@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login | Global Football Hope Fund</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <link rel="manifest" href="../manifest.json">
+</head>
+<body>
+<div id="appSplash" class="app-splash">
+    <div class="app-splash-card">
+        <div class="app-splash-icon">⚽</div>
+        <h2>GFHF</h2>
+        <p>Football news, live scores, and hope in one app.</p>
+    </div>
+</div>
+<header>
+    <div class="header-brand">
+        <div class="logo">⚽ GFHF</div>
+        <span id="userStatus" class="user-status">Login</span>
+        <button id="logoutBtn" class="logout-btn" type="button" hidden>Logout</button>
+    </div>
+    <nav>
+        <a href="../index.html">Home</a>
+        <a href="about.html">About</a>
+        <a href="competition.html">Competition</a>
+        <a href="donate.html">Donate</a>
+        <a href="news.html">News</a>
+        <a href="faq.html">FAQ</a>
+        <a href="contact.html">Contact</a>
+    </nav>
+</header>
+
+<div id="appInstallBanner" class="app-install-banner" hidden>
+    <div>
+        <strong>Install GFHF</strong>
+        <p>Get the app on your phone for faster sports updates and donations.</p>
+    </div>
+    <div class="app-install-actions">
+        <button id="installBannerBtn" class="mini-btn" type="button">Install</button>
+        <button id="dismissBannerBtn" class="mini-btn secondary" type="button">Later</button>
+    </div>
+</div>
+
+<nav class="mobile-bottom-nav" aria-label="Mobile navigation">
+    <a href="../index.html">Home</a>
+    <a href="news.html">Sports</a>
+    <a href="donate.html">Donate</a>
+    <a href="login.html" class="active">Login</a>
+</nav>
+
+<section class="section registration-section">
+    <div class="section-heading">
+        <h2>Welcome Back</h2>
+        <p>Sign in to continue supporting football initiatives and manage your account.</p>
+    </div>
+
+    <div class="form-container">
+        <div class="form-intro">
+            <span class="form-badge">Secure access</span>
+            <h3>Log in to your account</h3>
+            <p>Access your donations, profile, and community activity in one place.</p>
+        </div>
+
+        <form id="loginForm" class="registration-form">
+            <div id="messageBox" class="message"></div>
+
+            <fieldset class="form-section">
+                <legend>Account Details</legend>
+                <div class="form-row">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" required>
+                </div>
+                <div class="form-row">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" required>
+                </div>
+            </fieldset>
+
+            <div class="form-row form-actions">
+                <button class="btn" type="submit">Sign In</button>
+                <p class="helper-text">Need an account? <a href="register.html">Create one</a></p>
+            </div>
+        </form>
+    </div>
+</section>
+
+<footer>
+    <p>© 2026 Global Football Hope Fund</p>
+</footer>
+
+<script type="module" src="../js/auth.js"></script>
+<script type="module" src="../js/script.js"></script>
+<script>
+    window.addEventListener('load', () => {
+        const splash = document.getElementById('appSplash');
+        if (splash) {
+            setTimeout(() => splash.classList.add('hidden'), 900);
+        }
+
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('../sw.js').then((registration) => {
+                if (registration.waiting) {
+                    registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+                }
+            }).catch(console.error);
+        }
+    });
+</script>
+</body>
+</html>

@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Account | Global Football Hope Fund</title>
+
+    <link rel="stylesheet" href="../css/style.css">
+    <link rel="manifest" href="../manifest.json">
+</head>
+<body>
+<div id="appSplash" class="app-splash">
+    <div class="app-splash-card">
+        <div class="app-splash-icon">⚽</div>
+        <h2>GFHF</h2>
+        <p>Football news, live scores, and hope in one app.</p>
+    </div>
+</div>
+
+<header>
+    <div class="header-brand">
+        <div class="logo">⚽ GFHF</div>
+        <span id="userStatus" class="user-status">Login</span>
+        <button id="logoutBtn" class="logout-btn" type="button" hidden>Logout</button>
+    </div>
+
+    <nav>
+        <a href="../index.html">Home</a>
+        <a href="about.html">About</a>
+        <a href="competition.html">Competition</a>
+        <a href="donate.html">Donate</a>
+        <a href="news.html">News</a>
+        <a href="faq.html">FAQ</a>
+        <a href="contact.html">Contact</a>
+    </nav>
+</header>
+
+<div id="appInstallBanner" class="app-install-banner" hidden>
+    <div>
+        <strong>Install GFHF</strong>
+        <p>Get the app on your phone for faster sports updates and donations.</p>
+    </div>
+    <div class="app-install-actions">
+        <button id="installBannerBtn" class="mini-btn" type="button">Install</button>
+        <button id="dismissBannerBtn" class="mini-btn secondary" type="button">Later</button>
+    </div>
+</div>
+
+<nav class="mobile-bottom-nav" aria-label="Mobile navigation">
+    <a href="../index.html">Home</a>
+    <a href="news.html">Sports</a>
+    <a href="donate.html">Donate</a>
+    <a href="login.html">Login</a>
+</nav>
+
+<section class="section registration-section">
+
+    <div class="section-heading">
+        <h2>Create Your GFHF Account</h2>
+        <p>Join a vibrant football community, support meaningful causes, and get involved in exciting competitions.</p>
+    </div>
+
+    <div class="form-container">
+        <div class="form-intro">
+            <span class="form-badge">Join the community</span>
+            <h3>Sign up in a few simple steps</h3>
+            <p>Your account helps you stay connected with campaigns, events, and supporter updates.</p>
+            <ul class="benefits-list">
+                <li>Track donations and impact</li>
+                <li>Join football-based initiatives</li>
+                <li>Stay updated with opportunities</li>
+            </ul>
+        </div>
+
+        <form id="registerForm" class="registration-form">
+            <div id="messageBox" class="message"></div>
+
+            <fieldset class="form-section compact-grid">
+                <legend>Personal Information</legend>
+                <div class="form-row double">
+                    <div>
+                        <label for="firstName">First Name</label>
+                        <input type="text" id="firstName" name="firstName" required>
+                    </div>
+                    <div>
+                        <label for="lastName">Last Name</label>
+                        <input type="text" id="lastName" name="lastName" required>
+                    </div>
+                </div>
+
+                <div class="form-row double">
+                    <div>
+                        <label for="displayName">Display Name</label>
+                        <input type="text" id="displayName" name="displayName" required>
+                    </div>
+                    <div>
+                        <label for="dob">Date of Birth</label>
+                        <input type="date" id="dob" name="dob" required>
+                    </div>
+                </div>
+
+                <div class="form-row double">
+                    <div>
+                        <label for="country">Country</label>
+                        <input type="text" id="country" name="country" required>
+                    </div>
+                    <div>
+                        <label for="city">City</label>
+                        <input type="text" id="city" name="city">
+                    </div>
+                </div>
+            </fieldset>
+
+            <fieldset class="form-section compact-grid">
+                <legend>Football Interests</legend>
+                <div class="form-row double">
+                    <div>
+                        <label for="nationalTeam">Favorite National Team</label>
+                        <input type="text" id="nationalTeam" name="nationalTeam">
+                    </div>
+                    <div>
+                        <label for="club">Favorite Club</label>
+                        <input type="text" id="club" name="club">
+                    </div>
+                </div>
+            </fieldset>
+
+            <fieldset class="form-section compact-grid">
+                <legend>Account Details</legend>
+                <div class="form-row double">
+                    <div>
+                        <label for="email">Email</label>
+                        <input type="email" id="email" name="email" required>
+                    </div>
+                    <div>
+                        <label for="password">Password</label>
+                        <input type="password" id="password" name="password" required>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <label for="confirmPassword">Confirm Password</label>
+                    <input type="password" id="confirmPassword" name="confirmPassword" required>
+                </div>
+            </fieldset>
+
+            <fieldset class="form-section compact-grid">
+                <legend>Wallets (Optional)</legend>
+                <div class="form-row double">
+                    <div>
+                        <label for="btc">
+                            <span class="wallet-label">
+                                <span class="wallet-icon btc-icon">₿</span>
+                                BTC Wallet
+                            </span>
+                        </label>
+                        <input type="text" id="btc" name="btc" placeholder="Enter BTC wallet address">
+                    </div>
+                    <div>
+                        <label for="usdt">
+                            <span class="wallet-label">
+                                <span class="wallet-icon usdt-icon">T</span>
+                                USDT Wallet
+                            </span>
+                        </label>
+                        <input type="text" id="usdt" name="usdt" placeholder="Enter USDT wallet address">
+                    </div>
+                </div>
+            </fieldset>
+
+            <div class="form-row checkbox-row">
+                <label for="terms">
+                    <input type="checkbox" id="terms" name="terms" required>
+                    I agree to the Terms & Conditions.
+                </label>
+            </div>
+
+            <div class="form-row form-actions">
+                <button class="btn" type="submit">Create Account</button>
+                <p class="helper-text">Already have an account? <a href="login.html">Log in</a></p>
+            </div>
+
+        </form>
+    </div>
+
+</section>
+
+<footer>
+<p>© 2026 Global Football Hope Fund</p>
+</footer>
+
+<script type="module" src="../js/script.js"></script>
+<script type="module" src="../js/auth.js"></script>
+<script>
+    window.addEventListener('load', () => {
+        const splash = document.getElementById('appSplash');
+        if (splash) {
+            setTimeout(() => splash.classList.add('hidden'), 900);
+        }
+
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('../sw.js').then((registration) => {
+                if (registration.waiting) {
+                    registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+                }
+            }).catch(console.error);
+        }
+    });
+</script>
+</body>
+</html>

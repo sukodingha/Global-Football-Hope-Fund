@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Donate - Global Football Hope Fund</title>
+
+<link rel="stylesheet" href="../css/style.css">
+    <link rel="manifest" href="../manifest.json">
+</head>
+
+<body>
+<div id="appSplash" class="app-splash">
+    <div class="app-splash-card">
+        <div class="app-splash-icon">⚽</div>
+        <h2>GFHF</h2>
+        <p>Football news, live scores, and hope in one app.</p>
+    </div>
+</div>
+
+<header>
+    <div class="header-brand">
+        <div class="logo">⚽ GFHF</div>
+        <span id="userStatus" class="user-status">Login</span>
+        <button id="logoutBtn" class="logout-btn" type="button" hidden>Logout</button>
+    </div>
+
+    <nav>
+        <a href="../index.html">Home</a>
+        <a href="about.html">About</a>
+        <a href="competition.html">Competition</a>
+        <a href="donate.html">Donate</a>
+        <a href="news.html">News</a>
+        <a href="faq.html">FAQ</a>
+        <a href="contact.html">Contact</a>
+    </nav>
+</header>
+
+<div id="appInstallBanner" class="app-install-banner" hidden>
+    <div>
+        <strong>Install GFHF</strong>
+        <p>Get the app on your phone for faster sports updates and donations.</p>
+    </div>
+    <div class="app-install-actions">
+        <button id="installBannerBtn" class="mini-btn" type="button">Install</button>
+        <button id="dismissBannerBtn" class="mini-btn secondary" type="button">Later</button>
+    </div>
+</div>
+
+<nav class="mobile-bottom-nav" aria-label="Mobile navigation">
+    <a href="../index.html">Home</a>
+    <a href="news.html">Sports</a>
+    <a href="donate.html" class="active">Donate</a>
+    <a href="login.html">Login</a>
+</nav>
+
+<section class="section">
+    <h2>Support the Global Football Hope Fund</h2>
+
+    <p style="max-width:800px;margin:auto;line-height:1.6;">
+        Donations are completely voluntary. They help support children's charities
+        and build the prize pool for competition winners.
+        <br><br>
+        Every transaction is transparent and publicly tracked.
+        <br><br>
+        These are the official GFHF collection addresses for donations, registrations, and payments.
+    </p>
+</section>
+
+<section class="section">
+
+    <h2>Crypto Wallets</h2>
+
+    <div class="cards" id="walletCards"></div>
+
+</section>
+
+<section class="section stats">
+
+    <h2>Fund Allocation</h2>
+
+    <div class="stats-grid">
+
+        <div>
+            <div class="stat">70%</div>
+            <p>Children's Charities</p>
+        </div>
+
+        <div>
+            <div class="stat">20%</div>
+            <p>Prize Pool</p>
+        </div>
+
+        <div>
+            <div class="stat">10%</div>
+            <p>Operations</p>
+        </div>
+
+        <div>
+            <div class="stat">LIVE</div>
+            <p>Transparency</p>
+        </div>
+
+    </div>
+
+</section>
+
+<footer>
+    <p>Global Football Hope Fund © 2026</p>
+</footer>
+
+<script type="module" src="../js/auth.js"></script>
+<script type="module" src="../js/script.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+const walletAddresses = [
+    {
+        key: "btc",
+        label: "Bitcoin (BTC)",
+        icon: "₿",
+        address: "3AHRmvapCYokodN1diz9NzmVtPWYMMnEHy"
+    },
+    {
+        key: "usdt",
+        label: "USDT (TRC-20)",
+        icon: "T",
+        address: "TKd9H2ShuR6pDwFm9UhVWEcFbSNjLJVu5f"
+    },
+    {
+        key: "solana",
+        label: "Solana (SOL)",
+        icon: "◎",
+        address: "CKCML3MWK6hbSvEWETVhRv4h7AH2enaLfToqxn1KkHKs"
+    }
+];
+
+function copyText(text) {
+    navigator.clipboard.writeText(text);
+    alert("Wallet address copied!");
+}
+
+function renderWallets() {
+    const container = document.getElementById("walletCards");
+    if (!container) return;
+
+    container.innerHTML = walletAddresses.map((wallet) => `
+        <div class="card wallet-card">
+            <h3><span class="wallet-icon ${wallet.key === "btc" ? "btc-icon" : "usdt-icon"}">${wallet.icon}</span> ${wallet.label}</h3>
+            <div class="wallet-qr" id="qr-${wallet.key}"></div>
+            <p style="word-break:break-all;" class="wallet-address">${wallet.address}</p>
+            <button type="button" class="copy-address" data-address="${wallet.address}">
+                Copy Address
+            </button>
+        </div>
+    `).join("");
+
+    walletAddresses.forEach((wallet) => {
+        const qrTarget = document.getElementById(`qr-${wallet.key}`);
+        if (qrTarget) {
+            new QRCode(qrTarget, {
+                text: wallet.address,
+                width: 140,
+                height: 140,
+                colorDark: "#0b2d4d",
+                colorLight: "#ffffff",
+                correctLevel: QRCode.CorrectLevel.M
+            });
+        }
+    });
+
+    container.querySelectorAll(".copy-address").forEach((button) => {
+        button.addEventListener("click", () => copyText(button.getAttribute("data-address")));
+    });
+}
+
+document.addEventListener("DOMContentLoaded", renderWallets);
+</script>
+<script>
+    window.addEventListener('load', () => {
+        const splash = document.getElementById('appSplash');
+        if (splash) {
+            setTimeout(() => splash.classList.add('hidden'), 900);
+        }
+
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('../sw.js').then((registration) => {
+                if (registration.waiting) {
+                    registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+                }
+            }).catch(console.error);
+        }
+    });
+</script>
+
+</body>
+</html>

@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Football News & Scores - Global Football Hope Fund</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="manifest" href="../manifest.json">
+</head>
+<body>
+  <div id="appSplash" class="app-splash">
+    <div class="app-splash-card">
+      <div class="app-splash-icon">⚽</div>
+      <h2>GFHF</h2>
+      <p>Football news, live scores, and more.</p>
+    </div>
+  </div>
+
+  <header>
+    <div class="header-brand">
+      <div class="logo">⚽ GFHF</div>
+      <span id="userStatus" class="user-status">Login</span>
+    </div>
+    <nav>
+      <a href="../index.html">Home</a>
+      <a href="about.html">About</a>
+      <a href="competition.html">Competition</a>
+      <a href="donate.html">Donate</a>
+      <a href="news.html">News</a>
+      <a href="faq.html">FAQ</a>
+      <a href="contact.html">Contact</a>
+    </nav>
+  </header>
+
+  <div id="appInstallBanner" class="app-install-banner" hidden>
+    <div>
+      <strong>Install GFHF</strong>
+      <p>Get the sports hub and donation tools as an app on your phone.</p>
+    </div>
+    <div class="app-install-actions">
+      <button id="installBannerBtn" class="mini-btn" type="button">Install</button>
+      <button id="dismissBannerBtn" class="mini-btn secondary" type="button">Later</button>
+    </div>
+  </div>
+
+  <nav class="mobile-bottom-nav" aria-label="Mobile navigation">
+    <a href="../index.html">Home</a>
+    <a href="news.html" class="active">Sports</a>
+    <a href="donate.html">Donate</a>
+    <a href="login.html">Login</a>
+  </nav>
+
+  <section class="section">
+    <h2>Sports News & Live Scores</h2>
+    <p style="max-width: 900px; margin: 0 auto 24px; line-height: 1.7;">
+      Follow football, basketball, NFL, and hockey updates from around the world with live-style widgets and the latest headlines.
+    </p>
+    <button id="installBtn" class="btn install-btn">Install App</button>
+  </section>
+
+  <section class="section">
+    <div id="newsStatus" class="helper-text">Loading football news and scores...</div>
+    <div class="cards" id="newsCards"></div>
+  </section>
+
+  <section class="section stats">
+    <h2>Featured Competitions</h2>
+    <div class="stats-grid">
+      <div><div class="stat">UEFA</div><p>Champions League</p></div>
+      <div><div class="stat">NBA</div><p>Basketball</p></div>
+      <div><div class="stat">NFL</div><p>American Football</p></div>
+      <div><div class="stat">NHL</div><p>Hockey</p></div>
+    </div>
+  </section>
+
+  <footer>
+    <p>Global Football Hope Fund © 2026</p>
+  </footer>
+
+  <script type="module" src="../js/auth.js"></script>
+  <script>
+    window.addEventListener('load', () => {
+      const splash = document.getElementById('appSplash');
+      if (splash) {
+        setTimeout(() => splash.classList.add('hidden'), 900);
+      }
+    });
+
+    const sportsConfig = [
+      {
+        key: 'football',
+        label: 'Football',
+        icon: '⚽',
+        leagueId: 4328,
+        query: 'football',
+        fallbackScores: [
+          { league: 'Premier League', home: 'Manchester City', away: 'Chelsea', score: '3 - 2', status: 'Latest result' },
+          { league: 'Champions League', home: 'Real Madrid', away: 'Bayern', score: '2 - 1', status: 'Latest result' },
+          { league: 'La Liga', home: 'Barcelona', away: 'Atletico Madrid', score: '1 - 0', status: 'Latest result' }
+        ],
+        fallbackNews: [
+          { title: 'Transfer window reshapes top European squads', summary: 'Major clubs continue to strengthen ahead of the next campaign.', tag: 'Transfer News' },
+          { title: 'National teams push for World Cup qualification', summary: 'High-stakes qualifiers are delivering drama across all confederations.', tag: 'International' },
+          { title: 'Youth academies produce the next generation', summary: 'Emerging talents are earning first-team opportunities worldwide.', tag: 'Development' }
+        ]
+      },
+      {
+        key: 'basketball',
+        label: 'NBA Basketball',
+        icon: '🏀',
+        leagueId: 4387,
+        query: 'nba basketball',
+        fallbackScores: [
+          { league: 'NBA', home: 'Boston Celtics', away: 'Milwaukee Bucks', score: '121 - 118', status: 'Latest result' },
+          { league: 'NBA', home: 'Los Angeles Lakers', away: 'Golden State Warriors', score: '115 - 112', status: 'Latest result' }
+        ],
+        fallbackNews: [
+          { title: 'Western Conference race remains tight', summary: 'The playoff picture is heating up as teams jockey for position.', tag: 'NBA' },
+          { title: 'Young stars take center stage', summary: 'Rookies and sophomores are shaping the next era of basketball.', tag: 'Basketball' }
+        ]
+      },
+      {
+        key: 'nfl',
+        label: 'NFL',
+        icon: '🏈',
+        leagueId: 4391,
+        query: 'nfl american football',
+        fallbackScores: [
+          { league: 'NFL', home: 'Kansas City Chiefs', away: 'Buffalo Bills', score: '30 - 27', status: 'Latest result' },
+          { league: 'NFL', home: 'Philadelphia Eagles', away: 'Dallas Cowboys', score: '24 - 20', status: 'Latest result' }
+        ],
+        fallbackNews: [
+          { title: 'NFL playoff picture becomes clearer', summary: 'Teams are battling for seeding and momentum down the stretch.', tag: 'NFL' },
+          { title: 'Quarterback rotation changes the landscape', summary: 'Offseason and in-season decisions continue to shape the league.', tag: 'American Football' }
+        ]
+      },
+      {
+        key: 'hockey',
+        label: 'Hockey',
+        icon: '🏒',
+        leagueId: 4380,
+        query: 'nhl hockey',
+        fallbackScores: [
+          { league: 'NHL', home: 'Toronto Maple Leafs', away: 'Boston Bruins', score: '4 - 3', status: 'Latest result' },
+          { league: 'NHL', home: 'Colorado Avalanche', away: 'Edmonton Oilers', score: '5 - 2', status: 'Latest result' }
+        ],
+        fallbackNews: [
+          { title: 'Hockey playoff race enters final stretch', summary: 'Teams are fighting for positioning in a crowded postseason chase.', tag: 'NHL' },
+          { title: 'Young defensemen turn heads', summary: 'Emerging blue-chip talent is changing the pace of the game.', tag: 'Hockey' }
+        ]
+      }
+    ];
+
+    function formatScoreText(event, fallbackLabel) {
+      if (!event) return fallbackLabel;
+      const home = event.strHomeTeam || event.homeTeam || 'Home';
+      const away = event.strAwayTeam || event.awayTeam || 'Away';
+      const homeScore = event.intHomeScore ?? event.homeScore ?? '-';
+      const awayScore = event.intAwayScore ?? event.awayScore ?? '-';
+      const date = event.date || event.strTimestamp || 'Upcoming';
+      return `${home} ${homeScore} - ${awayScore} ${away}` + (date ? ` • ${date}` : '');
+    }
+
+    async function loadSportsData() {
+      const newsCards = document.getElementById('newsCards');
+      const newsStatus = document.getElementById('newsStatus');
+      if (!newsCards) return;
+
+      newsCards.innerHTML = '<div class="card"><h3>Loading multi-sport widgets...</h3></div>';
+      if (newsStatus) newsStatus.textContent = 'Fetching the latest sports data...';
+
+      try {
+        const sportsResults = await Promise.all(sportsConfig.map(async (sport) => {
+          const [latestResponse, nextResponse] = await Promise.all([
+            fetch(`https://www.thesportsdb.com/api/v1/json/3/eventslast.php?id=${sport.leagueId}`),
+            fetch(`https://www.thesportsdb.com/api/v1/json/3/eventsnextleague.php?id=${sport.leagueId}`)
+          ]);
+
+          const latestData = latestResponse.ok ? await latestResponse.json() : null;
+          const nextData = nextResponse.ok ? await nextResponse.json() : null;
+          const latestEvent = latestData?.results?.[0] || null;
+          const nextEvent = nextData?.events?.[0] || null;
+
+          return {
+            ...sport,
+            latestEvent,
+            nextEvent
+          };
+        }));
+
+        const sportsMarkup = sportsResults.map((sport) => {
+          const latestText = formatScoreText(sport.latestEvent, 'No recent result available');
+          const nextText = formatScoreText(sport.nextEvent, 'No upcoming fixture available');
+          const latestScore = sport.latestEvent ? `${sport.latestEvent.strHomeTeam || 'Home'} ${sport.latestEvent.intHomeScore ?? '-'} - ${sport.latestEvent.intAwayScore ?? '-'} ${sport.latestEvent.strAwayTeam || 'Away'}` : 'No recent result available';
+          return `
+            <div class="card sport-card">
+              <div class="sport-title">${sport.icon} ${sport.label}</div>
+              <div class="score-card">
+                <div class="league-pill">Latest</div>
+                <p><strong>${latestScore}</strong></p>
+              </div>
+              <div class="score-card">
+                <div class="league-pill">Next</div>
+                <p>${nextText}</p>
+              </div>
+              <div class="sport-news">
+                <h4>Latest Headlines</h4>
+                ${sport.fallbackNews.map((item) => `
+                  <div class="news-item">
+                    <strong>${item.title}</strong>
+                    <p>${item.summary}</p>
+                    <small>${item.tag}</small>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        newsCards.innerHTML = sportsMarkup;
+        if (newsStatus) newsStatus.textContent = 'Multi-sport widgets loaded.';
+      } catch (error) {
+        console.error(error);
+        newsCards.innerHTML = sportsConfig.map((sport) => `
+          <div class="card sport-card">
+            <div class="sport-title">${sport.icon} ${sport.label}</div>
+            ${sport.fallbackScores.map((item) => `
+              <div class="score-card">
+                <div class="league-pill">${item.league}</div>
+                <p><strong>${item.home} ${item.score} ${item.away}</strong></p>
+                <small>${item.status}</small>
+              </div>
+            `).join('')}
+            <div class="sport-news">
+              <h4>Latest Headlines</h4>
+              ${sport.fallbackNews.map((item) => `
+                <div class="news-item">
+                  <strong>${item.title}</strong>
+                  <p>${item.summary}</p>
+                  <small>${item.tag}</small>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `).join('');
+        if (newsStatus) newsStatus.textContent = 'Showing curated multi-sport highlights while live data refreshes.';
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', loadSportsData);
+
+    let deferredPrompt;
+    const installBtn = document.getElementById('installBtn');
+    const banner = document.getElementById('appInstallBanner');
+    const installBannerBtn = document.getElementById('installBannerBtn');
+    const dismissBannerBtn = document.getElementById('dismissBannerBtn');
+
+    function showInstallBanner() {
+      if (banner) banner.hidden = false;
+      if (installBtn) installBtn.hidden = false;
+    }
+
+    function hideInstallBanner() {
+      if (banner) banner.hidden = true;
+    }
+
+    window.addEventListener('beforeinstallprompt', (event) => {
+      event.preventDefault();
+      deferredPrompt = event;
+      showInstallBanner();
+    });
+
+    async function promptInstall() {
+      if (!deferredPrompt) {
+        alert('Install is not available on this browser yet.');
+        return;
+      }
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      hideInstallBanner();
+    }
+
+    if (installBtn) {
+      installBtn.addEventListener('click', promptInstall);
+    }
+
+    if (installBannerBtn) {
+      installBannerBtn.addEventListener('click', promptInstall);
+    }
+
+    if (dismissBannerBtn) {
+      dismissBannerBtn.addEventListener('click', hideInstallBanner);
+    }
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('../sw.js', { scope: '../' }).then((registration) => {
+          if (registration.waiting) {
+            registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+          }
+        }).catch(console.error);
+      });
+    }
+  </script>
+</body>
+</html>

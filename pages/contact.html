@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Contact - Global Football Hope Fund</title>
+
+<link rel="stylesheet" href="../css/style.css">
+    <link rel="manifest" href="../manifest.json">
+</head>
+
+<body>
+<div id="appSplash" class="app-splash">
+    <div class="app-splash-card">
+        <div class="app-splash-icon">⚽</div>
+        <h2>GFHF</h2>
+        <p>Football news, live scores, and hope in one app.</p>
+    </div>
+</div>
+
+<header>
+    <div class="header-brand">
+        <div class="logo">⚽ GFHF</div>
+        <span id="userStatus" class="user-status">Login</span>
+        <button id="logoutBtn" class="logout-btn" type="button" hidden>Logout</button>
+    </div>
+
+    <nav>
+        <a href="../index.html">Home</a>
+        <a href="about.html">About</a>
+        <a href="competition.html">Competition</a>
+        <a href="donate.html">Donate</a>
+        <a href="news.html">News</a>
+        <a href="faq.html">FAQ</a>
+        <a href="contact.html">Contact</a>
+    </nav>
+</header>
+
+<div id="appInstallBanner" class="app-install-banner" hidden>
+    <div>
+        <strong>Install GFHF</strong>
+        <p>Get the app on your phone for faster sports updates and donations.</p>
+    </div>
+    <div class="app-install-actions">
+        <button id="installBannerBtn" class="mini-btn" type="button">Install</button>
+        <button id="dismissBannerBtn" class="mini-btn secondary" type="button">Later</button>
+    </div>
+</div>
+
+<nav class="mobile-bottom-nav" aria-label="Mobile navigation">
+    <a href="../index.html">Home</a>
+    <a href="news.html">Sports</a>
+    <a href="donate.html">Donate</a>
+    <a href="login.html">Login</a>
+</nav>
+
+<section class="section">
+    <h2>Contact Us</h2>
+
+    <p style="max-width:700px;margin:auto;">
+        We are building a global football community. For partnerships,
+        support, or inquiries, reach out below.
+    </p>
+</section>
+
+<section class="section">
+
+<div class="cards">
+
+    <div class="card">
+        <h3>Email</h3>
+        <p>globalfootballhopefund@gmail.com</p>
+    </div>
+
+    <div class="card">
+        <h3>Telegram</h3>
+        <p>@GlobalFootballHopeFund</p>
+    </div>
+
+    <div class="card">
+        <h3>Twitter (X)</h3>
+        <p>@FootballHopeFund</p>
+    </div>
+
+</div>
+
+</section>
+
+<section class="section stats">
+
+    <h2>Join the Movement</h2>
+
+    <p>Football fans worldwide. One mission. One community.</p>
+
+</section>
+
+<footer>
+    <p>Global Football Hope Fund © 2026</p>
+</footer>
+
+<script type="module" src="../js/auth.js"></script>
+<script type="module" src="../js/script.js"></script>
+<script>
+    window.addEventListener('load', () => {
+        const splash = document.getElementById('appSplash');
+        if (splash) {
+            setTimeout(() => splash.classList.add('hidden'), 900);
+        }
+
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('../sw.js').then((registration) => {
+                if (registration.waiting) {
+                    registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+                }
+            }).catch(console.error);
+        }
+    });
+</script>
+</body>
+</html>

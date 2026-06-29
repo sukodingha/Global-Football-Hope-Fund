@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Competition - Global Football Hope Fund</title>
+
+<link rel="stylesheet" href="../css/style.css">
+    <link rel="manifest" href="../manifest.json">
+</head>
+
+<body>
+<div id="appSplash" class="app-splash">
+    <div class="app-splash-card">
+        <div class="app-splash-icon">⚽</div>
+        <h2>GFHF</h2>
+        <p>Football news, live scores, and hope in one app.</p>
+    </div>
+</div>
+
+<header>
+    <div class="header-brand">
+        <div class="logo">⚽ GFHF</div>
+        <span id="userStatus" class="user-status">Login</span>
+        <button id="logoutBtn" class="logout-btn" type="button" hidden>Logout</button>
+    </div>
+
+    <nav>
+        <a href="../index.html">Home</a>
+        <a href="about.html">About</a>
+        <a href="competition.html">Competition</a>
+        <a href="donate.html">Donate</a>
+        <a href="news.html">News</a>
+        <a href="faq.html">FAQ</a>
+        <a href="contact.html">Contact</a>
+    </nav>
+</header>
+
+<div id="appInstallBanner" class="app-install-banner" hidden>
+    <div>
+        <strong>Install GFHF</strong>
+        <p>Get the app on your phone for faster sports updates and donations.</p>
+    </div>
+    <div class="app-install-actions">
+        <button id="installBannerBtn" class="mini-btn" type="button">Install</button>
+        <button id="dismissBannerBtn" class="mini-btn secondary" type="button">Later</button>
+    </div>
+</div>
+
+<nav class="mobile-bottom-nav" aria-label="Mobile navigation">
+    <a href="../index.html">Home</a>
+    <a href="news.html">Sports</a>
+    <a href="donate.html">Donate</a>
+    <a href="login.html">Login</a>
+</nav>
+
+<section class="section">
+    <h2>Football Prediction Competition</h2>
+
+    <p style="max-width:800px;margin:auto;line-height:1.6;">
+        Predict football outcomes, earn points, and climb the leaderboard in a free, skill-based competition.
+        Prizes are separate from donations, and participation does not require payment.
+    </p>
+</section>
+
+<section class="section">
+
+    <h2>Make Your Predictions</h2>
+
+    <div class="form-container" style="grid-template-columns: 1fr; max-width: 900px;">
+        <form id="predictionForm" class="registration-form">
+            <div id="predictionMessage" class="message"></div>
+            <p id="predictionStatus" class="helper-text">Please sign in to submit predictions.</p>
+
+            <fieldset class="form-section">
+                <legend>Prediction Picks</legend>
+                <div class="form-row double">
+                    <div>
+                        <label for="champion">World Champion</label>
+                        <input type="text" id="champion" name="champion" placeholder="Enter team name" required>
+                    </div>
+                    <div>
+                        <label for="runnerUp">Runner-up</label>
+                        <input type="text" id="runnerUp" name="runnerUp" placeholder="Enter team name" required>
+                    </div>
+                </div>
+
+                <div class="form-row double">
+                    <div>
+                        <label for="goldenBoot">Golden Boot Winner</label>
+                        <input type="text" id="goldenBoot" name="goldenBoot" placeholder="Player name" required>
+                    </div>
+                    <div>
+                        <label for="goldenGlove">Golden Glove Winner</label>
+                        <input type="text" id="goldenGlove" name="goldenGlove" placeholder="Goalkeeper name" required>
+                    </div>
+                </div>
+            </fieldset>
+
+            <div class="form-row form-actions">
+                <button class="btn" type="submit">Submit Predictions</button>
+            </div>
+        </form>
+    </div>
+
+</section>
+
+<section class="section">
+    <h2>Scoring & Prize Structure</h2>
+    <div class="cards">
+        <div class="card">
+            <h3>How points are earned</h3>
+            <p id="pointsSummary">Loading scoring rules...</p>
+        </div>
+        <div class="card">
+            <h3>Prize model</h3>
+            <p>70% of optional donations go to children's charities, 20% to prize winners, and 10% to operations. Participation remains free.</p>
+        </div>
+    </div>
+</section>
+
+<section class="section stats">
+    <h2>Live Leaderboard</h2>
+
+    <p style="max-width:700px;margin:auto;">
+        Predictions are being collected for the community competition. The leaderboard updates as users submit picks.
+    </p>
+
+    <br>
+
+    <div class="stats-grid">
+        <div>
+            <div class="stat">FREE</div>
+            <p>Entry</p>
+        </div>
+
+        <div>
+            <div class="stat">SKILL</div>
+            <p>Based Competition</p>
+        </div>
+
+        <div>
+            <div class="stat">0</div>
+            <p>Predictions Submitted</p>
+        </div>
+
+        <div>
+            <div class="stat">LIVE</div>
+            <p>Status</p>
+        </div>
+    </div>
+
+    <div class="form-container" style="grid-template-columns: 1fr; max-width: 700px; margin-top: 20px;">
+        <div class="form-section">
+            <h3 style="margin-top:0;">Top Predictors</h3>
+            <ul id="leaderboardList" style="text-align:left; padding-left:20px; margin:0;"></ul>
+        </div>
+    </div>
+</section>
+
+
+<footer>
+    <p>Global Football Hope Fund © 2026</p>
+</footer>
+
+<script type="module" src="../js/auth.js"></script>
+<script type="module" src="../js/predictions.js"></script>
+<script>
+    window.addEventListener('load', () => {
+        const splash = document.getElementById('appSplash');
+        if (splash) {
+            setTimeout(() => splash.classList.add('hidden'), 900);
+        }
+
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('../sw.js').then((registration) => {
+                if (registration.waiting) {
+                    registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+                }
+            }).catch(console.error);
+        }
+    });
+</script>
+</body>
+</html>

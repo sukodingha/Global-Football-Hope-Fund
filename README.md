@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # ⚽ Global Football Hope Fund (GFHF)
 
 Global Football Hope Fund is a modern football community platform that brings fans together through prediction competitions while supporting charitable initiatives through optional donations.
@@ -89,3 +90,7 @@ If you discover a security issue, please review [SECURITY.md](SECURITY.md) for t
 This project is currently under development.
 
 All rights reserved © Global Football Hope Fund.
+=======
+# Global-Football-Hope-Fund
+Global Football Hope Fund (GFHF) is a web platform that brings football fans together through match predictions, community engagement, and voluntary charitable giving. Built with HTML, CSS, JavaScript, and Firebase, the platform features secure user authentication, prediction competitions, leaderboards, crypto donations, and an admin dashboard.
+>>>>>>> b849c0dc225747151e55f80f8a479d4af263080d

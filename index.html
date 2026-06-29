@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0b2d4d">
+    <title>Global Football Hope Fund</title>
+
+    <!-- CSS LINK -->
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="manifest" href="manifest.json">
+</head>
+
+<body>
+<div id="appSplash" class="app-splash">
+    <div class="app-splash-card">
+        <div class="app-splash-icon">⚽</div>
+        <h2>GFHF</h2>
+        <p>Football news, live scores, and hope in one app.</p>
+    </div>
+</div>
+
+<header>
+    <div class="header-brand">
+        <div class="logo">⚽ GFHF</div>
+        <!-- CORRECTED LINE 37: Changed from span to an anchor link -->
+        <a href="pages/login.html" id="userStatus" class="user-status" style="text-decoration: none; color: inherit;">Login</a>
+        <button id="logoutBtn" class="logout-btn" type="button" hidden>Logout</button>
+    </div>
+
+    <nav>
+        <a href="#">Home</a>
+        <a href="pages/about.html">About</a>
+        <a href="pages/competition.html">Competition</a>
+        <a href="pages/donate.html">Donate</a>
+        <a href="pages/news.html">News</a>
+        <a href="pages/faq.html">FAQ</a>
+        <a href="pages/contact.html">Contact</a>
+    </nav>
+</header>
+
+<div id="appInstallBanner" class="app-install-banner" hidden>
+    <div>
+        <strong>Install GFHF</strong>
+        <p>Get the app on your phone for faster sports updates and donations.</p>
+    </div>
+    <div class="app-install-actions">
+        <button id="installBannerBtn" class="mini-btn" type="button">Install</button>
+        <button id="dismissBannerBtn" class="mini-btn secondary" type="button">Later</button>
+    </div>
+</div>
+
+<nav class="mobile-bottom-nav" aria-label="Mobile navigation">
+    <a href="index.html" class="active">Home</a>
+    <a href="pages/news.html">Sports</a>
+    <a href="pages/donate.html">Donate</a>
+    <a href="pages/login.html">Login</a>
+</nav>
+
+<section class="hero">
+    <h1>One Game. One Community. Endless Hope.</h1>
+    <p>Global football fans united to support children through free registration, skill-based predictions, and optional crypto donations.</p>
+
+    <a href="pages/register.html" class="btn">Join the Campaign</a>
+    <a href="pages/news.html" class="btn btn-secondary">Open Sports Hub</a>
+</section>Target
+
+<section id="register" class="section registration-section">
+    <div class="section-heading">
+        <h2>Register Now</h2>
+        <p>Sign up for free to join a transparent football charity campaign that supports children around the world.</p>
+    </div>
+
+    <div class="form-container">
+        <form class="registration-form" id="registrationForm">
+            <div class="form-row">
+                <label for="fullName">Full Name</label>
+                <input type="text" id="fullName" name="fullName" placeholder="Your full name" required>
+            </div>
+
+            <div class="form-row">
+                <label for="email">Email Address</label>
+                <input type="email" id="email" name="email" placeholder="you@example.com" required>
+            </div>
+
+            <div class="form-row">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" placeholder="Choose a username" required>
+            </div>
+
+            <div class="form-row">
+                <label for="country">Country</label>
+                <input type="text" id="country" name="country" placeholder="Your country" required>
+            </div>
+
+            <div class="form-row">
+                <label for="favoriteTeam">Favorite Team</label>
+                <input type="text" id="favoriteTeam" name="favoriteTeam" placeholder="Your favorite team">
+            </div>
+
+            <div class="form-row double">
+                <div>
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" placeholder="Create a password" required>
+                </div>
+                <div>
+                    <label for="confirmPassword">Confirm Password</label>
+                    <input type="password" id="confirmPassword" name="confirmPassword" placeholder="Repeat password" required>
+                </div>
+            </div>
+
+            <div class="form-row checkbox-row">
+                <label><input type="checkbox" id="terms" name="terms" required> I agree to the terms and privacy policy.</label>
+            </div>
+
+            <div class="form-row form-actions">
+                <button type="submit" class="btn">Create Account</button>
+            </div>
+        </form>
+    </div>
+</section>
+
+<section class="section">
+    <h2>How It Works</h2>
+
+    <div class="cards">
+        <div class="card">
+            <h3>1. Register</h3>
+            <p>Create your free account.</p>
+        </div>
+
+        <div class="card">
+            <h3>2. Predict</h3>
+            <p>Submit match predictions for free.</p>
+        </div>
+
+        <div class="card">
+            <h3>3. Compete</h3>
+            <p>Climb the leaderboard through skill.</p>
+        </div>
+
+        <div class="card">
+            <h3>4. Give Hope</h3>
+            <p>Support children's charities with optional donations.</p>
+        </div>
+    </div>
+</section>
+
+<section class="section stats">
+    <h2>Live Impact</h2>
+
+    <div class="stats-grid">
+        <div><div class="stat" id="memberCount">0</div><p>Members</p></div>
+        <div><div class="stat" id="donationCount">$0</div><p>Donations</p></div>
+        <div><div class="stat" id="countryCount">0</div><p>Countries</p></div>
+        <div><div class="stat" id="prizePool">$0</div><p>Prize Pool</p></div>
+    </div>
+</section>
+
+<footer>
+    <p>Global Football Hope Fund © 2026</p>
+</footer>
+
+<script type="module" src="js/auth.js"></script>
+<script type="module" src="js/script.js"></script>
+<script type="module" src="js/home.js"></script>
+<script>
+    window.addEventListener('load', () => {
+        const splash = document.getElementById('appSplash');
+        if (splash) {
+            setTimeout(() => splash.classList.add('hidden'), 900);
+        }
+
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./sw.js').then((registration) => {
+                if (registration.waiting) {
+                    registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+                }
+            }).catch(console.error);
+        }
+    });
+</script>
+</body>
+</html>
