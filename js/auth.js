@@ -140,9 +140,8 @@ if (loginForm) {
       const user = userCredential.user;
 
       if (!user.emailVerified) {
-        await sendEmailVerification(user);
         await signOut(auth);
-        showMessage("Please verify your email before signing in. A new verification email has been sent.", "error");
+        showMessage("Your email is not verified. Please check your inbox or spam for the verification email before signing in.", "error");
         return;
       }
 

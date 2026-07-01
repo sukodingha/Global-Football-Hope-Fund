@@ -47,7 +47,6 @@
     <a href="../index.html">Home</a>
     <a href="news.html" class="active">Sports</a>
     <a href="donate.html">Donate</a>
-    <a href="login.html">Login</a>
   </nav>
 
   <section class="section">
@@ -55,7 +54,7 @@
     <p style="max-width: 900px; margin: 0 auto 24px; line-height: 1.7;">
       Follow football, basketball, NFL, and hockey updates from around the world with live-style widgets and the latest headlines.
     </p>
-    <button id="installBtn" class="btn install-btn">Install App</button>
+    <button id="installBtn" class="btn install-btn" hidden>Install App</button>
   </section>
 
   <section class="section">
@@ -255,16 +254,21 @@
     const installBannerBtn = document.getElementById('installBannerBtn');
     const dismissBannerBtn = document.getElementById('dismissBannerBtn');
 
+    const installSessionKey = 'gf_installPromptShown';
+
     function showInstallBanner() {
+      if (sessionStorage.getItem(installSessionKey) === 'true') return;
       if (banner) banner.hidden = false;
       if (installBtn) installBtn.hidden = false;
     }
 
-    function hideInstallBanner() {
+    function hideInstallBanner(markShown = true) {
       if (banner) banner.hidden = true;
+      if (markShown) sessionStorage.setItem(installSessionKey, 'true');
     }
 
     window.addEventListener('beforeinstallprompt', (event) => {
+      if (sessionStorage.getItem(installSessionKey) === 'true') return;
       event.preventDefault();
       deferredPrompt = event;
       showInstallBanner();
@@ -290,7 +294,7 @@
     }
 
     if (dismissBannerBtn) {
-      dismissBannerBtn.addEventListener('click', hideInstallBanner);
+      dismissBannerBtn.addEventListener('click', () => hideInstallBanner(true));
     }
 
     if ('serviceWorker' in navigator) {
