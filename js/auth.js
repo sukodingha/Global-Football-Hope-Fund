@@ -188,3 +188,19 @@ if (logoutBtn) {
     }
   });
 }
+
+// Cleanup: remove hardcoded "Login" anchors inserted in static navs
+// Auth UI uses `#userStatus` and `#logoutBtn` instead — remove duplicates
+document.addEventListener('DOMContentLoaded', () => {
+  try {
+    const anchors = Array.from(document.querySelectorAll('a[href$="login.html"]'));
+    anchors.forEach(a => {
+      if (a.id === 'userStatus') return; // keep dynamic userStatus anchor
+      // keep link if we are on the login page (so nav can show active state)
+      if (window.location.pathname.endsWith('login.html')) return;
+      a.remove();
+    });
+  } catch (e) {
+    console.error('Error cleaning up login anchors', e);
+  }
+});
