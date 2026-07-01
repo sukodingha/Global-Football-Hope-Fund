@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Community | Global Football Hope Fund</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="manifest" href="../manifest.json">
+</head>
+<body>
+  <div id="appSplash" class="app-splash">
+    <div class="app-splash-card">
+      <div class="app-splash-icon">⚽</div>
+      <h2>GFHF</h2>
+      <p>Football news, live scores, and community support.</p>
+    </div>
+  </div>
+
+  <header>
+    <div class="header-brand">
+      <div class="logo">⚽ GFHF</div>
+      <span id="userStatus" class="user-status">Login</span>
+      <button id="logoutBtn" class="logout-btn" type="button" hidden>Logout</button>
+    </div>
+    <nav>
+      <a href="../index.html">Home</a>
+      <a href="about.html">About</a>
+      <a href="competition.html">Competition</a>
+      <a href="donate.html">Donate</a>
+      <a href="news.html">News</a>
+      <a href="community.html" class="active">Community</a>
+      <a href="faq.html">FAQ</a>
+      <a href="contact.html">Contact</a>
+    </nav>
+  </header>
+
+  <div id="appInstallBanner" class="app-install-banner" hidden>
+    <div>
+      <strong>Install GFHF</strong>
+      <p>Get the app for easier community posting and chat.</p>
+    </div>
+    <div class="app-install-actions">
+      <button id="installBannerBtn" class="mini-btn" type="button">Install</button>
+      <button id="dismissBannerBtn" class="mini-btn secondary" type="button">Later</button>
+    </div>
+  </div>
+
+  <nav class="mobile-bottom-nav" aria-label="Mobile navigation">
+    <a href="../index.html">Home</a>
+    <a href="news.html">Sports</a>
+    <a href="donate.html">Donate</a>
+  </nav>
+
+  <section class="section registration-section community-page">
+    <div class="section-heading">
+      <h2>Community Feed</h2>
+      <p>Share updates, ask for help, and connect with other supporters in a safe, interest-driven space.</p>
+    </div>
+
+    <div class="community-grid">
+      <div class="community-main">
+        <div class="card">
+          <div class="section-heading">
+            <h3>Create a post</h3>
+            <p>Write updates, choose an interest tag, and upload a photo to share with the community.</p>
+          </div>
+          <form id="communityPostForm" class="registration-form">
+            <div id="communityStatus" class="message"></div>
+
+            <div class="form-row">
+              <label for="postText">Post text</label>
+              <textarea id="postText" name="postText" rows="4" placeholder="Share your story, update, or question..." required></textarea>
+            </div>
+
+            <div class="form-row">
+              <label for="postInterest">Interest tag</label>
+              <select id="postInterest" name="postInterest" required>
+                <option value="Football">Football</option>
+                <option value="Fundraising">Fundraising</option>
+                <option value="Support">Support</option>
+                <option value="Training">Training</option>
+                <option value="Events">Events</option>
+                <option value="General">General</option>
+              </select>
+            </div>
+
+            <div class="form-row">
+              <label for="postImage">Upload image</label>
+              <input type="file" id="postImage" name="postImage" accept="image/*">
+            </div>
+
+            <div class="form-row checkbox-row">
+              <label for="chatConsent">
+                <input type="checkbox" id="chatConsent" name="chatConsent">
+                I consent to public community chat messages.
+              </label>
+            </div>
+
+            <div class="form-row form-actions">
+              <button class="btn" type="submit">Publish Post</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="card">
+          <div class="section-heading">
+            <h3>Filter by interest</h3>
+            <p>Click a tag to show only community posts that match it.</p>
+          </div>
+          <div id="interestFilterButtons" class="filter-group"></div>
+        </div>
+
+        <div class="card">
+          <div class="section-heading">
+            <h3>Live feed</h3>
+            <p>New posts appear instantly when other members publish.</p>
+          </div>
+          <div id="communityFeed"></div>
+        </div>
+      </div>
+
+      <aside class="community-sidebar">
+        <div class="card chat-panel">
+          <div class="section-heading">
+            <h3>Community chat</h3>
+            <p>Only send messages if you consent and want to chat safely.</p>
+          </div>
+          <div id="communityChatSection" class="chat-section hidden">
+            <div id="communityChatStatus" class="helper-text">Chat is active.</div>
+            <div id="communityChatList" class="chat-list"></div>
+            <form id="communityChatForm" class="comment-form">
+              <label for="chatMessage">Send a message</label>
+              <input id="chatMessage" name="chatMessage" type="text" placeholder="Write a short message..." required>
+              <button class="btn" type="submit">Send</button>
+            </form>
+          </div>
+          <div id="chatOptOutMessage" class="helper-text">Enable consent to see and send chat messages.</div>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <footer>
+    <p>Global Football Hope Fund © 2026</p>
+  </footer>
+
+  <script type="module" src="../js/auth.js"></script>
+  <script type="module" src="../js/community.js"></script>
+</body>
+</html>
