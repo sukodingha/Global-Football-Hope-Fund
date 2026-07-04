@@ -146,7 +146,7 @@ if (loginForm) {
       }
 
       showMessage("Signed in successfully.", "success");
-      window.location.href = "dashboard.html";
+      window.location.href = "dashboard.html?goto=community";
     } catch (error) {
       showMessage(error.message || "Login failed.", "error");
     }

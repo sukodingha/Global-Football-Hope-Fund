@@ -151,7 +151,8 @@ nav a:hover {
     border-radius: 999px;
 }
 
-.mobile-bottom-nav a.active {
+.mobile-bottom-nav a.active,
+header nav a.active {
     background: rgba(255,255,255,0.16);
 }
 

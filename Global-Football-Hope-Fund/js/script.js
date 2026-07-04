@@ -150,3 +150,24 @@ if (predictionForm) {
 }
 
 loadLeaderboard();
+
+function setActiveNavigationLink() {
+  const currentPath = window.location.pathname.toLowerCase();
+  document.querySelectorAll('header nav a, .mobile-bottom-nav a').forEach((link) => {
+    const href = link.getAttribute('href');
+    if (!href) return;
+
+    try {
+      const resolved = new URL(href, window.location.origin + window.location.pathname);
+      if (resolved.pathname.toLowerCase() === currentPath) {
+        link.classList.add('active');
+      } else {
+        link.classList.remove('active');
+      }
+    } catch (error) {
+      // ignore invalid hrefs
+    }
+  });
+}
+
+window.addEventListener('load', setActiveNavigationLink);

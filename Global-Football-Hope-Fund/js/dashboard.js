@@ -21,6 +21,12 @@ onAuthStateChanged(auth, async (user) => {
     return;
   }
 
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("goto") === "community") {
+    window.location.href = "community.html";
+    return;
+  }
+
   if (welcomeText) {
     welcomeText.textContent = `Welcome, ${user.displayName || "friend"}!`;
   }
