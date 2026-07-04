@@ -1,7 +1,10 @@
 import { auth, db } from "./firebase.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { collection, addDoc, query, where, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, arrayUnion, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+
+const CLOUDINARY_CLOUD_NAME = "d8obkydb";
+const CLOUDINARY_UPLOAD_PRESET = "football_preset";
+const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/upload`;
 
 const postForm = document.getElementById("communityPostForm");
 const postText = document.getElementById("postText");
@@ -16,8 +19,6 @@ const communityChatList = document.getElementById("communityChatList");
 const communityChatForm = document.getElementById("communityChatForm");
 const chatOptOutMessage = document.getElementById("chatOptOutMessage");
 const communityChatStatus = document.getElementById("communityChatStatus");
-
-const storage = getStorage();
 
 const interests = ["All", "Football", "Fundraising", "Support", "Training", "Events", "General"];
 let activeInterest = "All";
@@ -194,15 +195,38 @@ function setChatVisibility() {
 async function uploadImage(file) {
   if (!file) return null;
 
-  const storageRef = ref(storage, `community-posts/${Date.now()}-${file.name}`);
-  const snapshot = await uploadBytes(storageRef, file);
-  return getDownloadURL(snapshot.ref);
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+
+  const response = await fetch(CLOUDINARY_UPLOAD_URL, {
+    method: "POST",
+    body: formData
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Cloudinary upload failed: ${errorText}`);
+  }
+
+  const data = await response.json();
+  return data.secure_url || null;
+}
+
+function hideAppSplash() {
+  const splash = document.getElementById("appSplash");
+  if (splash) {
+    splash.classList.add("hidden");
+  }
 }
 
 onAuthStateChanged(auth, (user) => {
   currentUser = user;
   setChatVisibility();
+  hideAppSplash();
 });
+
+window.addEventListener("load", hideAppSplash);
 
 if (postForm) {
   postForm.addEventListener("submit", async (event) => {
