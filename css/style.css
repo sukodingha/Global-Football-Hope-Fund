@@ -1015,4 +1015,21 @@ footer {
     .community-page .community-grid {
         grid-template-columns: 1fr;
     }
+.competition-widget-container {
+    width: 100%;
+    max-width: 1200px;
+    margin: 20px auto;
+    padding: 15px;
+    background: #1a1a1a; /* Matches a typical dark theme dashboard */
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+.competition-widget-container h2 {
+    color: #ffffff;
+    margin-bottom: 15px;
+    font-size: 1.5rem;
+    border-left: 4px solid #4CAF50; /* Clean green accent lines */
+    padding-left: 10px;
+}
 }

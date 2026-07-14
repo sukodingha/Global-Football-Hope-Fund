@@ -68,3 +68,67 @@ onAuthStateChanged(auth, async (user) => {
     `;
   }
 });
+const API_KEY = "6e2987eec8066be0a986f648fe4a9cf7"; // Put your API-Sports key here
+const API_HOST = "v3.football.api-sports.io";
+
+async function fetchLiveScores() {
+    const feedContainer = document.getElementById('live-scores-feed');
+    if (!feedContainer) return;
+
+    try {
+        const response = await fetch(`https://v3.football.api-sports.io/fixtures?live=all`, {
+            method: "GET",
+            headers: {
+                "x-rapidapi-host": API_HOST,
+                "x-rapidapi-key": API_KEY
+            }
+        });
+
+        const data = await response.json();
+        
+        if (!data.response || data.response.length === 0) {
+            feedContainer.innerHTML = "<p class='no-matches'>No live matches currently in progress.</p>";
+            return;
+        }
+
+        // Clear loading text
+        feedContainer.innerHTML = "";
+
+        // Render up to 4 current live matches to keep the dashboard clean
+        data.response.slice(0, 4).forEach(match => {
+            const homeTeam = match.teams.home.name;
+            const homeLogo = match.teams.home.logo;
+            const awayTeam = match.teams.away.name;
+            const awayLogo = match.teams.away.logo;
+            const homeGoals = match.goals.home ?? 0;
+            const awayGoals = match.goals.away ?? 0;
+            const elapsed = match.fixture.status.elapsed;
+            const leagueName = match.league.name;
+
+            const matchCard = document.createElement('div');
+            matchCard.className = 'match-card';
+            matchCard.innerHTML = `
+                <div class="match-league">${leagueName} - <span class="live-badge">${elapsed}' Live</span></div>
+                <div class="match-teams">
+                    <div class="team">
+                        <img src="${homeLogo}" alt="${homeTeam}" width="20" height="20">
+                        <span>${homeTeam}</span>
+                    </div>
+                    <div class="score">${homeGoals} - ${awayGoals}</div>
+                    <div class="team">
+                        <img src="${awayLogo}" alt="${awayTeam}" width="20" height="20">
+                        <span>${awayTeam}</span>
+                    </div>
+                </div>
+            `;
+            feedContainer.appendChild(matchCard);
+        });
+
+    } catch (error) {
+        console.error("Error fetching live matches:", error);
+        feedContainer.innerHTML = "<p class='error-text'>Failed to load live match data.</p>";
+    }
+}
+
+// Kick off the fetch when the dashboard loads
+document.addEventListener('DOMContentLoaded', fetchLiveScores);
