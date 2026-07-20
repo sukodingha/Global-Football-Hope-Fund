@@ -1015,12 +1015,14 @@ footer {
     .community-page .community-grid {
         grid-template-columns: 1fr;
     }
+}
+
 .competition-widget-container {
     width: 100%;
     max-width: 1200px;
     margin: 20px auto;
     padding: 15px;
-    background: #1a1a1a; /* Matches a typical dark theme dashboard */
+    background: #1a1a1a;
     border-radius: 8px;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
 }
@@ -1029,7 +1031,620 @@ footer {
     color: #ffffff;
     margin-bottom: 15px;
     font-size: 1.5rem;
-    border-left: 4px solid #4CAF50; /* Clean green accent lines */
+    border-left: 4px solid #4CAF50;
     padding-left: 10px;
 }
+
+/* ===== LIVE SCORES TICKER ===== */
+.live-scores-section {
+    background: linear-gradient(135deg, #0b2d4d 0%, #1a4a6e 100%);
+    color: white;
+    padding: 50px 20px 60px;
+    overflow: hidden;
+}
+
+.live-scores-section .section-heading h2 {
+    color: #fff;
+}
+
+.live-scores-section .section-heading p {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.ticker-container {
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    overflow: hidden;
+    position: relative;
+}
+
+.ticker-container::before,
+.ticker-container::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 60px;
+    z-index: 2;
+    pointer-events: none;
+}
+
+.ticker-container::before {
+    left: 0;
+    background: linear-gradient(90deg, rgba(11, 45, 77, 1) 0%, transparent 100%);
+}
+
+.ticker-container::after {
+    right: 0;
+    background: linear-gradient(270deg, rgba(11, 45, 77, 1) 0%, transparent 100%);
+}
+
+.ticker-track {
+    display: flex;
+    gap: 16px;
+    animation: tickerScroll 40s linear infinite;
+    width: max-content;
+    padding: 8px 0;
+}
+
+.ticker-track:hover {
+    animation-play-state: paused;
+}
+
+@keyframes tickerScroll {
+    0% {
+        transform: translateX(0);
+    }
+    100% {
+        transform: translateX(-50%);
+    }
+}
+
+.match-card {
+    flex-shrink: 0;
+    width: 280px;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 16px;
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    cursor: pointer;
+}
+
+.match-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.match-league {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 2px;
+}
+
+.match-league .league-pill {
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.match-status-badge {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 999px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.match-status-badge.live {
+    background: #ff3b30;
+    color: white;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    animation: pulseLive 1.5s ease-in-out infinite;
+}
+
+.match-status-badge.live::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: white;
+    animation: pulseDot 1.5s ease-in-out infinite;
+}
+
+@keyframes pulseLive {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.85; }
+}
+
+@keyframes pulseDot {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.3); }
+}
+
+.match-status-badge.ft {
+    background: #333;
+    color: #ccc;
+}
+
+.match-status-badge.ht {
+    background: #f5a623;
+    color: #1a1a1a;
+}
+
+.match-teams {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.match-team {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+    text-align: center;
+}
+
+.match-team .team-emoji {
+    font-size: 28px;
+    line-height: 1;
+}
+
+.match-team .team-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1.2;
+}
+
+.match-score-display {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 50px;
+}
+
+.match-score-display .score {
+    font-size: 26px;
+    font-weight: 900;
+    color: #fff;
+    letter-spacing: -0.02em;
+    line-height: 1;
+}
+
+.match-score-display .minute {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.7);
+    margin-top: 3px;
+    font-weight: 600;
+}
+
+.match-extra {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
+    padding-top: 6px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.match-extra .match-date {
+    font-weight: 600;
+}
+
+.match-extra .match-attendees {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Responsive Ticker */
+@media (max-width: 768px) {
+    .match-card {
+        width: 240px;
+        padding: 14px 16px;
+    }
+
+    .match-team .team-emoji {
+        font-size: 22px;
+    }
+
+    .match-score-display .score {
+        font-size: 22px;
+    }
+
+    .ticker-track {
+        animation-duration: 30s;
+    }
+
+    .ticker-container::before,
+    .ticker-container::after {
+        width: 30px;
+    }
+}
+
+@media (max-width: 480px) {
+    .match-card {
+        width: 200px;
+        padding: 12px 14px;
+    }
+
+    .match-team .team-name {
+        font-size: 11px;
+    }
+
+    .match-score-display .score {
+        font-size: 18px;
+    }
+
+    .ticker-track {
+        animation-duration: 25s;
+    }
+}
+
+/* ===== MEMBER CARDS (Friend System) ===== */
+.members-list {
+    display: grid;
+    gap: 12px;
+    max-height: 480px;
+    overflow-y: auto;
+}
+
+.member-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    background: #f8fbff;
+    border-radius: 14px;
+    border: 1px solid #e9eef4;
+    transition: background 0.2s ease;
+}
+
+.member-card:hover {
+    background: #eef4f8;
+}
+
+.member-avatar {
+    font-size: 28px;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: #0b2d4d;
+    color: white;
+    flex-shrink: 0;
+}
+
+.member-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.member-info strong {
+    display: block;
+    font-size: 14px;
+    color: #0b2d4d;
+}
+
+.member-meta {
+    font-size: 11px;
+    color: #64748b;
+}
+
+.member-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.member-actions .mini-btn {
+    font-size: 11px;
+    padding: 5px 10px;
+}
+
+.pending-label {
+    font-size: 11px;
+    color: #f5a623;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+/* Friend Requests */
+.friend-requests-list {
+    display: grid;
+    gap: 10px;
+}
+
+.friend-request-item {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px;
+    background: #f8fbff;
+    border-radius: 12px;
+    border: 1px solid #e9eef4;
+    font-size: 13px;
+}
+
+.friend-request-item .request-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.friend-request-item .mini-btn {
+    font-size: 11px;
+    padding: 5px 10px;
+}
+
+/* DM Chat Panel */
+#dmChatPanel {
+    transition: all 0.3s ease;
+}
+
+#dmChatPanel[hidden] {
+    display: none;
+}
+
+#dmChatMessages {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+/* Post Like Section */
+.post-like-section {
+    padding: 8px 0;
+    border-top: 1px solid #e9eef4;
+    margin-top: 6px;
+}
+
+.like-btn {
+    border: 1px solid #d6d9de;
+    background: white;
+    color: #0b2d4d;
+    border-radius: 999px;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 13px;
+    transition: all 0.2s ease;
+}
+
+.like-btn:hover {
+    background: #0b2d4d;
+    color: white;
+    border-color: #0b2d4d;
+}
+
+/* ===== USER WALL (Dashboard) ===== */
+.wall-container {
+    max-width: 800px;
+    margin: 0 auto;
+    display: grid;
+    gap: 24px;
+}
+
+.wall-post-form-card {
+    text-align: left;
+}
+
+.wall-post-form-card textarea {
+    width: 100%;
+    padding: 14px 16px;
+    border: 1px solid #d6d9de;
+    border-radius: 12px;
+    font-size: 16px;
+    color: #111;
+    background: #fafafa;
+    box-sizing: border-box;
+    resize: vertical;
+    font-family: inherit;
+}
+
+.wall-post-form-card textarea:focus {
+    outline: none;
+    border-color: #0b2d4d;
+    box-shadow: 0 0 0 4px rgba(11, 45, 77, 0.08);
+}
+
+.wall-feed {
+    display: grid;
+    gap: 16px;
+    text-align: left;
+}
+
+.wall-post-card {
+    display: grid;
+    gap: 14px;
+}
+
+.wall-post-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.wall-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #0b2d4d, #123f63);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+.wall-post-author {
+    flex: 1;
+}
+
+.wall-post-author strong {
+    display: block;
+    color: #0b2d4d;
+}
+
+.wall-post-footer {
+    display: flex;
+    gap: 10px;
+    padding-top: 8px;
+    border-top: 1px solid #e9eef4;
+}
+
+.wall-like-btn {
+    margin: 0;
+}
+
+.delete-wall-post {
+    font-size: 13px;
+    padding: 4px 8px;
+    background: rgba(255, 59, 48, 0.1);
+    color: #ff3b30;
+}
+
+.delete-wall-post:hover {
+    background: rgba(255, 59, 48, 0.2);
+}
+
+/* ===== SPORTS NEWS HUB ===== */
+.news-section {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 50px 20px 80px;
+}
+
+.news-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 24px;
+    margin-top: 10px;
+    text-align: left;
+}
+
+.news-card {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 0;
+    background: white;
+    border-radius: 16px;
+    border: 1px solid #e9eef4;
+    box-shadow: 0 12px 32px rgba(15, 35, 63, 0.08);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.news-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 20px 40px rgba(11, 45, 77, 0.15);
+}
+
+.news-card-image {
+    width: 100%;
+    height: 200px;
+    overflow: hidden;
+    background: #eef4f8;
+}
+
+.news-card-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.3s ease;
+}
+
+.news-card:hover .news-card-image img {
+    transform: scale(1.05);
+}
+
+.news-card-content {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    flex: 1;
+}
+
+.news-title {
+    font-size: 18px;
+    font-weight: 800;
+    color: #0b2d4d;
+    margin: 0;
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.news-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    font-size: 12px;
+    color: #64748b;
+}
+
+.news-source {
+    font-weight: 600;
+}
+
+.news-date {
+    color: #94a3b8;
+}
+
+.news-description {
+    font-size: 14px;
+    color: #475569;
+    line-height: 1.6;
+    margin: 0;
+    flex: 1;
+}
+
+.news-read-link {
+    margin-top: 8px;
+    align-self: flex-start;
+    padding: 10px 18px;
+    font-size: 13px;
+    background: linear-gradient(90deg, #0b2d4d 0%, #123f63 100%);
+    box-shadow: 0 6px 14px rgba(11, 45, 77, 0.18);
+}
+
+.news-read-link:hover {
+    background: linear-gradient(90deg, #123f63 0%, #1a4a6e 100%);
+}
+
+/* Responsive adjustments for sidebar */
+@media (max-width: 980px) {
+    .member-card {
+        flex-wrap: wrap;
+    }
+
+    .member-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
 }

@@ -52,6 +52,7 @@
     <a href="donate.html">Donate</a>
 </nav>
 
+<!-- Dashboard -->
 <section class="section registration-section">
     <div class="section-heading">
         <h2>Your Dashboard</h2>
@@ -75,13 +76,40 @@
                 <h3>Your Profile</h3>
                 <div id="profileSummary"></div>
             </div>
-            <div class="form-section">
+<div class="form-section">
                 <h3>Prediction Activity</h3>
                 <div id="predictionSummary"></div>
             </div>
             <div class="form-actions">
-                <button class="btn" type="button" onclick="logoutUser()">Log Out</button>
+                <button class="btn" type="button" id="dashboardLogoutBtn">Log Out</button>
             </div>
+        </div>
+    </div>
+</section>
+
+<!-- ===== USER WALL ===== -->
+<section class="section">
+    <div class="section-heading">
+        <h2>📋 User Wall</h2>
+        <p>Share match ideas, tactical analysis, and score predictions with the community.</p>
+    </div>
+
+    <div class="wall-container">
+        <div class="card wall-post-form-card">
+            <form id="wallPostForm">
+                <div id="wallMessage" class="message"></div>
+                <div class="form-row">
+                    <label for="wallPostText">Write your post</label>
+                    <textarea id="wallPostText" rows="4" placeholder="Share your thoughts, tactics, predictions..." required></textarea>
+                </div>
+                <div class="form-row form-actions">
+                    <button type="submit" class="btn">📢 Post to Wall</button>
+                </div>
+            </form>
+        </div>
+
+        <div id="wallFeed" class="wall-feed">
+            <p class="helper-text">Loading posts...</p>
         </div>
     </div>
 </section>

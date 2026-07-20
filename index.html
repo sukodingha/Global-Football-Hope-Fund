@@ -28,7 +28,6 @@
         <button id="logoutBtn" class="logout-btn" type="button" hidden>Logout</button>
     </div>
 
-   <header>
     <nav>
         <a href="/index.html">Home</a>
         <a href="/pages/about.html">About</a>
@@ -67,6 +66,20 @@
 
     <a href="pages/register.html" class="btn">Join the Campaign</a>
     <a href="pages/news.html" class="btn btn-secondary">Open Sports Hub</a>
+</section>
+
+<!-- LIVE SCORES TICKER -->
+<section class="section live-scores-section">
+    <div class="section-heading">
+        <h2>⚡ Live Scores</h2>
+        <p>Real-time football scores from top leagues around the world.</p>
+    </div>
+
+    <div class="ticker-container">
+        <div class="ticker-track" id="tickerTrack">
+            <!-- Match cards injected by JS -->
+        </div>
+    </div>
 </section>
 
 <section id="register" class="section registration-section">
@@ -168,6 +181,7 @@
 <script type="module" src="js/auth.js"></script>
 <script type="module" src="js/script.js"></script>
 <script type="module" src="js/home.js"></script>
+<script type="module" src="js/livescores.js"></script>
 <script>
     window.addEventListener('load', () => {
         const splash = document.getElementById('appSplash');

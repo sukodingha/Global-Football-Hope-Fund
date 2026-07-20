@@ -136,6 +136,39 @@
           </div>
           <div id="chatOptOutMessage" class="helper-text">Enable consent to see and send chat messages.</div>
         </div>
+
+        <!-- ===== MEMBERS / FRIEND REQUESTS ===== -->
+        <div class="card">
+          <div class="section-heading">
+            <h3>👥 Members</h3>
+            <p>Connect with other football fans.</p>
+          </div>
+          <div id="membersList" class="members-list">
+            <!-- Injected by JS -->
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="section-heading">
+            <h3>📨 Friend Requests</h3>
+            <p id="friendRequestCount">0 pending</p>
+          </div>
+          <div id="friendRequestsList" class="friend-requests-list">
+            <p class="helper-text">No pending requests.</p>
+          </div>
+        </div>
+
+        <div class="card" id="dmChatPanel" hidden>
+          <div class="section-heading">
+            <h3>💬 Direct Message</h3>
+            <p id="dmChatWith">Chat with a friend</p>
+          </div>
+          <div id="dmChatMessages" class="chat-list"></div>
+          <form id="dmChatForm" class="comment-form">
+            <input id="dmMessageInput" type="text" placeholder="Type a message..." required>
+            <button class="btn" type="submit">Send</button>
+          </form>
+        </div>
       </aside>
     </div>
   </section>
