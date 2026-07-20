@@ -56,133 +56,136 @@
     <a href="donate.html">Donate</a>
   </nav>
 
-  <section class="section registration-section community-page">
-    <div class="section-heading">
-      <h2>Community Feed</h2>
-      <p>Share updates, ask for help, and connect with other supporters in a safe, interest-driven space.</p>
+  <div class="fb-page">
+    <!-- ===== STORIES / HIGHLIGHTS BAR ===== -->
+    <div class="stories-bar">
+      <div class="stories-track" id="storiesTrack">
+        <!-- Injected by JS -->
+      </div>
     </div>
 
-    <div class="community-grid">
-      <div class="community-main">
-        <div class="card">
-          <div class="section-heading">
-            <h3>Create a post</h3>
-            <p>Write updates, choose an interest tag, and upload a photo to share with the community.</p>
-          </div>
-          <form id="communityPostForm" class="registration-form">
-            <div id="communityStatus" class="message"></div>
-
-            <div class="form-row">
-              <label for="postText">Post text</label>
-              <textarea id="postText" name="postText" rows="4" placeholder="Share your story, update, or question..." required></textarea>
-            </div>
-
-            <div class="form-row">
-              <label for="postInterest">Interest tag</label>
-              <select id="postInterest" name="postInterest" required>
-                <option value="Football">Football</option>
-                <option value="Fundraising">Fundraising</option>
-                <option value="Support">Support</option>
-                <option value="Training">Training</option>
-                <option value="Events">Events</option>
-                <option value="General">General</option>
-              </select>
-            </div>
-
-            <div class="form-row">
-              <label for="postImage">Upload image</label>
-              <input type="file" id="postImage" name="postImage" accept="image/*">
-            </div>
-
-            <div class="form-row checkbox-row">
-              <label for="chatConsent">
-                <input type="checkbox" id="chatConsent" name="chatConsent">
-                I consent to public community chat messages.
-              </label>
-            </div>
-
-            <div class="form-row form-actions">
-              <button class="btn" type="submit">Publish Post</button>
-            </div>
-          </form>
-        </div>
-
-        <div class="card">
-          <div class="section-heading">
-            <h3>Filter by interest</h3>
-            <p>Click a tag to show only community posts that match it.</p>
-          </div>
-          <div id="interestFilterButtons" class="filter-group"></div>
-        </div>
-
-        <div class="card">
-          <div class="section-heading">
-            <h3>Live feed</h3>
-            <p>New posts appear instantly when other members publish.</p>
-          </div>
-          <div id="communityFeed"></div>
+    <!-- ===== CREATE POST CARD ===== -->
+    <div class="create-post-card">
+      <div class="create-post-row">
+        <div class="create-post-avatar" id="createPostAvatar">👤</div>
+        <div class="create-post-input-wrap">
+          <input type="text" id="createPostInput" class="create-post-input" placeholder="What's on your mind, Football Fan?" readonly>
         </div>
       </div>
-
-      <aside class="community-sidebar">
-        <div class="card chat-panel">
-          <div class="section-heading">
-            <h3>Community chat</h3>
-            <p>Only send messages if you consent and want to chat safely.</p>
-          </div>
-          <div id="communityChatSection" class="chat-section hidden">
-            <div id="communityChatStatus" class="helper-text">Chat is active.</div>
-            <div id="communityChatList" class="chat-list"></div>
-            <form id="communityChatForm" class="comment-form">
-              <label for="chatMessage">Send a message</label>
-              <input id="chatMessage" name="chatMessage" type="text" placeholder="Write a short message..." required>
-              <button class="btn" type="submit">Send</button>
-            </form>
-          </div>
-          <div id="chatOptOutMessage" class="helper-text">Enable consent to see and send chat messages.</div>
-        </div>
-
-        <!-- ===== MEMBERS / FRIEND REQUESTS ===== -->
-        <div class="card">
-          <div class="section-heading">
-            <h3>👥 Members</h3>
-            <p>Connect with other football fans.</p>
-          </div>
-          <div id="membersList" class="members-list">
-            <!-- Injected by JS -->
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="section-heading">
-            <h3>📨 Friend Requests</h3>
-            <p id="friendRequestCount">0 pending</p>
-          </div>
-          <div id="friendRequestsList" class="friend-requests-list">
-            <p class="helper-text">No pending requests.</p>
-          </div>
-        </div>
-
-        <div class="card" id="dmChatPanel" hidden>
-          <div class="section-heading">
-            <h3>💬 Direct Message</h3>
-            <p id="dmChatWith">Chat with a friend</p>
-          </div>
-          <div id="dmChatMessages" class="chat-list"></div>
-          <form id="dmChatForm" class="comment-form">
-            <input id="dmMessageInput" type="text" placeholder="Type a message..." required>
-            <button class="btn" type="submit">Send</button>
-          </form>
-        </div>
-      </aside>
+      <div class="create-post-divider"></div>
+      <div class="create-post-actions">
+        <button class="create-post-action" id="openVideoBtn">📹 Live video</button>
+        <button class="create-post-action" id="openPhotoBtn">📷 Photo</button>
+        <button class="create-post-action" id="openFeelingBtn">😊 Feeling</button>
+      </div>
     </div>
-  </section>
 
-<footer>
+    <!-- ===== POST MODAL (hidden by default) ===== -->
+    <div id="postModal" class="fb-modal" hidden>
+      <div class="fb-modal-overlay" id="postModalOverlay"></div>
+      <div class="fb-modal-card create-post-modal-card">
+        <div class="fb-modal-header">
+          <h3>Create Post</h3>
+          <button class="fb-modal-close" id="postModalClose">&times;</button>
+        </div>
+        <div class="create-post-modal-body">
+          <div class="create-post-modal-user">
+            <span class="create-post-modal-avatar" id="postModalAvatar">👤</span>
+            <div>
+              <strong id="postModalName">Your Name</strong>
+              <div class="create-post-modal-privacy">🌍 Public</div>
+            </div>
+          </div>
+          <textarea id="postModalText" class="create-post-modal-textarea" placeholder="What's on your mind?" rows="3"></textarea>
+          <div class="create-post-image-preview" id="postImagePreview" hidden>
+            <img id="postPreviewImg" src="" alt="Preview">
+            <button class="remove-image-btn" id="removeImageBtn">&times;</button>
+          </div>
+          <div class="create-post-modal-actions">
+            <label class="create-post-modal-photo-btn">
+              📷 Add Photos
+              <input type="file" id="postModalFile" accept="image/*" hidden>
+            </label>
+            <div class="create-post-modal-interest">
+              <select id="postModalInterest">
+                <option value="Football">⚽ Football</option>
+                <option value="Fundraising">💰 Fundraising</option>
+                <option value="Support">🤝 Support</option>
+                <option value="Training">🏋️ Training</option>
+                <option value="Events">📅 Events</option>
+                <option value="General">💬 General</option>
+              </select>
+            </div>
+          </div>
+          <div id="postModalStatus" class="message"></div>
+          <button class="create-post-submit" id="postModalSubmit">Post</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== FEED FILTER TABS ===== -->
+    <div class="feed-filter-bar">
+      <button class="feed-filter-btn active" data-filter="All">All Posts</button>
+      <button class="feed-filter-btn" data-filter="Football">⚽ Football</button>
+      <button class="feed-filter-btn" data-filter="Events">📅 Events</button>
+      <button class="feed-filter-btn" data-filter="Support">🤝 Support</button>
+    </div>
+
+    <!-- ===== FEED CONTAINER ===== -->
+    <div class="fb-feed" id="communityFeed">
+      <div class="fb-loading">Loading posts...</div>
+    </div>
+  </div>
+
+  <!-- ===== RIGHT SIDEBAR (desktop) ===== -->
+  <aside class="fb-sidebar" id="fbSidebar">
+    <div class="fb-sidebar-card">
+      <h4>👥 Members</h4>
+      <div id="membersList" class="members-list"></div>
+    </div>
+    <div class="fb-sidebar-card">
+      <h4>📨 Friend Requests <span id="friendRequestCount" class="fb-badge">0</span></h4>
+      <div id="friendRequestsList" class="friend-requests-list"></div>
+    </div>
+    <div class="fb-sidebar-card">
+      <h4>💬 Community Chat</h4>
+      <div id="communityChatSection" class="chat-section">
+        <div id="communityChatList" class="chat-list"></div>
+        <form id="communityChatForm" class="comment-form">
+          <input id="chatMessage" name="chatMessage" type="text" placeholder="Write a message..." required>
+          <button class="btn" type="submit">Send</button>
+        </form>
+      </div>
+    </div>
+    <div class="fb-sidebar-card" id="dmChatPanel" hidden>
+      <h4 id="dmChatWith">💬 Direct Message</h4>
+      <div id="dmChatMessages" class="chat-list"></div>
+      <form id="dmChatForm" class="comment-form">
+        <input id="dmMessageInput" type="text" placeholder="Type a message..." required>
+        <button class="btn" type="submit">Send</button>
+      </form>
+    </div>
+  </aside>
+
+  <footer>
     <p>Global Football Hope Fund © 2026</p>
   </footer>
 
-  <!-- ===== AUTH MODAL (appears on #userStatus click) ===== -->
+  <!-- ===== USER PROFILE MODAL ===== -->
+  <div id="profileModal" class="fb-modal" hidden>
+    <div class="fb-modal-overlay" id="profileModalOverlay"></div>
+    <div class="fb-modal-card profile-modal-card">
+      <div class="fb-modal-header">
+        <h3>User Profile</h3>
+        <button class="fb-modal-close" id="profileModalClose">&times;</button>
+      </div>
+      <div class="profile-modal-body" id="profileModalBody">
+        <!-- Injected by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== AUTH MODAL ===== -->
   <div id="authModal" class="auth-modal">
     <div id="authModalOverlay" class="auth-modal-overlay"></div>
     <div class="auth-modal-card">
