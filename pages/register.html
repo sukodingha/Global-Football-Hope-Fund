@@ -3,10 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0b2d4d">
     <title>Create Account | Global Football Hope Fund</title>
-
     <link rel="stylesheet" href="../css/style.css">
     <link rel="manifest" href="../manifest.json">
+    <link rel="icon" href="../images/icon-192.svg" sizes="192x192">
+    <link rel="apple-touch-icon" href="../images/icon-192.svg">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+</head>
+<body>
 <div id="appSplash" class="app-splash">
     <div class="app-splash-card">
         <div class="app-splash-icon">⚽</div>
@@ -53,7 +59,6 @@
 </nav>
 
 <section class="section registration-section">
-
     <div class="section-heading">
         <h2>Create Your GFHF Account</h2>
         <p>Join a vibrant football community, support meaningful causes, and get involved in exciting competitions.</p>
@@ -181,28 +186,20 @@
 
         </form>
     </div>
-
 </section>
 
 <footer>
-<p>© 2026 Global Football Hope Fund</p>
+    <p>© 2026 Global Football Hope Fund</p>
 </footer>
 
-<script type="module" src="../js/script.js"></script>
 <script type="module" src="../js/auth.js"></script>
+<script type="module" src="../js/script.js"></script>
+<script src="../js/pwa.js"></script>
 <script>
     window.addEventListener('load', () => {
         const splash = document.getElementById('appSplash');
         if (splash) {
             setTimeout(() => splash.classList.add('hidden'), 900);
-        }
-
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('../sw.js').then((registration) => {
-                if (registration.waiting) {
-                    registration.waiting.postMessage({ type: 'SKIP_WAITING' });
-                }
-            }).catch(console.error);
         }
     });
 </script>

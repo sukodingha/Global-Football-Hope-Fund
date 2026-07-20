@@ -4,7 +4,6 @@
  * New imports should go directly to ./firebase-config.js
  */
 
-import { app, auth, db } from "./firebase-config.js";
+import { auth, db } from "./firebase-config.js";
 
-export { app, auth, db };
-
+export { auth, db };
