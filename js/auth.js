@@ -1,33 +1,180 @@
 import { auth, db } from "./firebase.js";
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, sendEmailVerification } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  onAuthStateChanged,
+  signOut,
+  sendEmailVerification,
+  GoogleAuthProvider,
+  signInWithPopup
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
+// ===== DOM refs =====
 const registerForm = document.getElementById("registerForm");
 const loginForm = document.getElementById("loginForm");
 const messageBox = document.getElementById("messageBox");
 const userStatus = document.getElementById("userStatus");
 const logoutBtn = document.getElementById("logoutBtn");
+const authModal = document.getElementById("authModal");
+const authModalOverlay = document.getElementById("authModalOverlay");
+const authModalClose = document.getElementById("authModalClose");
+const authModalTitle = document.getElementById("authModalTitle");
+const authModalMsg = document.getElementById("authModalMsg");
+const authLoginTab = document.getElementById("authLoginTab");
+const authRegisterTab = document.getElementById("authRegisterTab");
+const authLoginForm = document.getElementById("authLoginForm");
+const authRegisterForm = document.getElementById("authRegisterForm");
+const googleSignInBtn = document.getElementById("googleSignInBtn");
 
-function showMessage(text, type = "success") {
-  if (!messageBox) return;
-  messageBox.textContent = text;
-  messageBox.className = `message ${type}`;
+let authModalResolve = null;
+
+// ===== Auth Modal =====
+export function showAuthModal() {
+  return new Promise((resolve) => {
+    authModalResolve = resolve;
+    if (authModal) {
+      authModal.classList.add("auth-modal--open");
+      document.body.style.overflow = "hidden";
+    }
+    switchAuthTab("login");
+  });
 }
 
-function updateUserStatus(user, profileData = null) {
-  if (!userStatus) return;
-
-  if (!user) {
-    userStatus.textContent = "Login";
-    userStatus.classList.remove("active");
-    if (logoutBtn) logoutBtn.hidden = true;
-    return;
+export function hideAuthModal() {
+  if (authModal) {
+    authModal.classList.remove("auth-modal--open");
+    document.body.style.overflow = "";
   }
+  if (authModalResolve) {
+    authModalResolve(auth.currentUser);
+    authModalResolve = null;
+  }
+}
 
-  const displayName = profileData?.displayName || profileData?.firstName || user.displayName || user.email?.split("@")[0] || "Member";
-  userStatus.textContent = `Welcome, ${displayName}`;
-  userStatus.classList.add("active");
-  if (logoutBtn) logoutBtn.hidden = false;
+function switchAuthTab(tab) {
+  if (!authLoginTab || !authRegisterTab || !authLoginForm || !authRegisterForm || !authModalTitle) return;
+
+  if (tab === "login") {
+    authLoginTab.classList.add("active");
+    authRegisterTab.classList.remove("active");
+    authLoginForm.style.display = "grid";
+    authRegisterForm.style.display = "none";
+    authModalTitle.textContent = "Sign In";
+  } else {
+    authLoginTab.classList.remove("active");
+    authRegisterTab.classList.add("active");
+    authLoginForm.style.display = "none";
+    authRegisterForm.style.display = "grid";
+    authModalTitle.textContent = "Create Account";
+  }
+}
+
+function showModalMessage(text, type = "success") {
+  if (!authModalMsg) return;
+  authModalMsg.textContent = text;
+  authModalMsg.className = `message ${type}`;
+}
+
+// Close modal events
+if (authModalClose) {
+  authModalClose.addEventListener("click", hideAuthModal);
+}
+if (authModalOverlay) {
+  authModalOverlay.addEventListener("click", (e) => {
+    if (e.target === authModalOverlay) hideAuthModal();
+  });
+}
+
+// Tab switching
+if (authLoginTab) {
+  authLoginTab.addEventListener("click", () => switchAuthTab("login"));
+}
+if (authRegisterTab) {
+  authRegisterTab.addEventListener("click", () => switchAuthTab("register"));
+}
+
+// ===== Modal Login =====
+if (authLoginForm) {
+  authLoginForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const email = authLoginForm.email?.value?.trim();
+    const password = authLoginForm.password?.value;
+    if (!email || !password) return;
+
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      hideAuthModal();
+    } catch (error) {
+      showModalMessage(error.message || "Login failed.", "error");
+    }
+  });
+}
+
+// ===== Modal Register =====
+if (authRegisterForm) {
+  authRegisterForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const displayName = authRegisterForm.displayName?.value?.trim() || "";
+    const email = authRegisterForm.email?.value?.trim() || "";
+    const password = authRegisterForm.password?.value || "";
+    const confirmPassword = authRegisterForm.confirmPassword?.value || "";
+
+    if (password.length < 6) {
+      showModalMessage("Password must be at least 6 characters.", "error");
+      return;
+    }
+    if (password !== confirmPassword) {
+      showModalMessage("Passwords do not match.", "error");
+      return;
+    }
+
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+
+      await saveUserProfile(user, { displayName });
+      await sendEmailVerification(user);
+      showModalMessage("Account created! Please verify your email.", "success");
+      setTimeout(() => switchAuthTab("login"), 2000);
+    } catch (error) {
+      showModalMessage(error.message || "Registration failed.", "error");
+    }
+  });
+}
+
+// ===== Google Sign-In =====
+if (googleSignInBtn) {
+  googleSignInBtn.addEventListener("click", async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+
+      // Save/update profile
+      await saveUserProfile(user, {
+        displayName: user.displayName || "",
+        photoURL: user.photoURL || ""
+      });
+
+      hideAuthModal();
+    } catch (error) {
+      console.error("Google sign-in error:", error);
+      showModalMessage(error.message || "Google sign-in failed.", "error");
+    }
+  });
+}
+
+// ===== Original page forms (register.html / login.html) =====
+const registerFormLegacy = document.getElementById("registerForm");
+const loginFormLegacy = document.getElementById("loginForm");
+const messageBoxLegacy = document.getElementById("messageBox");
+
+function showMessage(text, type = "success") {
+  if (!messageBoxLegacy) return;
+  messageBoxLegacy.textContent = text;
+  messageBoxLegacy.className = `message ${type}`;
 }
 
 function saveFlashMessage(text, type = "success") {
@@ -37,7 +184,6 @@ function saveFlashMessage(text, type = "success") {
 function restoreFlashMessage() {
   const stored = sessionStorage.getItem("authFlashMessage");
   if (!stored) return;
-
   try {
     const { text, type } = JSON.parse(stored);
     showMessage(text, type);
@@ -50,7 +196,6 @@ function restoreFlashMessage() {
 
 async function saveUserProfile(user, extraData = {}) {
   if (!user) return;
-
   const userRef = doc(db, "users", user.uid);
   const userData = {
     uid: user.uid,
@@ -58,7 +203,6 @@ async function saveUserProfile(user, extraData = {}) {
     createdAt: new Date().toISOString(),
     ...extraData
   };
-
   await setDoc(userRef, userData, { merge: true });
 }
 
@@ -70,31 +214,27 @@ async function createUniqueMembershipId(firstName = "", lastName = "") {
   const candidate = initials ? `GFHF-${randomNumber}-${initials}` : `GFHF-${randomNumber}`;
   const membershipRef = doc(db, "membershipIds", candidate);
   const membershipSnap = await getDoc(membershipRef);
-
   if (membershipSnap.exists()) {
     return createUniqueMembershipId(firstName, lastName);
   }
-
   await setDoc(membershipRef, { createdAt: new Date().toISOString() });
   return candidate;
 }
 
-if (registerForm) {
-  registerForm.addEventListener("submit", async (event) => {
+if (registerFormLegacy) {
+  registerFormLegacy.addEventListener("submit", async (event) => {
     event.preventDefault();
-
-    const firstName = registerForm.firstName?.value.trim() || "";
-    const lastName = registerForm.lastName?.value.trim() || "";
-    const displayName = registerForm.displayName?.value.trim() || "";
-    const email = registerForm.email?.value.trim() || "";
-    const password = registerForm.password?.value || "";
-    const confirmPassword = registerForm.confirmPassword?.value || "";
+    const firstName = registerFormLegacy.firstName?.value.trim() || "";
+    const lastName = registerFormLegacy.lastName?.value.trim() || "";
+    const displayName = registerFormLegacy.displayName?.value.trim() || "";
+    const email = registerFormLegacy.email?.value.trim() || "";
+    const password = registerFormLegacy.password?.value || "";
+    const confirmPassword = registerFormLegacy.confirmPassword?.value || "";
 
     if (password.length < 6) {
       showMessage("Password should be at least 6 characters.", "error");
       return;
     }
-
     if (password !== confirmPassword) {
       showMessage("Passwords do not match.", "error");
       return;
@@ -104,23 +244,18 @@ if (registerForm) {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       const membershipId = await createUniqueMembershipId(firstName, lastName);
-
       await saveUserProfile(user, {
-        firstName,
-        lastName,
-        displayName,
-        membershipId,
-        country: registerForm.country?.value.trim() || "",
-        city: registerForm.city?.value.trim() || "",
-        nationalTeam: registerForm.nationalTeam?.value.trim() || "",
-        club: registerForm.club?.value.trim() || "",
-        btc: registerForm.btc?.value.trim() || "",
-        usdt: registerForm.usdt?.value.trim() || ""
+        firstName, lastName, displayName, membershipId,
+        country: registerFormLegacy.country?.value.trim() || "",
+        city: registerFormLegacy.city?.value.trim() || "",
+        nationalTeam: registerFormLegacy.nationalTeam?.value.trim() || "",
+        club: registerFormLegacy.club?.value.trim() || "",
+        btc: registerFormLegacy.btc?.value.trim() || "",
+        usdt: registerFormLegacy.usdt?.value.trim() || ""
       });
-
       await sendEmailVerification(user);
       saveFlashMessage("Account created successfully. Please verify your email before signing in.", "success");
-      registerForm.reset();
+      registerFormLegacy.reset();
       window.location.href = "login.html";
     } catch (error) {
       showMessage(error.message || "Registration failed.", "error");
@@ -128,23 +263,19 @@ if (registerForm) {
   });
 }
 
-if (loginForm) {
-  loginForm.addEventListener("submit", async (event) => {
+if (loginFormLegacy) {
+  loginFormLegacy.addEventListener("submit", async (event) => {
     event.preventDefault();
-
-    const email = loginForm.email?.value.trim() || "";
-    const password = loginForm.password?.value || "";
-
+    const email = loginFormLegacy.email?.value.trim() || "";
+    const password = loginFormLegacy.password?.value || "";
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
-
       if (!user.emailVerified) {
         await signOut(auth);
         showMessage("Your email is not verified. Please check your inbox or spam for the verification email before signing in.", "error");
         return;
       }
-
       showMessage("Signed in successfully.", "success");
       window.location.href = "dashboard.html?goto=community";
     } catch (error) {
@@ -155,6 +286,68 @@ if (loginForm) {
 
 restoreFlashMessage();
 
+// ===== Profile Avatar Helper =====
+function generateInitialsAvatar(name, size = 40) {
+  const initials = (name || "?")
+    .split(" ")
+    .map(s => s[0])
+    .join("")
+    .substring(0, 2)
+    .toUpperCase() || "?";
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  const gradient = ctx.createLinearGradient(0, 0, size, size);
+  gradient.addColorStop(0, "#0b2d4d");
+  gradient.addColorStop(1, "#123f63");
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#fff";
+  ctx.font = `bold ${size * 0.4}px "Segoe UI", sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(initials, size / 2, size / 2);
+  return canvas.toDataURL("image/png");
+}
+
+// ===== Update user status with avatar =====
+function updateUserStatus(user, profileData = null) {
+  if (!userStatus) return;
+
+  if (!user) {
+    userStatus.innerHTML = `<span class="user-status-text">Login</span>`;
+    userStatus.classList.remove("active");
+    userStatus.style.cursor = "pointer";
+    userStatus.onclick = showAuthModal;
+    if (logoutBtn) logoutBtn.hidden = true;
+    return;
+  }
+
+  const displayName = profileData?.displayName || user.displayName || user.email?.split("@")[0] || "Member";
+  const photoURL = profileData?.photoURL || user.photoURL || "";
+
+  let avatarHtml = "";
+  if (photoURL) {
+    avatarHtml = `<img src="${photoURL}" alt="" class="user-avatar" onerror="this.style.display='none'">`;
+  } else {
+    const dataUri = generateInitialsAvatar(displayName, 32);
+    avatarHtml = `<img src="${dataUri}" alt="" class="user-avatar">`;
+  }
+
+  userStatus.innerHTML = `
+    ${avatarHtml}
+    <span class="user-status-text">${displayName}</span>
+    <span class="user-status-dot"></span>
+  `;
+  userStatus.classList.add("active");
+  userStatus.style.cursor = "default";
+  userStatus.onclick = null;
+  if (logoutBtn) logoutBtn.hidden = false;
+}
+
 onAuthStateChanged(auth, async (user) => {
   if (!user) {
     updateUserStatus(null);
@@ -163,11 +356,9 @@ onAuthStateChanged(auth, async (user) => {
 
   const profileRef = doc(db, "users", user.uid);
   const profileSnap = await getDoc(profileRef);
-
   if (profileSnap.exists()) {
     const profileData = profileSnap.data();
     updateUserStatus(user, profileData);
-    console.log("User profile loaded", profileData);
   } else {
     updateUserStatus(user);
   }
@@ -188,19 +379,3 @@ if (logoutBtn) {
     }
   });
 }
-
-// Cleanup: remove hardcoded "Login" anchors inserted in static navs
-// Auth UI uses `#userStatus` and `#logoutBtn` instead — remove duplicates
-document.addEventListener('DOMContentLoaded', () => {
-  try {
-    const anchors = Array.from(document.querySelectorAll('a[href$="login.html"]'));
-    anchors.forEach(a => {
-      if (a.id === 'userStatus') return; // keep dynamic userStatus anchor
-      // keep link if we are on the login page (so nav can show active state)
-      if (window.location.pathname.endsWith('login.html')) return;
-      a.remove();
-    });
-  } catch (e) {
-    console.error('Error cleaning up login anchors', e);
-  }
-});

@@ -1648,3 +1648,747 @@ footer {
         justify-content: flex-end;
     }
 }
+
+/* ===== LIVE ODDS & PREDICTIONS ===== */
+.odds-section {
+    background: linear-gradient(135deg, #0b2d4d 0%, #1a4a6e 100%);
+    color: #fff;
+    padding: 60px 20px 80px;
+}
+
+.odds-section .section-heading h2,
+.odds-section .section-heading h3 {
+    color: #fff;
+}
+
+.odds-section .section-heading p {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.odds-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+    text-align: left;
+}
+
+.odds-card {
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 18px;
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    color: #fff;
+}
+
+.odds-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3);
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.odds-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.odds-header .league-pill {
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.odds-time {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.7);
+    font-weight: 600;
+}
+
+.odds-teams {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 8px 0;
+}
+
+.odds-team {
+    font-size: 16px;
+    font-weight: 800;
+    color: #fff;
+    text-align: center;
+    flex: 1;
+}
+
+.odds-vs {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.4);
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.odds-prices {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+
+.odds-price {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 10px 8px;
+    border-radius: 12px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.odds-price:hover {
+    background: rgba(0, 0, 0, 0.35);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.odds-price.odds-fav {
+    border-color: #00c853;
+    box-shadow: 0 0 12px rgba(0, 200, 83, 0.15);
+}
+
+.odds-price.odds-fav .odds-value {
+    color: #00c853;
+}
+
+.odds-label {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+}
+
+.odds-value {
+    font-size: 20px;
+    font-weight: 900;
+    color: #fff;
+    font-family: "Courier New", monospace;
+}
+
+/* Prediction Input Form */
+.odds-prediction-form {
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.predict-label {
+    font-size: 13px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.predict-inputs {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+.predict-team {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+}
+
+.predict-team-name {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.6);
+    font-weight: 600;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 110px;
+}
+
+.predict-score-input {
+    width: 56px;
+    padding: 10px 0;
+    text-align: center;
+    font-size: 20px;
+    font-weight: 900;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
+    background: rgba(0, 0, 0, 0.3);
+    color: #fff;
+    font-family: "Courier New", monospace;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    -moz-appearance: textfield;
+}
+
+.predict-score-input::-webkit-outer-spin-button,
+.predict-score-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.predict-score-input:focus {
+    outline: none;
+    border-color: #00c853;
+    box-shadow: 0 0 16px rgba(0, 200, 83, 0.2);
+}
+
+.predict-score-input:disabled {
+    opacity: 0.6;
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.predict-dash {
+    font-size: 24px;
+    font-weight: 900;
+    color: rgba(255, 255, 255, 0.4);
+    padding-top: 20px;
+}
+
+.submit-prediction-btn {
+    margin-top: 4px;
+    padding: 10px 20px;
+    font-size: 13px;
+    background: linear-gradient(90deg, #00c853 0%, #00b34a 100%);
+    box-shadow: 0 8px 16px rgba(0, 200, 83, 0.2);
+}
+
+.submit-prediction-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: linear-gradient(90deg, #666 0%, #555 100%);
+    box-shadow: none;
+}
+
+/* Leaderboard */
+.leaderboard-container {
+    max-width: 700px;
+    margin: 0 auto;
+    text-align: left;
+}
+
+.leaderboard-table {
+    display: grid;
+    gap: 2px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.leaderboard-header {
+    display: grid;
+    grid-template-columns: 44px 1fr 50px 60px 60px;
+    gap: 8px;
+    padding: 12px 16px;
+    background: rgba(0, 0, 0, 0.2);
+    font-size: 12px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.leaderboard-row {
+    display: grid;
+    grid-template-columns: 44px 1fr 50px 60px 60px;
+    gap: 8px;
+    padding: 10px 16px;
+    align-items: center;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.85);
+    transition: background 0.15s ease;
+}
+
+.leaderboard-row:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.leaderboard-row:not(:last-child) {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.leaderboard-rank {
+    font-size: 16px;
+    text-align: center;
+}
+
+.leaderboard-name strong {
+    color: #fff;
+}
+
+.leaderboard-pts {
+    text-align: center;
+    color: #00c853;
+    font-weight: 900;
+    font-size: 16px;
+}
+
+.leaderboard-exact {
+    text-align: center;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.leaderboard-winrate {
+    text-align: center;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.leaderboard-you {
+    background: rgba(0, 200, 83, 0.08);
+    border-left: 3px solid #00c853;
+}
+
+.leaderboard-legend {
+    margin-top: 12px;
+    text-align: center;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .odds-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .odds-team {
+        font-size: 14px;
+    }
+
+    .predict-score-input {
+        width: 48px;
+        font-size: 18px;
+    }
+
+    .leaderboard-header,
+    .leaderboard-row {
+        grid-template-columns: 36px 1fr 40px 44px 44px;
+        font-size: 12px;
+        padding: 8px 12px;
+    }
+
+    .leaderboard-rank {
+        font-size: 14px;
+    }
+
+    .leaderboard-pts {
+        font-size: 14px;
+    }
+}
+
+/* ===== AUTH MODAL ===== */
+.auth-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 3000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    visibility: hidden;
+    opacity: 0;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.auth-modal--open {
+    visibility: visible;
+    opacity: 1;
+}
+
+.auth-modal-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+}
+
+.auth-modal-card {
+    position: relative;
+    width: 100%;
+    max-width: 420px;
+    max-height: 90vh;
+    overflow-y: auto;
+    margin: 16px;
+    padding: 32px 28px 28px;
+    background: white;
+    border-radius: 24px;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+    text-align: center;
+}
+
+.auth-modal-close {
+    position: absolute;
+    top: 12px;
+    right: 16px;
+    border: none;
+    background: rgba(0, 0, 0, 0.06);
+    color: #4b5563;
+    font-size: 24px;
+    line-height: 1;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+}
+
+.auth-modal-close:hover {
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.auth-modal-header {
+    margin-bottom: 16px;
+}
+
+.auth-modal-icon {
+    width: 56px;
+    height: 56px;
+    margin: 0 auto 10px;
+    border-radius: 16px;
+    display: grid;
+    place-items: center;
+    font-size: 28px;
+    background: linear-gradient(135deg, #00c853, #0b2d4d);
+}
+
+.auth-modal-header h3 {
+    margin: 0;
+    font-size: 22px;
+    color: #0b2d4d;
+}
+
+.auth-tabs {
+    display: flex;
+    gap: 4px;
+    background: #f1f5f9;
+    border-radius: 999px;
+    padding: 4px;
+    margin-bottom: 18px;
+}
+
+.auth-tab {
+    flex: 1;
+    border: none;
+    background: transparent;
+    color: #64748b;
+    font-weight: 700;
+    font-size: 14px;
+    padding: 10px 12px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.auth-tab.active {
+    background: white;
+    color: #0b2d4d;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.auth-form {
+    display: grid;
+    gap: 14px;
+    text-align: left;
+}
+
+.auth-form-row label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 600;
+    color: #14213d;
+    font-size: 13px;
+}
+
+.auth-form-row input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 12px 16px;
+    border: 1px solid #d6d9de;
+    border-radius: 12px;
+    font-size: 15px;
+    background: #fafafa;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.auth-form-row input:focus {
+    outline: none;
+    border-color: #0b2d4d;
+    box-shadow: 0 0 0 4px rgba(11, 45, 77, 0.08);
+}
+
+.auth-submit-btn {
+    width: 100%;
+    margin-top: 4px;
+    text-align: center;
+    border: none;
+    font-size: 15px;
+    cursor: pointer;
+}
+
+.auth-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 18px 0;
+    color: #94a3b8;
+    font-size: 13px;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: #e2e8f0;
+}
+
+.btn-google {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 0;
+    padding: 13px 20px;
+    background: #fff;
+    color: #14213d;
+    border: 1px solid #d6d9de;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    transition: background 0.2s, box-shadow 0.2s;
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 14px;
+}
+
+.btn-google:hover {
+    background: #f8fafc;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* ===== USER AVATAR IN HEADER ===== */
+.user-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.user-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    background: #123f63;
+}
+
+.user-status-text {
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 120px;
+}
+
+.user-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #00c853;
+    display: inline-block;
+    animation: pulseDot 2s ease-in-out infinite;
+}
+
+/* ===== CHAT BUBBLES (Real-Time DM) ===== */
+.chat-bubble-wrapper {
+    display: flex;
+    margin-bottom: 8px;
+}
+
+.chat-bubble-wrapper.sent {
+    justify-content: flex-end;
+}
+
+.chat-bubble-wrapper.received {
+    justify-content: flex-start;
+}
+
+.chat-bubble {
+    max-width: 80%;
+    padding: 10px 14px;
+    border-radius: 16px;
+    font-size: 14px;
+    line-height: 1.5;
+    position: relative;
+}
+
+.chat-bubble-wrapper.sent .chat-bubble {
+    background: linear-gradient(135deg, #0b2d4d, #123f63);
+    color: #fff;
+    border-bottom-right-radius: 4px;
+}
+
+.chat-bubble-wrapper.received .chat-bubble {
+    background: #f1f5f9;
+    color: #14213d;
+    border-bottom-left-radius: 4px;
+}
+
+.chat-bubble-author {
+    font-size: 11px;
+    font-weight: 700;
+    margin-bottom: 3px;
+    opacity: 0.8;
+}
+
+.chat-bubble-text {
+    word-wrap: break-word;
+}
+
+.chat-bubble-time {
+    font-size: 10px;
+    opacity: 0.6;
+    margin-top: 4px;
+    text-align: right;
+}
+
+.chat-loading,
+.chat-empty,
+.chat-error {
+    text-align: center;
+    padding: 20px;
+    color: #64748b;
+    font-size: 14px;
+}
+
+.chat-error {
+    color: #ef4444;
+}
+
+/* ===== WALL POST (Dashboard) ===== */
+.wall-container {
+    max-width: 800px;
+    margin: 0 auto;
+    display: grid;
+    gap: 24px;
+}
+
+.wall-post-form-card {
+    text-align: left;
+}
+
+.wall-post-form-card textarea {
+    width: 100%;
+    padding: 14px 16px;
+    border: 1px solid #d6d9de;
+    border-radius: 12px;
+    font-size: 16px;
+    color: #111;
+    background: #fafafa;
+    box-sizing: border-box;
+    resize: vertical;
+    font-family: inherit;
+}
+
+.wall-post-form-card textarea:focus {
+    outline: none;
+    border-color: #0b2d4d;
+    box-shadow: 0 0 0 4px rgba(11, 45, 77, 0.08);
+}
+
+.wall-feed {
+    display: grid;
+    gap: 16px;
+    text-align: left;
+}
+
+.wall-post-card {
+    display: grid;
+    gap: 14px;
+}
+
+.wall-post-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.wall-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #0b2d4d, #123f63);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+.wall-post-author {
+    flex: 1;
+}
+
+.wall-post-author strong {
+    display: block;
+    color: #0b2d4d;
+}
+
+.wall-post-footer {
+    display: flex;
+    gap: 10px;
+    padding-top: 8px;
+    border-top: 1px solid #e9eef4;
+}
+
+.wall-like-btn {
+    margin: 0;
+}
+
+.delete-wall-post {
+    font-size: 13px;
+    padding: 4px 8px;
+    background: rgba(255, 59, 48, 0.1);
+    color: #ff3b30;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.delete-wall-post:hover {
+    background: rgba(255, 59, 48, 0.2);
+}
+
+/* Responsive auth modal */
+@media (max-width: 480px) {
+    .auth-modal-card {
+        padding: 24px 20px 20px;
+    }
+}
