@@ -1,13 +1,6 @@
-/**
- * GFHF Firebase Configuration — Centralized Single Source of Truth
- * Initializes Firebase app, Auth, Firestore, and Analytics.
- * All modules should import { auth, db } from this file.
- */
-
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-analytics.js";
-import { getFirestore } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { getAuth } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { getAuth } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { getFirestore } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBZZwZUTHqCqCvptGnLB3Vzq-ZGWPHEZ7o",
@@ -20,11 +13,5 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
-const db = getFirestore(app);
-const auth = getAuth(app);
-
-console.log("Firebase connected successfully ✔");
-
-export { app, analytics, auth, db };
-
+export const auth = getAuth(app);
+export const db = getFirestore(app);
