@@ -204,8 +204,13 @@ function initPayPalButton() {
   try {
     paypal.Buttons({
       createOrder: function (data, actions) {
-        const amount = getDonationAmount();
-        if (amount < 1) {
+        // Validate form before creating PayPal order
+        const formData = getFormData();
+        if (!formData.email || !formData.email.includes("@")) {
+          showDonationMessage("Please enter a valid email address before paying with PayPal.", "error");
+          return actions.reject();
+        }
+        if (formData.amount < 1) {
           showDonationMessage("Please select a donation amount of at least $1.", "error");
           return actions.reject();
         }
@@ -214,19 +219,19 @@ function initPayPalButton() {
             description: "Donation to Global Football Hope Fund",
             amount: {
               currency_code: "USD",
-              value: amount.toFixed(2)
+              value: formData.amount.toFixed(2)
             }
           }]
         });
       },
-      onApprove: function (data, actions) {
+      onApprove: function (paypalData, actions) {
         return actions.order.capture().then(function (details) {
-          const data = getFormData();
-          const payerName = details.payer?.name?.given_name || data.name;
-          const payerEmail = details.payer?.email_address || data.email;
+          const formData = getFormData();
+          const payerName = details.payer?.name?.given_name || formData.name;
+          const payerEmail = details.payer?.email_address || formData.email;
 
           showDonationMessage(
-            `✅ Thank you, ${payerName}! Your donation of $${data.amount.toFixed(2)} via PayPal was successful. Transaction ID: ${details.id}`,
+            `✅ Thank you, ${payerName}! Your donation of $${formData.amount.toFixed(2)} via PayPal was successful. Transaction ID: ${details.id}`,
             "success"
           );
 
@@ -234,8 +239,8 @@ function initPayPalButton() {
           saveDonationRecord({
             name: payerName,
             email: payerEmail,
-            message: data.message,
-            amount: data.amount,
+            message: formData.message,
+            amount: formData.amount,
             paymentRef: details.id,
             method: "paypal"
           });
