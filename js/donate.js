@@ -136,7 +136,7 @@ window.payWithPaystack = function () {
   }
 
   const handler = PaystackPop.setup({
-    key: "pk_live_xxxxxxxxxxxxxxxxxxxx", // Replace with your live Paystack public key
+    key: "YOUR_PAYSTACK_PUBLIC_KEY", // Replace with your live Paystack public key
     email: data.email,
     amount: amountInKobo,
     currency: "USD",
