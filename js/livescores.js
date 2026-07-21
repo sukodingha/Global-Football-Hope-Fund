@@ -3,7 +3,7 @@
  * Simulates real-time match data with auto-rotating scores and statuses.
  */
 
-const LEAUGE_LOGOS = {
+const LEAGUE_LOGOS = {
   "Premier League": "🏴󠁧󠁢󠁥󠁮󠁧󠁿",
   "La Liga": "🇪🇸",
   "Serie A": "🇮🇹",
@@ -134,7 +134,7 @@ function generateMatch() {
 
   return {
     league,
-    leagueLogo: LEAUGE_LOGOS[league] || "⚽",
+leagueLogo: LEAGUE_LOGOS[league] || "⚽",
     homeTeam: home.name,
     homeEmoji: home.emoji,
     awayTeam: away.name,
@@ -235,9 +235,3 @@ export function initLiveScores() {
 }
 
 // Auto-initialize on DOM ready
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", initLiveScores);
-} else {
-  initLiveScores();
-}
-
