@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0b2d4d">
+  <title>Admin Dashboard | Global Football Hope Fund</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="manifest" href="../manifest.json">
+  <link rel="icon" href="../images/icon-192.svg" sizes="192x192">
+  <link rel="apple-touch-icon" href="../images/icon-192.svg">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <style>
+    .admin-grid { display: grid; gap: 24px; max-width: 1200px; margin: 0 auto; }
+    .admin-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+    .admin-stat-card { background: white; border-radius: 16px; padding: 24px; border: 1px solid #e2e8f0; text-align: center; }
+    .admin-stat-card h3 { margin: 0 0 8px; font-size: 14px; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em; }
+    .admin-stat-card .stat-value { font-size: 32px; font-weight: 900; color: #0b2d4d; }
+    .admin-panel { background: white; border-radius: 16px; border: 1px solid #e2e8f0; padding: 24px; text-align: left; }
+    .admin-panel h3 { margin: 0 0 16px; color: #0b2d4d; display: flex; align-items: center; gap: 8px; }
+    .admin-table-wrap { overflow-x: auto; }
+    .admin-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .admin-table th, .admin-table td { padding: 12px 14px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+    .admin-table th { background: #f8fafc; color: #475569; font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .admin-table tr:hover td { background: #f8fafc; }
+    .admin-badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+    .admin-badge.admin { background: #fef3c7; color: #d97706; }
+    .admin-badge.user { background: #dbeafe; color: #2563eb; }
+    .admin-btn-sm { padding: 6px 12px; font-size: 12px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; }
+    .admin-btn-sm.primary { background: #0b2d4d; color: white; }
+    .admin-btn-sm.danger { background: #fee2e2; color: #dc2626; }
+    .admin-btn-sm.success { background: #d1fae5; color: #059669; }
+    .admin-loading { text-align: center; padding: 40px; color: #64748b; }
+    .admin-error { text-align: center; padding: 24px; color: #dc2626; background: #fef2f2; border-radius: 12px; }
+    .admin-empty { text-align: center; padding: 24px; color: #94a3b8; font-style: italic; }
+    .admin-post-preview { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .admin-tabs { display: flex; gap: 4px; background: #f1f5f9; border-radius: 999px; padding: 4px; margin-bottom: 24px; max-width: 500px; }
+    .admin-tab { flex: 1; border: none; background: transparent; color: #64748b; font-weight: 700; font-size: 14px; padding: 10px 16px; border-radius: 999px; cursor: pointer; transition: all 0.2s ease; }
+    .admin-tab.active { background: white; color: #0b2d4d; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .admin-section { display: none; }
+    .admin-section.active { display: block; }
+  </style>
+</head>
+<body>
+  <div id="appSplash" class="app-splash">
+    <div class="app-splash-card">
+      <div class="app-splash-icon">⚽</div>
+      <h2>GFHF</h2>
+      <p>Admin Portal — Manage the platform.</p>
+    </div>
+  </div>
+
+  <header>
+    <div class="header-brand">
+      <div class="logo">⚽ GFHF</div>
+      <span id="userStatus" class="user-status">Login</span>
+      <button id="logoutBtn" class="logout-btn" type="button" hidden>Logout</button>
+    </div>
+    <nav>
+      <a href="../index.html">Home</a>
+      <a href="predictions.html">Predictions</a>
+      <a href="donate.html">Donate</a>
+      <a href="community.html">Community</a>
+      <a href="dashboard.html">Dashboard</a>
+      <a href="admin.html" class="active">Admin</a>
+    </nav>
+  </header>
+
+  <div id="appInstallBanner" class="app-install-banner" hidden>
+    <div><strong>Install GFHF</strong><p>Get the admin panel on your device.</p></div>
+    <div class="app-install-actions">
+      <button id="installBannerBtn" class="mini-btn" type="button">Install</button>
+      <button id="dismissBannerBtn" class="mini-btn secondary" type="button">Later</button>
+    </div>
+  </div>
+
+  <nav class="mobile-bottom-nav" aria-label="Mobile navigation">
+    <a href="../index.html">Home</a>
+    <a href="predictions.html">Predictions</a>
+    <a href="community.html">Community</a>
+    <a href="admin.html" class="active">Admin</a>
+  </nav>
+
+  <section class="section registration-section">
+    <div class="section-heading">
+      <h2>🔐 Admin Portal</h2>
+      <p id="adminAccessMsg">Verifying administrator access...</p>
+    </div>
+
+    <div id="adminContent" class="admin-grid" hidden>
+      <!-- Admin Tabs -->
+      <div class="admin-tabs">
+        <button class="admin-tab active" data-section="overview">📊 Overview</button>
+        <button class="admin-tab" data-section="users">👥 Users</button>
+        <button class="admin-tab" data-section="donations">💰 Donations</button>
+        <button class="admin-tab" data-section="posts">📝 Posts</button>
+      </div>
+
+      <!-- Overview Section -->
+      <div id="adminOverview" class="admin-section active">
+        <div class="admin-cards" id="adminStatsCards">
+          <div class="admin-stat-card"><h3>Total Users</h3><div class="stat-value" id="adminTotalUsers">—</div></div>
+          <div class="admin-stat-card"><h3>Total Donations</h3><div class="stat-value" id="adminTotalDonations">—</div></div>
+          <div class="admin-stat-card"><h3>Total Raised</h3><div class="stat-value" id="adminTotalRaised">$0</div></div>
+          <div class="admin-stat-card"><h3>Total Posts</h3><div class="stat-value" id="adminTotalPosts">—</div></div>
+          <div class="admin-stat-card"><h3>Total Predictions</h3><div class="stat-value" id="adminTotalPredictions">—</div></div>
+          <div class="admin-stat-card"><h3>Admins</h3><div class="stat-value" id="adminTotalAdmins">—</div></div>
+        </div>
+        <div class="admin-panel">
+          <h3>📈 Recent Transactions</h3>
+          <div id="adminRecentTransactions" class="admin-table-wrap">
+            <div class="admin-loading">Loading transactions...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Users Section -->
+      <div id="adminUsers" class="admin-section">
+        <div class="admin-panel">
+          <h3>👥 Registered Users</h3>
+          <div id="adminUsersList" class="admin-table-wrap">
+            <div class="admin-loading">Loading users...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Donations Section -->
+      <div id="adminDonations" class="admin-section">
+        <div class="admin-panel">
+          <h3>💰 Donation Records</h3>
+          <div id="adminDonationsList" class="admin-table-wrap">
+            <div class="admin-loading">Loading donations...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Posts Section -->
+      <div id="adminPosts" class="admin-section">
+        <div class="admin-panel">
+          <h3>📝 Community Posts Moderation</h3>
+          <div id="adminPostsList" class="admin-table-wrap">
+            <div class="admin-loading">Loading posts...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="adminDenied" hidden>
+      <div class="admin-panel" style="text-align:center;max-width:500px;margin:0 auto;">
+        <div style="font-size:48px;margin-bottom:16px;">🚫</div>
+        <h3>Access Denied</h3>
+        <p style="color:#64748b;">You do not have administrator privileges. If you believe this is a mistake, contact the platform owner.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p>Global Football Hope Fund © 2026 — Admin Panel</p>
+  </footer>
+
+  <script src="../js/pwa.js"></script>
+  <script type="module" src="../js/auth.js"></script>
+  <script type="module" src="../js/admin.js"></script>
+  <script>
+    window.addEventListener('load', () => {
+      const splash = document.getElementById('appSplash');
+      if (splash) setTimeout(() => splash.classList.add('hidden'), 900);
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('../sw.js').then((registration) => {
+          if (registration.waiting) registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+        }).catch(console.error);
+      }
+    });
+  </script>
+</body>
+</html>
+

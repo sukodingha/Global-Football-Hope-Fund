@@ -19,6 +19,13 @@ const APP_SHELL = [
   './js/chat.js',
   './js/firebase-config.js',
   './js/firebase.js',
+  './js/notifications.js',
+  './js/predictions.js',
+  './js/admin.js',
+  './js/community.js',
+  './js/dashboard.js',
+  './js/donate.js',
+  './js/news.js',
   './pages/about.html',
   './pages/competition.html',
   './pages/contact.html',
@@ -29,6 +36,8 @@ const APP_SHELL = [
   './pages/news.html',
   './pages/community.html',
   './pages/dashboard.html',
+  './pages/predictions.html',
+  './pages/admin.html',
   './images/icon-192.svg',
   './images/icon-512.svg'
 ];

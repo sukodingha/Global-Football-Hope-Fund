@@ -74,14 +74,64 @@ function registerSW() {
   }
 }
 
+// ===== Create and inject "Install App" nav button =====
+function injectInstallNavButton() {
+  // Remove existing if any
+  const existing = document.getElementById('installNavBtn');
+  if (existing) existing.remove();
+
+  const navBtn = document.createElement('button');
+  navBtn.id = 'installNavBtn';
+  navBtn.className = 'install-nav-btn hidden';
+  navBtn.type = 'button';
+  navBtn.innerHTML = '📲 Install App';
+
+  // Insert in header brand area before userStatus or after logo
+  const headerBrand = document.querySelector('.header-brand');
+  if (headerBrand) {
+    const userStatus = document.getElementById('userStatus');
+    if (userStatus) {
+      headerBrand.insertBefore(navBtn, userStatus);
+    } else {
+      headerBrand.appendChild(navBtn);
+    }
+  }
+
+  navBtn.addEventListener('click', async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const choiceResult = await deferredPrompt.userChoice;
+    if (choiceResult.outcome === 'accepted') {
+      localStorage.setItem(CACHE_KEY, 'true');
+      navBtn.classList.add('hidden');
+      hideInstallBanner();
+    }
+    deferredPrompt = null;
+  });
+
+  return navBtn;
+}
+
 // ===== Capture Install Prompt =====
 window.addEventListener('beforeinstallprompt', (event) => {
   // Prevent Chrome 67+ from automatically showing the prompt
   event.preventDefault();
   deferredPrompt = event;
 
+  // Show the install nav button
+  const navBtn = document.getElementById('installNavBtn');
+  if (navBtn && !isAppInstalled()) {
+    navBtn.classList.remove('hidden');
+  }
+
   // Show the install banner
   showInstallBanner();
+});
+
+// ===== Hide install button when app is installed =====
+window.addEventListener('appinstalled', () => {
+  const navBtn = document.getElementById('installNavBtn');
+  if (navBtn) navBtn.classList.add('hidden');
 });
 
 // ===== Handle Install Button Click =====
