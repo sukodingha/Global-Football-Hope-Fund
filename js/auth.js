@@ -1,4 +1,5 @@
-import { auth, db } from "./firebase.js";
+import { auth } from "./firebase-config.js";
+import { db } from "./firebase-config.js";
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -7,8 +8,8 @@ import {
   sendEmailVerification,
   GoogleAuthProvider,
   signInWithPopup
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 // ===== DOM refs =====
 const registerForm = document.getElementById("registerForm");
@@ -144,24 +145,34 @@ if (authRegisterForm) {
   });
 }
 
-// ===== Google Sign-In =====
+// ===== Google Sign-In Handler =====
+export async function handleGoogleSignIn() {
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });
+  try {
+    const result = await signInWithPopup(auth, provider);
+    const user = result.user;
+
+    // Save/update profile
+    await saveUserProfile(user, {
+      displayName: user.displayName || "",
+      photoURL: user.photoURL || ""
+    });
+
+    console.log("User signed in successfully:", user);
+    return user;
+  } catch (error) {
+    console.error("Google Auth Error:", error.code, error.message);
+    alert("Google Sign-In Error: " + error.message);
+  }
+}
+
 if (googleSignInBtn) {
-  googleSignInBtn.addEventListener("click", async () => {
-    try {
-      const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-      const user = result.user;
-
-      // Save/update profile
-      await saveUserProfile(user, {
-        displayName: user.displayName || "",
-        photoURL: user.photoURL || ""
-      });
-
+  googleSignInBtn.addEventListener("click", async (e) => {
+    e.preventDefault();
+    const user = await handleGoogleSignIn();
+    if (user) {
       hideAuthModal();
-    } catch (error) {
-      console.error("Google sign-in error:", error);
-      showModalMessage(error.message || "Google sign-in failed.", "error");
     }
   });
 }
