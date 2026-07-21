@@ -1,16 +1,25 @@
 /**
  * GFHF Dashboard Module — Account overview + User Wall (localStorage)
+ * Features: profile photo upload, photo gallery, unique ID display
  */
 
 import { auth, db } from "./firebase.js";
-import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { doc, getDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { onAuthStateChanged, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const CLOUDINARY_CLOUD_NAME = "d8obkydb";
+const CLOUDINARY_UPLOAD_PRESET = "football_preset";
+const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/upload`;
 
 const welcomeText = document.getElementById("welcomeText");
 const userEmail = document.getElementById("userEmail");
 const messageBox = document.getElementById("messageBox");
 const profileSummary = document.getElementById("profileSummary");
 const predictionSummary = document.getElementById("predictionSummary");
+const uniqueIdSection = document.getElementById("uniqueIdSection");
+const avatarUploadInput = document.getElementById("avatarUploadInput");
+const photoGalleryContainer = document.getElementById("photoGalleryContainer");
+const photoUploadInput = document.getElementById("photoUploadInput");
 
 // Wall elements
 const wallPostForm = document.getElementById("wallPostForm");
@@ -131,10 +140,102 @@ if (wallPostForm) {
   });
 }
 
+/**
+ * Generate a unique 8-character alphanumeric User ID (e.g., #GFHF-89A2)
+ */
+function generateUniqueId() {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let code = "";
+  for (let i = 0; i < 4; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return `#GFHF-${code}`;
+}
+
+/**
+ * Upload a file to Cloudinary and return the secure URL
+ */
+async function uploadToCloudinary(file) {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+  const res = await fetch(CLOUDINARY_UPLOAD_URL, { method: "POST", body: fd });
+  if (!res.ok) throw new Error("Upload failed");
+  const data = await res.json();
+  return data.secure_url;
+}
+
+/**
+ * Ensure the user has a uniqueId in Firestore
+ */
+async function ensureUniqueId(user, profile) {
+  if (profile.uniqueId) return profile.uniqueId;
+  const newId = generateUniqueId();
+  const userRef = doc(db, "users", user.uid);
+  await setDoc(userRef, { uniqueId: newId }, { merge: true });
+  return newId;
+}
+
+/**
+ * Render the Unique ID section with a Copy button
+ */
+function renderUniqueId(uniqueId) {
+  if (!uniqueIdSection || !uniqueId) return;
+  uniqueIdSection.innerHTML = `
+    <p><strong>Your Unique ID:</strong></p>
+    <div style="display:flex;align-items:center;gap:10px;background:#0b2d4d;color:#fff;padding:12px 16px;border-radius:12px;">
+      <span style="font-size:20px;font-weight:900;letter-spacing:0.04em;font-family:monospace;">${uniqueId}</span>
+      <button id="copyUniqueIdBtn" class="mini-btn" style="background:#00c853;border:none;color:white;padding:6px 14px;border-radius:999px;font-weight:700;cursor:pointer;">📋 Copy ID</button>
+    </div>
+    <p style="font-size:13px;color:#64748b;margin-top:6px;">Use this ID for account recovery and tagging in community posts.</p>
+  `;
+  const copyBtn = document.getElementById("copyUniqueIdBtn");
+  if (copyBtn) {
+    copyBtn.addEventListener("click", () => {
+      navigator.clipboard.writeText(uniqueId).then(() => {
+        copyBtn.textContent = "✅ Copied!";
+        setTimeout(() => { copyBtn.textContent = "📋 Copy ID"; }, 2000);
+      }).catch(() => {
+        copyBtn.textContent = "❌ Error";
+      });
+    });
+  }
+}
+
+/**
+ * Render the photo gallery
+ */
+async function renderPhotoGallery(userId) {
+  if (!photoGalleryContainer) return;
+  const profileRef = doc(db, "users", userId);
+  const snap = await getDoc(profileRef);
+  const photos = snap.exists() ? (snap.data().photos || []) : [];
+
+  if (photos.length === 0) {
+    photoGalleryContainer.innerHTML = '<p style="color:#64748b;font-size:14px;">No photos yet. Upload your first photo below!</p>';
+    return;
+  }
+
+  photoGalleryContainer.innerHTML = photos.map((url, index) => `
+    <div style="position:relative;display:inline-block;margin:4px;">
+      <img src="${url}" alt="User photo ${index + 1}" style="width:120px;height:120px;object-fit:cover;border-radius:12px;border:2px solid #e2e8f0;">
+      <button class="delete-photo-btn" data-index="${index}" style="position:absolute;top:4px;right:4px;width:24px;height:24px;border:none;border-radius:50%;background:rgba(0,0,0,0.6);color:white;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;">&times;</button>
+    </div>
+  `).join('');
+
+  photoGalleryContainer.querySelectorAll(".delete-photo-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const index = parseInt(btn.dataset.index);
+      photos.splice(index, 1);
+      await setDoc(doc(db, "users", userId), { photos }, { merge: true });
+      renderPhotoGallery(userId);
+    });
+  });
+}
+
 onAuthStateChanged(auth, async (user) => {
   if (!user) {
     showMessage("Please sign in to access your dashboard.", "error");
-    // Still render wall with empty user ID
     renderWallPosts(null);
     return;
   }
@@ -164,12 +265,58 @@ onAuthStateChanged(auth, async (user) => {
     }
   }
 
+  // Ensure unique ID
+  const uniqueId = await ensureUniqueId(user, profile);
+  renderUniqueId(uniqueId);
+
   if (profileSummary) {
     profileSummary.innerHTML = `
       <p><strong>Country:</strong> ${profile.country || "Not provided"}</p>
       <p><strong>City:</strong> ${profile.city || "Not provided"}</p>
       <p><strong>Favorite Team:</strong> ${profile.club || profile.nationalTeam || "Not provided"}</p>
+      <p><strong>Unique ID:</strong> <code style="background:#0b2d4d;color:#fff;padding:2px 8px;border-radius:6px;">${uniqueId}</code></p>
     `;
+  }
+
+  // Render photo gallery
+  renderPhotoGallery(user.uid);
+
+  // Avatar upload handler
+  if (avatarUploadInput) {
+    avatarUploadInput.addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        const imageUrl = await uploadToCloudinary(file);
+        await updateProfile(user, { photoURL: imageUrl });
+        await setDoc(doc(db, "users", user.uid), { photoURL: imageUrl }, { merge: true });
+        showMessage("Profile picture updated successfully!", "success");
+      } catch (err) {
+        showMessage("Failed to upload profile picture.", "error");
+        console.error(err);
+      }
+    });
+  }
+
+  // Photo gallery upload handler
+  if (photoUploadInput) {
+    photoUploadInput.addEventListener("change", async (e) => {
+      const files = Array.from(e.target.files);
+      if (files.length === 0) return;
+      try {
+        for (const file of files) {
+          const imageUrl = await uploadToCloudinary(file);
+          const existing = profile.photos || [];
+          existing.push(imageUrl);
+          await setDoc(doc(db, "users", user.uid), { photos: existing }, { merge: true });
+        }
+        showMessage(`${files.length} photo(s) uploaded!`, "success");
+        renderPhotoGallery(user.uid);
+      } catch (err) {
+        showMessage("Failed to upload photos.", "error");
+        console.error(err);
+      }
+    });
   }
 
   const predictionsRef = collection(db, "predictions");
@@ -186,7 +333,6 @@ onAuthStateChanged(auth, async (user) => {
     `;
   }
 
-// Render wall posts
   renderWallPosts(user.uid);
 });
 

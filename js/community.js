@@ -24,6 +24,7 @@ let unsubscribeFeed = null;
 let activeInterest = "All";
 let activeDMUserId = null;
 let pendingFiles = [];
+let userDirectory = {}; // uniqueId -> { displayName, uid }
 
 // ===== DOM REFS =====
 const feed = document.getElementById("communityFeed");
@@ -114,6 +115,58 @@ function renderStories() {
   });
 }
 
+// ===== @MENTION TAG SYSTEM =====
+
+/**
+ * Load all Firestore users that have a uniqueId into the userDirectory
+ */
+async function loadUserDirectory() {
+  try {
+    const usersSnap = await getDocs(collection(db, "users"));
+    usersSnap.forEach(docSnap => {
+      const data = docSnap.data();
+      if (data.uniqueId) {
+        userDirectory[data.uniqueId] = {
+          uid: docSnap.id,
+          displayName: data.displayName || data.firstName || "Unknown"
+        };
+      }
+    });
+  } catch (err) {
+    console.warn("Could not load user directory for @mentions:", err);
+  }
+}
+
+/**
+ * Parse @mentions in text and return { cleanText, taggedIds[] }
+ */
+function parseMentions(text) {
+  const taggedIds = [];
+  const cleanText = text.replace(/@(#GFHF-[A-Z0-9]+)/g, (match, uniqueId) => {
+    const user = userDirectory[uniqueId];
+    if (user) {
+      taggedIds.push(user.uid);
+      return `<span class="mention-tag" style="color:#00c853;font-weight:700;background:rgba(0,200,83,0.1);padding:1px 6px;border-radius:6px;">@${user.displayName}</span>`;
+    }
+    // Keep as plain text if user not found
+    return match;
+  });
+  return { cleanText, taggedIds };
+}
+
+/**
+ * Highlight @mentions in post text for display
+ */
+function highlightMentions(text) {
+  return text.replace(/@(#GFHF-[A-Z0-9]+)/g, (match, uniqueId) => {
+    const user = userDirectory[uniqueId];
+    if (user) {
+      return `<span class="mention-tag" style="color:#00c853;font-weight:700;background:rgba(0,200,83,0.1);padding:1px 6px;border-radius:6px;">@${user.displayName}</span>`;
+    }
+    return `<span style="color:#f59e0b;font-weight:600;">${match}</span>`;
+  });
+}
+
 // ===== CREATE POST MODAL =====
 function openPostModal() {
   if (!currentUser) {
@@ -132,6 +185,13 @@ function openPostModal() {
   const name = document.getElementById("postModalName");
   avatar.textContent = currentUserAvatar;
   name.textContent = currentUserName;
+
+  // Show @mention hint
+  postModalStatus.className = "message";
+  postModalStatus.textContent = '💡 Tip: Type @#GFHF-XXXX to tag another user in your post!';
+  postModalStatus.style.display = "block";
+  postModalStatus.style.background = "#f0f9ff";
+  postModalStatus.style.color = "#0369a1";
 }
 
 function closePostModal() {
@@ -209,11 +269,16 @@ if (postModalSubmit) {
         imageUrl = await uploadImage(pendingFiles[0]);
       }
 
+      // Parse @mentions in the post text
+      const { cleanText: parsedText, taggedIds } = parseMentions(text);
+
       await addDoc(collection(db, "posts"), {
         authorId: currentUser.uid,
         authorName: currentUserName,
         authorAvatar: currentUserAvatar,
-        text,
+        text: parsedText, // Store with HTML mentions
+        rawText: text,    // Keep original for editing
+        taggedUserIds: taggedIds,
         interest: postModalInterest.value,
         imageUrl: imageUrl || null,
         likes: [],
@@ -262,6 +327,24 @@ function renderPostCard(post) {
   const likeCount = post.likes?.length || 0;
   const commentCount = post.comments?.length || 0;
 
+  // Determine post text to display - support both old plain text and new HTML mentions
+  let displayText;
+  if (post.text && (post.text.includes('<span class="mention-tag') || post.text.includes('<span style='))) {
+    // Already contains HTML mentions from parseMentions
+    displayText = post.text;
+  } else if (post.rawText) {
+    // Has rawText - highlight mentions client-side
+    displayText = highlightMentions(escapeHtml(post.rawText));
+  } else {
+    // Old style plain text - escape and highlight
+    displayText = highlightMentions(escapeHtml(post.text || ""));
+  }
+
+  // Tagged users badge
+  const taggedBadge = (post.taggedUserIds && post.taggedUserIds.length > 0)
+    ? `<div style="font-size:12px;color:#00c853;padding:0 18px 6px;">👥 Tagged ${post.taggedUserIds.length} user(s)</div>`
+    : '';
+
   // Header
   card.innerHTML = `
     <div class="fb-post-header">
@@ -272,7 +355,8 @@ function renderPostCard(post) {
       </div>
       <div class="fb-post-options">•••</div>
     </div>
-    <div class="fb-post-text">${escapeHtml(post.text || "")}</div>
+    <div class="fb-post-text">${displayText}</div>
+    ${taggedBadge}
   `;
 
   // Image Grid
@@ -651,4 +735,5 @@ loadFeed();
 listenToChat();
 renderMembers();
 renderFriendRequests();
+loadUserDirectory(); // Load @mention directory
 

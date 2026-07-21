@@ -81,7 +81,21 @@
                 <h3>Your Profile</h3>
                 <div id="profileSummary"></div>
             </div>
-<div class="form-section">
+            <div class="form-section" id="uniqueIdSection">
+                <!-- Injected by dashboard.js -->
+            </div>
+            <div class="form-section">
+                <h3>Profile Picture</h3>
+                <p style="font-size:13px;color:#64748b;">Upload a profile photo to personalize your account.</p>
+                <input type="file" id="avatarUploadInput" accept="image/*" style="margin-top:8px;">
+            </div>
+            <div class="form-section">
+                <h3>My Photos</h3>
+                <div id="photoGalleryContainer"></div>
+                <p style="font-size:13px;color:#64748b;margin-top:8px;">Add photos to build your personal gallery.</p>
+                <input type="file" id="photoUploadInput" accept="image/*" multiple style="margin-top:8px;">
+            </div>
+            <div class="form-section">
                 <h3>Prediction Activity</h3>
                 <div id="predictionSummary"></div>
             </div>

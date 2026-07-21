@@ -6,10 +6,11 @@ import {
   onAuthStateChanged,
   signOut,
   sendEmailVerification,
+  sendPasswordResetEmail,
   GoogleAuthProvider,
   signInWithPopup
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-import { doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { doc, setDoc, getDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 // ===== DOM refs =====
 const registerForm = document.getElementById("registerForm");
@@ -93,6 +94,79 @@ if (authLoginTab) {
 }
 if (authRegisterTab) {
   authRegisterTab.addEventListener("click", () => switchAuthTab("register"));
+}
+
+// ===== Account Recovery via Unique ID =====
+const authRecoveryForm = document.getElementById("authRecoveryForm");
+const authRecoveryLink = document.getElementById("authRecoveryLink");
+const authBackToLoginLink = document.getElementById("authBackToLoginLink");
+const authLoginFormEl = document.getElementById("authLoginForm");
+
+if (authRecoveryLink) {
+  authRecoveryLink.addEventListener("click", (e) => {
+    e.preventDefault();
+    if (authLoginFormEl) authLoginFormEl.style.display = "none";
+    if (authRecoveryForm) authRecoveryForm.style.display = "grid";
+    if (authModalTitle) authModalTitle.textContent = "Account Recovery";
+    if (authLoginTab) authLoginTab.classList.remove("active");
+    if (authRegisterTab) authRegisterTab.classList.remove("active");
+  });
+}
+
+if (authBackToLoginLink) {
+  authBackToLoginLink.addEventListener("click", (e) => {
+    e.preventDefault();
+    if (authLoginFormEl) authLoginFormEl.style.display = "grid";
+    if (authRecoveryForm) authRecoveryForm.style.display = "none";
+    if (authModalTitle) authModalTitle.textContent = "Sign In";
+    if (authLoginTab) authLoginTab.classList.add("active");
+  });
+}
+
+if (authRecoveryForm) {
+  authRecoveryForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const uniqueId = authRecoveryForm.uniqueId?.value?.trim() || "";
+    const email = authRecoveryForm.email?.value?.trim() || "";
+
+    if (!uniqueId || !email) {
+      showModalMessage("Please enter both your Unique ID and email.", "error");
+      return;
+    }
+
+    try {
+      // Look up the user by uniqueId in Firestore
+      const usersSnap = await getDocs(collection(db, "users"));
+      let foundUser = null;
+      usersSnap.forEach(docSnap => {
+        const data = docSnap.data();
+        if (data.uniqueId === uniqueId) {
+          foundUser = { id: docSnap.id, email: data.email, ...data };
+        }
+      });
+
+      if (!foundUser) {
+        showModalMessage("No account found with this Unique ID.", "error");
+        return;
+      }
+
+      if (foundUser.email !== email) {
+        showModalMessage("The email does not match the account associated with this Unique ID.", "error");
+        return;
+      }
+
+      // Send password reset email
+      await sendPasswordResetEmail(auth, email);
+      showModalMessage("✅ Password reset email sent! Check your inbox (including spam).", "success");
+      authRecoveryForm.reset();
+      setTimeout(() => {
+        if (authBackToLoginLink) authBackToLoginLink.click();
+      }, 3000);
+    } catch (error) {
+      console.error("Recovery error:", error);
+      showModalMessage(error.message || "Recovery failed. Please try again.", "error");
+    }
+  });
 }
 
 // ===== Modal Login =====

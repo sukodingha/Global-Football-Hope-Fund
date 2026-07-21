@@ -209,6 +209,25 @@
                 <input id="authLoginPass" name="password" type="password" placeholder="••••••" required>
             </div>
             <button type="submit" class="btn auth-submit-btn">Sign In</button>
+            <p style="margin:8px 0 0;font-size:13px;text-align:center;">
+                <a href="#" id="authRecoveryLink" style="color:#64748b;text-decoration:none;">🔑 Forgot password / Recover account via Unique ID</a>
+            </p>
+        </form>
+
+        <!-- Account Recovery Form (hidden by default) -->
+        <form id="authRecoveryForm" class="auth-form" style="display:none;">
+            <div class="auth-form-row">
+                <label for="authRecoveryUniqueId">Your Unique ID (e.g., #GFHF-XXXX)</label>
+                <input id="authRecoveryUniqueId" name="uniqueId" type="text" placeholder="#GFHF-XXXX" required>
+            </div>
+            <div class="auth-form-row">
+                <label for="authRecoveryEmail">Email Address</label>
+                <input id="authRecoveryEmail" name="email" type="email" placeholder="you@example.com" required>
+            </div>
+            <button type="submit" class="btn auth-submit-btn" style="background:linear-gradient(90deg,#f59e0b,#d97706);">Send Recovery Email</button>
+            <p style="margin:8px 0 0;font-size:13px;text-align:center;">
+                <a href="#" id="authBackToLoginLink" style="color:#64748b;text-decoration:none;">⬅ Back to Sign In</a>
+            </p>
         </form>
 
         <!-- Register Form -->
