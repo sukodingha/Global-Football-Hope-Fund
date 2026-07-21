@@ -1,27 +1,29 @@
 /**
  * GFHF Multi-Sport News Feed
- * Dual-API fetch with NewsAPI.org (primary) → GNews.io (fallback)
- * Features: category tabs, image thumbnails, formatted dates, read links
+ * Primary: GNews API → Fallback: RSS-to-JSON (ESPN feeds via rss2json.com)
+ * Fully CORS-safe — works in browser without a proxy.
  */
 
-const NEWSAPI_KEY = "99c938d3ecad40b7aa0a6f40b7b91ff4";
 const GNEWS_KEY = "23a2a74d60317b06c1d4862ca61d4743";
+const RSS2JSON_URL = "https://api.rss2json.com/v1/api.json";
 
 const CATEGORIES = [
-  { label: "All Sports", query: "sports" },
-  { label: "Football", query: "football soccer" },
-  { label: "Basketball", query: "basketball NBA" },
-  { label: "Formula 1", query: "Formula 1 F1" },
-  { label: "Tennis", query: "tennis ATP WTA" },
-  { label: "Combat Sports", query: "boxing UFC MMA" }
+  { label: "All Sports", query: "sports", rss: "https://www.espn.com/espn/rss/news" },
+  { label: "Football", query: "soccer", rss: "https://www.espn.com/espn/rss/soccer" },
+  { label: "Basketball", query: "basketball", rss: "https://www.espn.com/espn/rss/nba" },
+  { label: "Formula 1", query: "formula 1", rss: "https://www.espn.com/espn/rss/f1" },
+  { label: "Tennis", query: "tennis", rss: "https://www.espn.com/espn/rss/tennis" },
+  { label: "Combat Sports", query: "boxing", rss: "https://www.espn.com/espn/rss/boxing" }
 ];
 
-let activeCategory = 0; // index
+let activeCategory = 0;
 let currentNews = [];
 
 const newsGrid = document.getElementById("newsGrid");
 const newsStatus = document.getElementById("newsStatus");
 const categoryTabs = document.getElementById("categoryTabs");
+
+// ── Helpers ────────────────────────────────────────────────
 
 function formatDate(dateStr) {
   if (!dateStr) return "";
@@ -46,6 +48,20 @@ function truncate(text, maxLen = 180) {
   return text.substring(0, maxLen).replace(/\s+\S*$/, "") + "…";
 }
 
+function getImageUrl(article) {
+  return article.urlToImage || article.image || article.thumbnail || "";
+}
+
+function getSourceName(article) {
+  return article.source?.name || article.source || "Sports News";
+}
+
+function getPublishedAt(article) {
+  return article.publishedAt || article.pubDate || "";
+}
+
+// ── Render ─────────────────────────────────────────────────
+
 function renderNews(articles) {
   if (!newsGrid) return;
 
@@ -64,10 +80,10 @@ function renderNews(articles) {
   newsGrid.innerHTML = articles.map((article) => {
     const title = article.title || "Untitled";
     const description = truncate(article.description || article.content || "");
-    const source = article.source?.name || article.source || "Unknown Source";
-    const date = formatDate(article.publishedAt);
-    const imageUrl = article.urlToImage || article.image || "";
-    const articleUrl = article.url || "";
+    const source = getSourceName(article);
+    const date = formatDate(getPublishedAt(article));
+    const imageUrl = getImageUrl(article);
+    const articleUrl = article.url || article.link || "";
 
     return `
       <div class="card news-card">
@@ -109,80 +125,126 @@ function renderCategoryTabs() {
   });
 }
 
-async function fetchFromNewsAPI(query) {
-  const url = `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&language=en&pageSize=20&apiKey=${NEWSAPI_KEY}`;
-  const response = await fetch(url, { method: "GET" });
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`NewsAPI ${response.status}: ${errorText}`);
-  }
-  const data = await response.json();
-  return data.articles || [];
-}
+// ── Data sources ──────────────────────────────────────────
 
+/**
+ * Primary: GNews API – top-headlines for "sports", or search for other queries.
+ * CORS-safe via browser `fetch`. Free tier: 100 req/day.
+ */
 async function fetchFromGNews(query) {
-  const url = `https://gnews.io/api/v4/search?q=${encodeURIComponent(query)}&lang=en&max=20&apikey=${GNEWS_KEY}`;
+  const isGeneral = query === "sports";
+  let url;
+  if (isGeneral) {
+    url = `https://gnews.io/api/v4/top-headlines?category=sports&lang=en&max=20&apikey=${GNEWS_KEY}`;
+  } else {
+    url = `https://gnews.io/api/v4/search?q=${encodeURIComponent(query)}&lang=en&max=20&apikey=${GNEWS_KEY}`;
+  }
+
   const response = await fetch(url, { method: "GET" });
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(`GNews ${response.status}: ${errorText}`);
   }
   const data = await response.json();
-  // Normalize GNews format to match NewsAPI
+
   return (data.articles || []).map((a) => ({
     title: a.title,
     description: a.description,
     url: a.url,
     urlToImage: a.image,
-    source: { name: a.source?.name || a.source || "GNews" },
+    source: { name: a.source?.name || a.source?.title || "GNews" },
     publishedAt: a.publishedAt,
     content: a.content
   }));
 }
 
+/**
+ * Fallback: RSS-to-JSON via rss2json.com (no API key required, no CORS).
+ * Fetches category-specific ESPN RSS feed and normalises to the same format.
+ */
+async function fetchFromRSS(rssUrl) {
+  const url = `${RSS2JSON_URL}?rss_url=${encodeURIComponent(rssUrl)}`;
+  const response = await fetch(url, { method: "GET" });
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`RSS2JSON ${response.status}: ${errorText}`);
+  }
+  const data = await response.json();
+
+  if (data.status !== "ok") {
+    throw new Error(`RSS2JSON error: ${data.message || "unknown"}`);
+  }
+
+  return (data.items || []).map((item) => ({
+    title: item.title,
+    description: item.description,
+    url: item.link,
+    urlToImage: item.enclosure?.link || item.thumbnail || "",
+    source: { name: (item.author || "").replace(/^https?:\/\/[^/]+/, "") || "ESPN" },
+    publishedAt: item.pubDate,
+    content: item.content
+  }));
+}
+
+// ── Orchestrator ──────────────────────────────────────────
+
 async function fetchNews() {
   if (!newsGrid) return;
 
-  const query = CATEGORIES[activeCategory].query;
+  const category = CATEGORIES[activeCategory];
+  const query = category.query;
+  const rssUrl = category.rss;
+
   setStatus("Loading news...");
   newsGrid.innerHTML = '<div class="card" style="grid-column: 1 / -1; text-align: center;"><p style="padding: 40px 0;">⏳ Fetching latest sports news...</p></div>';
 
   let articles = [];
-  let usedFallback = false;
+  let sourceLabel = "";
 
-  // Primary: NewsAPI
+  // 1. Try GNews API
   try {
-    articles = await fetchFromNewsAPI(query);
-  } catch (newsApiError) {
-    console.warn("NewsAPI failed, falling back to GNews:", newsApiError.message);
-    usedFallback = true;
+    articles = await fetchFromGNews(query);
+    sourceLabel = `GNews`;
+  } catch (gnewsError) {
+    console.warn("GNews API failed — trying RSS fallback:", gnewsError.message);
   }
 
-  // Fallback: GNews
+  // 2. If GNews returned nothing (empty or error), fall back to RSS
   if (articles.length === 0) {
     try {
-      articles = await fetchFromGNews(query);
-    } catch (gnewsError) {
-      console.error("Both APIs failed:", gnewsError.message);
-      setStatus("Unable to fetch news. Please try again later.", true);
-      newsGrid.innerHTML = `
-        <div class="card" style="grid-column: 1 / -1; text-align: center;">
-          <p style="padding: 40px 0; color: #b42318;">
-            <strong>⚠️ News Unavailable</strong><br>
-            Both news sources are currently unreachable. Check your connection or try again.
-          </p>
-        </div>
-      `;
-      return;
+      articles = await fetchFromRSS(rssUrl);
+      sourceLabel = `ESPN (RSS)`;
+    } catch (rssError) {
+      console.error("RSS fallback also failed:", rssError.message);
     }
+  }
+
+  // 3. If both failed, show a gentle message
+  if (articles.length === 0) {
+    setStatus("Could not fetch news right now. Please try again later.", true);
+    newsGrid.innerHTML = `
+      <div class="card" style="grid-column: 1 / -1; text-align: center;">
+        <p style="padding: 40px 0; color: #64748b;">
+          <strong>No articles available right now.</strong><br>
+          Please check back later or try a different category.
+        </p>
+      </div>
+    `;
+    return;
   }
 
   currentNews = articles;
   renderNews(articles);
-  setStatus(usedFallback ? "Showing GNews results (NewsAPI unavailable)" : `Showing ${articles.length} articles from NewsAPI`);
+
+  if (sourceLabel) {
+    setStatus(`Showing ${articles.length} articles from ${sourceLabel}`);
+  } else {
+    setStatus(`Showing ${articles.length} articles`);
+  }
 }
 
-// Initialize
+// ── Init ──────────────────────────────────────────────────
+
 document.addEventListener("DOMContentLoaded", () => {
   renderCategoryTabs();
   fetchNews();
