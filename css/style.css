@@ -3889,3 +3889,8 @@ footer {
 .powered-by-kinesis a:hover {
     color: #cbd5e0;
 }
+
+/* ===== HIDDEN STATE for conditional display ===== */
+.hidden-state {
+  display: none !important;
+}
