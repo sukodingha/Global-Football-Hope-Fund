@@ -90,10 +90,13 @@
                 <input type="file" id="avatarUploadInput" accept="image/*" style="margin-top:8px;">
             </div>
             <div class="form-section">
-                <h3>My Photos</h3>
+                <h3>Photo Gallery</h3>
+                <p style="font-size:13px;color:#64748b;">Upload photos to your personal gallery. Click "Set as Profile Picture" to make it your avatar.</p>
                 <div id="photoGalleryContainer"></div>
-                <p style="font-size:13px;color:#64748b;margin-top:8px;">Add photos to build your personal gallery.</p>
-                <input type="file" id="photoUploadInput" accept="image/*" multiple style="margin-top:8px;">
+                <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+                    <button type="button" id="uploadPhotoBtn" class="btn" style="margin:0;padding:10px 18px;font-size:14px;">📷 Upload New Photo</button>
+                    <input type="file" id="photoUploadInput" accept="image/*" multiple style="display:none;">
+                </div>
             </div>
             <div class="form-section">
                 <h3>Prediction Activity</h3>

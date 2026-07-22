@@ -201,32 +201,65 @@ function renderUniqueId(uniqueId) {
 }
 
 /**
- * Render the photo gallery
+ * Render the photo gallery with "Set as Profile Picture" buttons and "Active Profile Pic" badge
  */
 async function renderPhotoGallery(userId) {
   if (!photoGalleryContainer) return;
   const profileRef = doc(db, "users", userId);
   const snap = await getDoc(profileRef);
-  const photos = snap.exists() ? (snap.data().photos || []) : [];
+  const profile = snap.exists() ? snap.data() : {};
+  const photos = profile.galleryPhotos || profile.photos || [];
+  const currentPhotoURL = profile.photoURL || "";
 
   if (photos.length === 0) {
     photoGalleryContainer.innerHTML = '<p style="color:#64748b;font-size:14px;">No photos yet. Upload your first photo below!</p>';
     return;
   }
 
-  photoGalleryContainer.innerHTML = photos.map((url, index) => `
-    <div style="position:relative;display:inline-block;margin:4px;">
-      <img src="${url}" alt="User photo ${index + 1}" style="width:120px;height:120px;object-fit:cover;border-radius:12px;border:2px solid #e2e8f0;">
-      <button class="delete-photo-btn" data-index="${index}" style="position:absolute;top:4px;right:4px;width:24px;height:24px;border:none;border-radius:50%;background:rgba(0,0,0,0.6);color:white;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;">&times;</button>
+  photoGalleryContainer.innerHTML = photos.map((url, index) => {
+    const isActiveProfile = url === currentPhotoURL;
+    return `
+    <div style="position:relative;display:inline-flex;flex-direction:column;align-items:center;margin:6px;padding:6px;background:#fff;border-radius:14px;border:2px solid ${isActiveProfile ? '#00c853' : '#e2e8f0'};box-shadow:${isActiveProfile ? '0 0 16px rgba(0,200,83,0.25)' : 'none'};min-width:130px;">
+      <div style="position:relative;width:120px;height:120px;">
+        <img src="${url}" alt="Gallery photo ${index + 1}" style="width:120px;height:120px;object-fit:cover;border-radius:10px;">
+        ${isActiveProfile ? '<span style="position:absolute;top:4px;left:4px;background:#00c853;color:#fff;font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;">⭐ Active</span>' : ''}
+        <button class="delete-photo-btn" data-index="${index}" style="position:absolute;top:4px;right:4px;width:24px;height:24px;border:none;border-radius:50%;background:rgba(0,0,0,0.6);color:white;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;">&times;</button>
+      </div>
+      <button type="button" class="set-profile-btn" data-url="${url}" style="margin-top:6px;padding:5px 10px;border:none;border-radius:999px;background:${isActiveProfile ? '#00c853' : '#0b2d4d'};color:white;font-size:11px;font-weight:700;cursor:pointer;width:100%;">${isActiveProfile ? '✅ Active Profile Pic' : '🖼 Set as Profile Picture'}</button>
     </div>
-  `).join('');
+  `}).join('');
 
+  // Delete photo handler
   photoGalleryContainer.querySelectorAll(".delete-photo-btn").forEach(btn => {
     btn.addEventListener("click", async () => {
       const index = parseInt(btn.dataset.index);
       photos.splice(index, 1);
-      await setDoc(doc(db, "users", userId), { photos }, { merge: true });
+      await setDoc(doc(db, "users", userId), { galleryPhotos: photos }, { merge: true });
       renderPhotoGallery(userId);
+    });
+  });
+
+  // Set as Profile Picture handler
+  photoGalleryContainer.querySelectorAll(".set-profile-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const url = btn.dataset.url;
+      try {
+        // Update Firestore
+        await setDoc(doc(db, "users", userId), { photoURL: url }, { merge: true });
+        // Update Firebase Auth profile
+        if (auth.currentUser) {
+          await updateProfile(auth.currentUser, { photoURL: url });
+        }
+        // Update header immediately
+        const displayName = profile.displayName || auth.currentUser?.displayName || auth.currentUser?.email?.split("@")[0] || "Member";
+        updateHeaderAvatar(url, displayName);
+        // Re-render gallery to show the Active badge
+        renderPhotoGallery(userId);
+        showMessage("Profile picture updated!", "success");
+      } catch (err) {
+        showMessage("Failed to set profile picture.", "error");
+        console.error(err);
+      }
     });
   });
 }
@@ -308,17 +341,28 @@ onAuthStateChanged(auth, async (user) => {
     });
   }
 
-  // Photo gallery upload handler
+  // Wire up the "Upload New Photo" button to trigger file input
+  const uploadPhotoBtn = document.getElementById("uploadPhotoBtn");
+  if (uploadPhotoBtn && photoUploadInput) {
+    uploadPhotoBtn.addEventListener("click", () => {
+      photoUploadInput.click();
+    });
+  }
+
+  // Photo gallery upload handler — stores in user_photos/{uid}/{timestamp}_{filename}
   if (photoUploadInput) {
     photoUploadInput.addEventListener("change", async (e) => {
       const files = Array.from(e.target.files);
       if (files.length === 0) return;
       try {
         for (const file of files) {
-          const imageUrl = await uploadToFirebaseStorage(file, user.uid, "photos");
-          const existing = profile.photos || [];
+          const imageUrl = await uploadToFirebaseStorage(file, user.uid, `user_photos/${user.uid}`);
+          // Get existing galleryPhotos (or fallback to photos) and append
+          const snap = await getDoc(doc(db, "users", user.uid));
+          const currentProfile = snap.exists() ? snap.data() : {};
+          const existing = currentProfile.galleryPhotos || currentProfile.photos || [];
           existing.push(imageUrl);
-          await setDoc(doc(db, "users", user.uid), { photos: existing }, { merge: true });
+          await setDoc(doc(db, "users", user.uid), { galleryPhotos: existing }, { merge: true });
         }
         showMessage(`${files.length} photo(s) uploaded!`, "success");
         renderPhotoGallery(user.uid);
