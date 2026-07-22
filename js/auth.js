@@ -31,6 +31,59 @@ const googleSignInBtn = document.getElementById("googleSignInBtn");
 
 let authModalResolve = null;
 
+// ===== Profile Avatar Helper (canvas-based initials) =====
+export function generateInitialsAvatar(name, size = 40) {
+  const initials = (name || "?")
+    .split(" ")
+    .map(s => s[0])
+    .join("")
+    .substring(0, 2)
+    .toUpperCase() || "?";
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  const gradient = ctx.createLinearGradient(0, 0, size, size);
+  gradient.addColorStop(0, "#0b2d4d");
+  gradient.addColorStop(1, "#123f63");
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#fff";
+  ctx.font = `bold ${size * 0.4}px "Segoe UI", sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(initials, size / 2, size / 2);
+  return canvas.toDataURL("image/png");
+}
+
+/**
+ * Update the header avatar (userStatus element) with a new photoURL or fallback initials
+ */
+export function updateHeaderAvatar(photoURL, displayName) {
+  if (!userStatus) return;
+  const name = displayName || auth.currentUser?.displayName || auth.currentUser?.email?.split("@")[0] || "Member";
+
+  let avatarHtml = "";
+  if (photoURL) {
+    avatarHtml = `<img src="${photoURL}" alt="" class="user-avatar" onerror="this.style.display='none'">`;
+  } else {
+    const dataUri = generateInitialsAvatar(name, 32);
+    avatarHtml = `<img src="${dataUri}" alt="" class="user-avatar">`;
+  }
+
+  userStatus.innerHTML = `
+    ${avatarHtml}
+    <span class="user-status-text">${name}</span>
+    <span class="user-status-dot"></span>
+  `;
+  userStatus.classList.add("active");
+  userStatus.style.cursor = "default";
+  userStatus.onclick = null;
+  if (logoutBtn) logoutBtn.hidden = false;
+}
+
 // ===== Auth Modal =====
 export function showAuthModal() {
   return new Promise((resolve) => {

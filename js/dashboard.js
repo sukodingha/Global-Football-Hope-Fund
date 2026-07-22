@@ -1,15 +1,13 @@
 /**
  * GFHF Dashboard Module — Account overview + User Wall (localStorage)
- * Features: profile photo upload, photo gallery, unique ID display
+ * Features: profile photo upload (Firebase Storage), photo gallery, unique ID display
  */
 
 import { auth, db } from "./firebase.js";
 import { onAuthStateChanged, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
-const CLOUDINARY_CLOUD_NAME = "d8obkydb";
-const CLOUDINARY_UPLOAD_PRESET = "football_preset";
-const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/upload`;
+import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+import { generateInitialsAvatar, updateHeaderAvatar } from "./auth.js";
 
 const welcomeText = document.getElementById("welcomeText");
 const userEmail = document.getElementById("userEmail");
@@ -153,16 +151,16 @@ function generateUniqueId() {
 }
 
 /**
- * Upload a file to Cloudinary and return the secure URL
+ * Upload a file to Firebase Storage and return the download URL
  */
-async function uploadToCloudinary(file) {
-  const fd = new FormData();
-  fd.append("file", file);
-  fd.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-  const res = await fetch(CLOUDINARY_UPLOAD_URL, { method: "POST", body: fd });
-  if (!res.ok) throw new Error("Upload failed");
-  const data = await res.json();
-  return data.secure_url;
+async function uploadToFirebaseStorage(file, userId, folder = "avatars") {
+  const storage = getStorage();
+  const timestamp = Date.now();
+  const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
+  const storageRef = ref(storage, `${folder}/${userId}_${timestamp}_${sanitizedName}`);
+  const snapshot = await uploadBytes(storageRef, file);
+  const downloadURL = await getDownloadURL(snapshot.ref);
+  return downloadURL;
 }
 
 /**
@@ -281,15 +279,27 @@ onAuthStateChanged(auth, async (user) => {
   // Render photo gallery
   renderPhotoGallery(user.uid);
 
-  // Avatar upload handler
+  // Avatar upload handler — uses Firebase Storage, creates local preview, updates header immediately
   if (avatarUploadInput) {
     avatarUploadInput.addEventListener("change", async (e) => {
       const file = e.target.files[0];
       if (!file) return;
       try {
-        const imageUrl = await uploadToCloudinary(file);
+        // Show a local preview immediately in the header
+        const localPreviewUrl = URL.createObjectURL(file);
+        updateHeaderAvatar(localPreviewUrl, user.displayName || user.email?.split("@")[0]);
+
+        // Upload to Firebase Storage
+        const imageUrl = await uploadToFirebaseStorage(file, user.uid, "avatars");
+
+        // Update Firebase Auth profile and Firestore
         await updateProfile(user, { photoURL: imageUrl });
         await setDoc(doc(db, "users", user.uid), { photoURL: imageUrl }, { merge: true });
+
+        // Clean up the local object URL and update header with the permanent URL
+        URL.revokeObjectURL(localPreviewUrl);
+        updateHeaderAvatar(imageUrl, user.displayName || user.email?.split("@")[0]);
+
         showMessage("Profile picture updated successfully!", "success");
       } catch (err) {
         showMessage("Failed to upload profile picture.", "error");
@@ -305,7 +315,7 @@ onAuthStateChanged(auth, async (user) => {
       if (files.length === 0) return;
       try {
         for (const file of files) {
-          const imageUrl = await uploadToCloudinary(file);
+          const imageUrl = await uploadToFirebaseStorage(file, user.uid, "photos");
           const existing = profile.photos || [];
           existing.push(imageUrl);
           await setDoc(doc(db, "users", user.uid), { photos: existing }, { merge: true });
