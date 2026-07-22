@@ -9,8 +9,8 @@ import {
   sendPasswordResetEmail,
   GoogleAuthProvider,
   signInWithPopup
-} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-import { doc, setDoc, getDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { doc, setDoc, getDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // ===== DOM refs =====
 const registerForm = document.getElementById("registerForm");
