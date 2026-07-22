@@ -1257,6 +1257,205 @@ footer {
     gap: 4px;
 }
 
+/* ===== BTC WALLET BALANCE BANNER ===== */
+.btc-balance-banner {
+    background: linear-gradient(135deg, #f7931a 0%, #ffb347 50%, #f7931a 100%);
+    padding: 18px 24px;
+    margin: 16px auto;
+    max-width: 900px;
+    border-radius: 18px;
+    box-shadow: 0 8px 32px rgba(247, 147, 26, 0.35), inset 0 1px 0 rgba(255,255,255,0.3);
+    position: relative;
+    overflow: hidden;
+    animation: btcPulse 3s ease-in-out infinite;
+}
+
+@keyframes btcPulse {
+    0%, 100% { box-shadow: 0 8px 32px rgba(247, 147, 26, 0.35); }
+    50% { box-shadow: 0 8px 48px rgba(247, 147, 26, 0.55); }
+}
+
+.btc-balance-banner::before {
+    content: '₿';
+    position: absolute;
+    right: -30px;
+    top: -30px;
+    font-size: 120px;
+    color: rgba(255, 255, 255, 0.08);
+    line-height: 1;
+    pointer-events: none;
+    transform: rotate(15deg);
+}
+
+.btc-balance-banner::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 18px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+    transform: translateX(-100%);
+    animation: btcShine 4s ease-in-out infinite;
+    pointer-events: none;
+}
+
+@keyframes btcShine {
+    0% { transform: translateX(-100%); }
+    50% { transform: translateX(100%); }
+    100% { transform: translateX(100%); }
+}
+
+.btc-balance-banner-content {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: wrap;
+    position: relative;
+    z-index: 1;
+}
+
+.btc-balance-banner-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 32px;
+    font-weight: 900;
+    color: #fff;
+    flex-shrink: 0;
+    border: 2px solid rgba(255, 255, 255, 0.25);
+    animation: btcGlow 2s ease-in-out infinite;
+}
+
+@keyframes btcGlow {
+    0%, 100% { box-shadow: 0 0 20px rgba(255,255,255,0.2); }
+    50% { box-shadow: 0 0 40px rgba(255,255,255,0.4); }
+}
+
+.btc-balance-banner-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 140px;
+}
+
+.btc-balance-label {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.btc-balance-amount {
+    font-size: 32px;
+    font-weight: 900;
+    color: #fff;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.btc-balance-usd {
+    font-size: 14px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.75);
+}
+
+.btc-balance-banner-address {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(0, 0, 0, 0.12);
+    padding: 10px 14px;
+    border-radius: 12px;
+    flex-wrap: wrap;
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    min-width: 200px;
+}
+
+.btc-address-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.6);
+    letter-spacing: 0.04em;
+}
+
+.btc-address-value {
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+    word-break: break-all;
+    font-family: 'Courier New', monospace;
+    flex: 1;
+    min-width: 120px;
+}
+
+.btc-copy-btn {
+    border: none;
+    border-radius: 8px;
+    padding: 6px 12px;
+    background: rgba(255, 255, 255, 0.2);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.2s ease;
+    white-space: nowrap;
+}
+
+.btc-copy-btn:hover {
+    background: rgba(255, 255, 255, 0.35);
+    transform: scale(1.05);
+}
+
+@media (max-width: 700px) {
+    .btc-balance-banner {
+        margin: 12px 12px;
+        padding: 14px 16px;
+        border-radius: 14px;
+    }
+
+    .btc-balance-banner-content {
+        gap: 12px;
+    }
+
+    .btc-balance-banner-icon {
+        width: 44px;
+        height: 44px;
+        font-size: 24px;
+    }
+
+    .btc-balance-amount {
+        font-size: 26px;
+    }
+
+    .btc-balance-banner-address {
+        width: 100%;
+        padding: 8px 12px;
+    }
+
+    .btc-address-value {
+        font-size: 12px;
+    }
+}
+
+@media (max-width: 480px) {
+    .btc-balance-amount {
+        font-size: 22px;
+    }
+
+    .btc-balance-usd {
+        font-size: 12px;
+    }
+}
+
 /* Responsive Ticker */
 @media (max-width: 768px) {
     .match-card {
