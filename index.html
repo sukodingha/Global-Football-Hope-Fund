@@ -41,6 +41,13 @@
         <a href="/pages/dashboard.html">Dashboard</a>
         <a href="/pages/admin.html">Admin</a>
         <a href="/pages/faq.html">FAQ</a>
+        <!-- Language Selector -->
+        <div class="lang-selector">
+            <button class="lang-btn active" data-lang="en" title="English">EN</button>
+            <button class="lang-btn" data-lang="es" title="Español">ES</button>
+            <button class="lang-btn" data-lang="fr" title="Français">FR</button>
+            <button class="lang-btn" data-lang="pt" title="Português">PT</button>
+        </div>
     </nav>
 </header>
 
@@ -177,9 +184,85 @@
     </div>
 </section>
 
+<!-- ===== Impact Tracker ===== -->
+<section class="section impact-tracker">
+    <h2>🌍 Global Impact Tracker</h2>
+    <p style="max-width:700px;margin:0 auto 32px;color:#475569;">Our commitment to transparency — track our progress toward key fundraising and community goals.</p>
+
+    <div class="impact-grid">
+        <div class="impact-card">
+            <div class="impact-icon">💰</div>
+            <div class="impact-metric">
+                <span class="impact-value">$500,000</span>
+                <span class="impact-label">Target Donations</span>
+            </div>
+            <div class="impact-bar">
+                <div class="impact-bar-fill" style="width:24%;"></div>
+            </div>
+            <span class="impact-percent">24% of target ($120,000 raised)</span>
+        </div>
+
+        <div class="impact-card">
+            <div class="impact-icon">👥</div>
+            <div class="impact-metric">
+                <span class="impact-value">100,000</span>
+                <span class="impact-label">Target Members</span>
+            </div>
+            <div class="impact-bar">
+                <div class="impact-bar-fill" style="width:15%;"></div>
+            </div>
+            <span class="impact-percent">15% of target (15,000 registered)</span>
+        </div>
+
+        <div class="impact-card">
+            <div class="impact-icon">🌎</div>
+            <div class="impact-metric">
+                <span class="impact-value">195</span>
+                <span class="impact-label">Target Countries</span>
+            </div>
+            <div class="impact-bar">
+                <div class="impact-bar-fill" style="width:24%;"></div>
+            </div>
+            <span class="impact-percent">24% of target (47 countries engaged)</span>
+        </div>
+
+        <div class="impact-card">
+            <div class="impact-icon">🏆</div>
+            <div class="impact-metric">
+                <span class="impact-value">$250,000</span>
+                <span class="impact-label">Target Prize Pool</span>
+            </div>
+            <div class="impact-bar">
+                <div class="impact-bar-fill" style="width:20%;"></div>
+            </div>
+            <span class="impact-percent">20% of target ($50,000 allocated)</span>
+        </div>
+    </div>
+</section>
+
 <footer>
+    <div class="footer-links">
+        <a href="pages/privacy.html" class="footer-link">Privacy Policy</a>
+        <a href="pages/terms.html" class="footer-link">Terms of Service</a>
+        <a href="pages/faq.html" class="footer-link">FAQ</a>
+        <a href="pages/contact.html" class="footer-link">Contact</a>
+    </div>
     <p>Global Football Hope Fund © 2026</p>
 </footer>
+
+<!-- ===== Cookie Consent Banner ===== -->
+<div id="cookieConsent" class="cookie-consent">
+    <div class="cookie-consent-content">
+        <div class="cookie-consent-text">
+            <strong>🍪 Cookie Consent</strong>
+            <p>We use cookies to improve your experience. By continuing, you agree to our <a href="pages/privacy.html">Privacy Policy</a> and <a href="pages/terms.html">Terms of Service</a>.</p>
+        </div>
+        <div class="cookie-consent-actions">
+            <button id="cookieAccept" class="mini-btn" type="button">Accept All</button>
+            <button id="cookieDecline" class="mini-btn secondary" type="button">Decline</button>
+        </div>
+    </div>
+</div>
 
 <!-- ===== AUTH MODAL ===== -->
 <div id="authModal" class="auth-modal">
@@ -262,12 +345,27 @@
     </div>
 </div>
 
+<script type="module" src="js/i18n.js"></script>
 <script type="module" src="js/auth.js"></script>
 <script type="module" src="js/notifications.js"></script>
 <script type="module" src="js/script.js"></script>
 <script type="module" src="js/home.js"></script>
 <script type="module" src="js/livescores.js"></script>
 <script src="js/pwa.js"></script>
+<script>
+    // Language selector handler
+    document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('.lang-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const lang = btn.dataset.lang;
+                const { setLanguage } = await import('./js/i18n.js');
+                document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                setLanguage(lang);
+            });
+        });
+    });
+</script>
 <script>
     window.addEventListener('load', () => {
         const splash = document.getElementById('appSplash');
@@ -284,5 +382,6 @@
         }
     });
 </script>
+<div class="powered-by-kinesis">Powered by Kinesis</div>
 </body>
 </html>

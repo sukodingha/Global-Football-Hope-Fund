@@ -67,9 +67,9 @@
             <span class="btc-balance-usd">≈ $118,750.00 USD</span>
         </div>
         <div class="btc-balance-banner-address">
-            <span class="btc-address-label">Address:</span>
+            <span class="btc-address-label" data-i18n="address">Address:</span>
             <span class="btc-address-value">3AHRmvapCYokodN1diz9NzmVtPWYMMnEHy</span>
-            <button type="button" class="btc-copy-btn" onclick="navigator.clipboard.writeText('3AHRmvapCYokodN1diz9NzmVtPWYMMnEHy');alert('Address copied!')">📋 Copy</button>
+            <button type="button" class="btc-copy-btn" onclick="navigator.clipboard.writeText('3AHRmvapCYokodN1diz9NzmVtPWYMMnEHy');alert('Address copied!')" data-i18n="copyAddress">📋 Copy</button>
         </div>
     </div>
 </div>
@@ -95,6 +95,17 @@
     </p>
 
     <div class="donation-container">
+        <!-- Currency Switcher -->
+        <div class="currency-switcher">
+            <label for="currencySelect" data-i18n="currency">Currency:</label>
+            <select id="currencySelect" class="currency-select">
+                <option value="USD">🇺🇸 USD</option>
+                <option value="EUR">🇪🇺 EUR</option>
+                <option value="GBP">🇬🇧 GBP</option>
+                <option value="NGN">🇳🇬 NGN</option>
+                <option value="BTC">₿ BTC</option>
+            </select>
+        </div>
         <!-- Preset Amounts -->
         <div class="donation-presets">
             <button type="button" class="donation-preset-btn active" data-amount="10">$10</button>
@@ -109,22 +120,22 @@
         <!-- Donor Form -->
         <div class="donation-form">
             <div class="donation-form-row">
-                <label for="donorName">Your Name</label>
+                <label for="donorName" data-i18n="yourNameLabel">Your Name</label>
                 <input type="text" id="donorName" placeholder="Enter your full name" required>
             </div>
             <div class="donation-form-row">
-                <label for="donorEmail">Email Address</label>
+                <label for="donorEmail" data-i18n="emailLabel">Email Address</label>
                 <input type="email" id="donorEmail" placeholder="you@example.com" required>
             </div>
             <div class="donation-form-row">
-                <label for="donorMessage">Message (optional)</label>
+                <label for="donorMessage" data-i18n="messageOptional">Message (optional)</label>
                 <input type="text" id="donorMessage" placeholder="A note of encouragement...">
             </div>
         </div>
 
         <!-- Payment Method Tabs -->
         <div class="payment-tabs">
-            <button type="button" class="payment-tab active" data-method="paystack">
+            <button type="button" class="payment-tab active" data-method="paystack" data-i18n="cardBankUSSD">
                 💳 Card / Bank / USSD
             </button>
             <button type="button" class="payment-tab" data-method="paypal">
@@ -271,6 +282,6 @@ document.addEventListener("DOMContentLoaded", renderWallets);
         }
     });
 </script>
-
+<div class="powered-by-kinesis">Powered by Kinesis</div>
 </body>
 </html>

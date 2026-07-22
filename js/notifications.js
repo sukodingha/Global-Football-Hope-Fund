@@ -62,12 +62,7 @@ function injectNotificationBell() {
   if (bellBtn && dropdown) {
     bellBtn.addEventListener("click", (e) => {
       e.stopPropagation();
-      const isHidden = dropdown.hidden;
-      dropdown.hidden = !isHidden;
-      if (!isHidden) {
-        // Open: mark all as read via Firestore
-        markAllNotificationsRead();
-      }
+      dropdown.hidden = !dropdown.hidden;
     });
 
     // Close dropdown on outside click
@@ -204,9 +199,11 @@ function renderNotifications(notifications) {
     `;
   }).join("");
 
-  // Add click handler to mark individual as read
+  // Add click handler to mark individual as read and close dropdown
+  const dropdown = document.getElementById("notificationDropdown");
   list.querySelectorAll(".notification-item.unread").forEach((item) => {
-    item.addEventListener("click", async () => {
+    item.addEventListener("click", async (e) => {
+      e.stopPropagation();
       const notifId = item.dataset.id;
       if (currentUser && notifId) {
         try {
@@ -217,6 +214,16 @@ function renderNotifications(notifications) {
           console.warn("Could not mark notification as read:", err);
         }
       }
+      // Close dropdown after clicking a notification
+      if (dropdown) dropdown.hidden = true;
+    });
+  });
+
+  // Also close dropdown on already-read notification click
+  list.querySelectorAll(".notification-item.read").forEach((item) => {
+    item.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (dropdown) dropdown.hidden = true;
     });
   });
 }
