@@ -97,6 +97,8 @@ function listenToNotifications(uid) {
     return;
   }
 
+  if (!db) { console.warn("Firestore db not available"); return; }
+
   try {
     const notificationsRef = collection(db, "notifications", uid, "items");
     const q = query(notificationsRef, orderBy("createdAt", "desc"), limit(50));

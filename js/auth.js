@@ -424,33 +424,6 @@ if (loginFormLegacy) {
 
 restoreFlashMessage();
 
-// ===== Profile Avatar Helper =====
-function generateInitialsAvatar(name, size = 40) {
-  const initials = (name || "?")
-    .split(" ")
-    .map(s => s[0])
-    .join("")
-    .substring(0, 2)
-    .toUpperCase() || "?";
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d");
-  const gradient = ctx.createLinearGradient(0, 0, size, size);
-  gradient.addColorStop(0, "#0b2d4d");
-  gradient.addColorStop(1, "#123f63");
-  ctx.fillStyle = gradient;
-  ctx.beginPath();
-  ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = "#fff";
-  ctx.font = `bold ${size * 0.4}px "Segoe UI", sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(initials, size / 2, size / 2);
-  return canvas.toDataURL("image/png");
-}
-
 // ===== Update user status with avatar =====
 function updateUserStatus(user, profileData = null) {
   if (!userStatus) return;

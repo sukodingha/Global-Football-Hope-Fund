@@ -21,6 +21,7 @@ function toNumber(value) {
 
 async function loadHomeStats() {
   if (!memberCount && !donationCount && !countryCount && !prizePool) return;
+  if (!db) { console.warn("Firestore db not available"); return; }
 
   try {
     const usersSnap = await getDocs(collection(db, "users"));
