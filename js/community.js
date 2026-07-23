@@ -345,12 +345,19 @@ function renderPostCard(post) {
     ? `<div style="font-size:12px;color:#00c853;padding:0 18px 6px;">👥 Tagged ${post.taggedUserIds.length} user(s)</div>`
     : '';
 
+  // Build profile link
+  const profileLink = `profile.html?uid=${encodeURIComponent(post.authorId || "")}`;
+
   // Header
   card.innerHTML = `
     <div class="fb-post-header">
-      <div class="fb-post-avatar fb-avatar-clickable" data-userid="${post.authorId}" data-username="${post.authorName || "Anonymous"}" data-useremoji="${post.authorAvatar || "👤"}">${post.authorAvatar || "👤"}</div>
+      <a href="${profileLink}" class="fb-post-avatar-link" style="text-decoration:none;color:inherit;">
+        <div class="fb-post-avatar">${post.authorAvatar || "👤"}</div>
+      </a>
       <div class="fb-post-meta">
-        <strong class="fb-avatar-clickable" data-userid="${post.authorId}" data-username="${post.authorName || "Anonymous"}" data-useremoji="${post.authorAvatar || "👤"}">${post.authorName || "Anonymous"}</strong>
+        <a href="${profileLink}" style="text-decoration:none;color:inherit;">
+          <strong>${post.authorName || "Anonymous"}</strong>
+        </a>
         <div class="fb-post-time">${timeAgo(post.createdAt)} · ${post.interest || "General"}</div>
       </div>
       <div class="fb-post-options">•••</div>
@@ -406,7 +413,8 @@ function renderPostCard(post) {
   (post.comments || []).forEach((c) => {
     const ci = document.createElement("div");
     ci.className = "fb-comment-item";
-    ci.innerHTML = `<span class="fb-comment-avatar">${c.authorAvatar || "👤"}</span><div class="fb-comment-body"><strong class="fb-avatar-clickable" data-userid="${c.authorId}" data-username="${c.authorName || "Guest"}" data-useremoji="${c.authorAvatar || "👤"}">${c.authorName || "Guest"}</strong><p>${escapeHtml(c.text || "")}</p><span class="fb-comment-time">${timeAgo(c.createdAt)}</span></div>`;
+    const commentProfileLink = `profile.html?uid=${encodeURIComponent(c.authorId || "")}`;
+    ci.innerHTML = `<span class="fb-comment-avatar"><a href="${commentProfileLink}" style="text-decoration:none;color:inherit;">${c.authorAvatar || "👤"}</a></span><div class="fb-comment-body"><strong><a href="${commentProfileLink}" style="text-decoration:none;color:inherit;">${c.authorName || "Guest"}</a></strong><p>${escapeHtml(c.text || "")}</p><span class="fb-comment-time">${timeAgo(c.createdAt)}</span></div>`;
     commentList.appendChild(ci);
   });
   commentSection.appendChild(commentList);

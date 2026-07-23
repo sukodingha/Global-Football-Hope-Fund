@@ -1,30 +1,18 @@
-# Photo Upload Refactor — Progress Tracker
+# Photo Upload Refactor & Public Profile — Progress Tracker
 
 ## ✅ Completed Steps
+- All dashboard photo upload UI/JS/CSS changes
 
 ## 📋 Steps
 
-### Step 1: `pages/dashboard.html` — UI Changes
-- [x] Add `<img id="currentProfilePic">` inside "Profile Picture" form-section
-- [x] Add loading spinner `<div id="uploadSpinner" class="spinner" hidden></div>`
-- [x] Add `#uploadAvatarBtn` button next to hidden file input
+### TASK 1: Fix Dashboard Photo Upload Pipeline
+- [x] Already done in previous pass — `handleProfilePhotoUpload()` covers Storage → Auth → Firestore → UI
 
-### Step 2: `js/dashboard.js` — Core Logic Refactor
-- [x] Add safe Firestore DB guard checks (`if (!db) return;`)
-- [x] Refactor `uploadToFirebaseStorage()` to use path `profile_pictures/${uid}/${Date.now()}`
-- [x] Create `handleProfilePhotoUpload(file)` combined handler (uploads → Auth → Firestore → UI refresh)
-- [x] Refactor `avatarUploadInput` change handler to use new handler
-- [x] Wire `#uploadPhotoBtn` + `#photoUploadInput` for gallery with instant refresh
-- [x] Add `updateCurrentProfilePicUI()` for instant #currentProfilePic refresh
-- [x] Add spinner controls (`showSpinner`/`hideSpinner`)
-- [x] Load existing photo into #currentProfilePic on page load
+### TASK 2: Public User Profile View & Wall (`pages/profile.html` + `js/profile.js`)
+- [ ] Create `pages/profile.html` — Full profile page template
+- [ ] Create `js/profile.js` — Profile loader: reads `?uid=`, fetches Firestore user doc, renders profile header, wall feed, photo gallery
+- [ ] Link Community Posts: Edit `js/community.js` to wrap avatar/name in `<a>` pointing to `profile.html?uid=`
 
-### Step 3: `css/style.css` — New Styles
-- [x] Add `.spinner` animation styles
-- [x] Add `#currentProfilePic` styles
-- [x] Add `.profile-pic-placeholder` styles
-- [x] Add `#uploadAvatarBtn:disabled` styles
-
-### Step 4: Git Stage
+### TASK 3: Git Stage
 - [ ] Run `git add .`
 

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0b2d4d">
+    <title>User Profile | Global Football Hope Fund</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <link rel="manifest" href="../manifest.json">
+    <link rel="icon" href="../images/icon-192.svg" sizes="192x192">
+    <link rel="apple-touch-icon" href="../images/icon-192.svg">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+</head>
+<body>
+<div id="appSplash" class="app-splash">
+    <div class="app-splash-card">
+        <div class="app-splash-icon">⚽</div>
+        <h2>GFHF</h2>
+        <p>Football news, live scores, and hope in one app.</p>
+    </div>
+</div>
+
+<header>
+    <div class="header-brand">
+        <div class="logo">⚽ GFHF</div>
+        <span id="userStatus" class="user-status">Login</span>
+        <button id="logoutBtn" class="logout-btn" type="button" hidden>Logout</button>
+    </div>
+    <nav>
+        <a href="../index.html">Home</a>
+        <a href="about.html">About</a>
+        <a href="competition.html">Competition</a>
+        <a href="donate.html">Donate</a>
+        <a href="news.html">News</a>
+        <a href="community.html">Community</a>
+        <a href="faq.html">FAQ</a>
+        <a href="contact.html">Contact</a>
+    </nav>
+</header>
+
+<nav class="mobile-bottom-nav" aria-label="Mobile navigation">
+    <a href="../index.html">Home</a>
+    <a href="news.html">Sports</a>
+    <a href="community.html">Community</a>
+    <a href="donate.html">Donate</a>
+</nav>
+
+<!-- ===== PROFILE PAGE ===== -->
+<section class="section" style="background:linear-gradient(135deg,#f5f8fc 0%,#eef4f8 100%);min-height:80vh;">
+    <div class="profile-page-container" style="max-width:900px;margin:0 auto;">
+
+        <!-- Profile Header Card -->
+        <div id="profileHeaderCard" class="card" style="padding:0;overflow:hidden;text-align:center;">
+            <div id="profileCover" style="height:180px;background:linear-gradient(135deg,#0b2d4d,#123f63);border-radius:16px 16px 0 0;position:relative;">
+                <div id="profileAvatarWrap" style="position:absolute;bottom:-50px;left:50%;transform:translateX(-50%);width:100px;height:100px;border-radius:50%;border:4px solid white;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.2);background:#eef4f8;">
+                    <img id="profileAvatar" src="" alt="Profile" style="width:100%;height:100%;object-fit:cover;display:none;">
+                    <div id="profileAvatarPlaceholder" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:40px;background:linear-gradient(135deg,#0b2d4d,#123f63);color:white;">👤</div>
+                </div>
+            </div>
+            <div style="padding:60px 24px 24px;">
+                <h2 id="profileDisplayName" style="margin:0;font-size:26px;color:#0b2d4d;">Loading...</h2>
+                <p id="profileEmail" style="color:#64748b;font-size:14px;margin:4px 0 8px;"></p>
+                <div id="profileDetails" style="display:flex;flex-wrap:wrap;gap:16px;justify-content:center;margin:12px 0;">
+                    <div style="background:#f1f5f9;border-radius:12px;padding:10px 18px;min-width:120px;">
+                        <div style="font-size:12px;color:#64748b;">Country</div>
+                        <div id="profileCountry" style="font-weight:700;color:#0b2d4d;">—</div>
+                    </div>
+                    <div style="background:#f1f5f9;border-radius:12px;padding:10px 18px;min-width:120px;">
+                        <div style="font-size:12px;color:#64748b;">City</div>
+                        <div id="profileCity" style="font-weight:700;color:#0b2d4d;">—</div>
+                    </div>
+                    <div style="background:#f1f5f9;border-radius:12px;padding:10px 18px;min-width:120px;">
+                        <div style="font-size:12px;color:#64748b;">Favorite Team</div>
+                        <div id="profileTeam" style="font-weight:700;color:#0b2d4d;">—</div>
+                    </div>
+                    <div style="background:#f1f5f9;border-radius:12px;padding:10px 18px;min-width:120px;">
+                        <div style="font-size:12px;color:#64748b;">Unique ID</div>
+                        <div id="profileUniqueId" style="font-weight:700;color:#0b2d4d;font-family:monospace;">—</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Photo Gallery Section -->
+        <div class="card" style="margin-top:24px;text-align:left;">
+            <h3 style="margin:0 0 16px;color:#0b2d4d;">📸 Photo Gallery</h3>
+            <div id="profileGallery" style="display:flex;flex-wrap:wrap;gap:10px;">
+                <p id="profileGalleryEmpty" style="color:#64748b;font-size:14px;">No photos yet.</p>
+            </div>
+        </div>
+
+        <!-- Wall / Activity Feed Section -->
+        <div class="card" style="margin-top:24px;text-align:left;">
+            <h3 style="margin:0 0 16px;color:#0b2d4d;">📋 Activity Feed</h3>
+            <div id="profileWallFeed" style="display:grid;gap:14px;">
+                <p id="profileWallEmpty" style="color:#64748b;font-size:14px;">Loading posts...</p>
+            </div>
+        </div>
+
+        <!-- Back to Community Link -->
+        <div style="text-align:center;margin-top:32px;">
+            <a href="community.html" class="btn" style="margin:0;padding:12px 24px;">← Back to Community</a>
+        </div>
+    </div>
+</section>
+
+<footer>
+    <p>© 2026 Global Football Hope Fund</p>
+</footer>
+
+<script src="../js/pwa.js"></script>
+<script type="module" src="../js/auth.js"></script>
+<script type="module" src="../js/profile.js"></script>
+<script type="module" src="../js/script.js"></script>
+<script>
+    window.addEventListener('load', () => {
+        const splash = document.getElementById('appSplash');
+        if (splash) {
+            setTimeout(() => splash.classList.add('hidden'), 900);
+        }
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('../sw.js').then((registration) => {
+                if (registration.waiting) {
+                    registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+                }
+            }).catch(console.error);
+        }
+    });
+</script>
+<div class="powered-by-kinesis">Powered by Kinesis</div>
+</body>
+</html>
+
