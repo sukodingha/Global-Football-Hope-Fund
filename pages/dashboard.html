@@ -87,7 +87,15 @@
             <div class="form-section">
                 <h3>Profile Picture</h3>
                 <p style="font-size:13px;color:#64748b;">Upload a profile photo to personalize your account.</p>
-                <input type="file" id="avatarUploadInput" accept="image/*" style="margin-top:8px;">
+                <div id="currentProfilePicWrap" style="display:flex;align-items:center;gap:14px;margin-top:8px;">
+                    <img id="currentProfilePic" src="" alt="Profile Picture" style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:3px solid #0b2d4d;background:#eef4f8;display:none;">
+                    <div class="profile-pic-placeholder" id="profilePicPlaceholder" style="width:72px;height:72px;border-radius:50%;background:#eef4f8;border:3px dashed #94a3b8;display:flex;align-items:center;justify-content:center;font-size:28px;color:#94a3b8;">📷</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:10px;margin-top:10px;">
+                    <input type="file" id="avatarUploadInput" accept="image/*" style="display:none;">
+                    <button type="button" id="uploadAvatarBtn" class="btn" style="margin:0;padding:10px 18px;font-size:14px;">📤 Upload Photo</button>
+                    <div id="uploadSpinner" class="spinner" hidden></div>
+                </div>
             </div>
             <div class="form-section">
                 <h3>Photo Gallery</h3>
