@@ -5,10 +5,11 @@
 
 import { auth, db } from "./firebase.js";
 import { onAuthStateChanged, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { doc, getDoc, setDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
-import { generateInitialsAvatar, updateHeaderAvatar } from "./auth.js";
+import { updateHeaderAvatar } from "./auth.js";
 
+// ===== DOM refs =====
 const welcomeText = document.getElementById("welcomeText");
 const userEmail = document.getElementById("userEmail");
 const messageBox = document.getElementById("messageBox");
@@ -16,6 +17,10 @@ const profileSummary = document.getElementById("profileSummary");
 const predictionSummary = document.getElementById("predictionSummary");
 const uniqueIdSection = document.getElementById("uniqueIdSection");
 const avatarUploadInput = document.getElementById("avatarUploadInput");
+const uploadAvatarBtn = document.getElementById("uploadAvatarBtn");
+const uploadSpinner = document.getElementById("uploadSpinner");
+const currentProfilePic = document.getElementById("currentProfilePic");
+const profilePicPlaceholder = document.getElementById("profilePicPlaceholder");
 const photoGalleryContainer = document.getElementById("photoGalleryContainer");
 const photoUploadInput = document.getElementById("photoUploadInput");
 
@@ -151,16 +156,118 @@ function generateUniqueId() {
 }
 
 /**
- * Upload a file to Firebase Storage and return the download URL
+ * Safe Firestore DB guard — prevents Uncaught FirebaseError if db is null
  */
-async function uploadToFirebaseStorage(file, userId, folder = "avatars") {
+function guardDb() {
+  if (!db) {
+    console.warn("Firestore (db) is not initialized.");
+    return false;
+  }
+  return true;
+}
+
+// ===== Spinner Controls =====
+function showSpinner() {
+  if (uploadSpinner) uploadSpinner.hidden = false;
+  if (uploadAvatarBtn) uploadAvatarBtn.disabled = true;
+}
+function hideSpinner() {
+  if (uploadSpinner) uploadSpinner.hidden = true;
+  if (uploadAvatarBtn) uploadAvatarBtn.disabled = false;
+}
+
+/**
+ * Immediately update the #currentProfilePic element on the dashboard
+ * without a full page reload — Facebook-style instant refresh.
+ */
+function updateCurrentProfilePicUI(photoURL) {
+  if (!currentProfilePic || !profilePicPlaceholder) return;
+  if (photoURL) {
+    currentProfilePic.src = photoURL;
+    currentProfilePic.style.display = "block";
+    profilePicPlaceholder.style.display = "none";
+  } else {
+    currentProfilePic.style.display = "none";
+    profilePicPlaceholder.style.display = "flex";
+  }
+}
+
+/**
+ * Upload a file to Firebase Storage under profile_pictures/{userId}/{timestamp}
+ * and return the download URL.
+ */
+async function uploadToFirebaseStorage(file, userId, folder = null) {
   const storage = getStorage();
   const timestamp = Date.now();
   const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
-  const storageRef = ref(storage, `${folder}/${userId}_${timestamp}_${sanitizedName}`);
+  // Default to profile_pictures/{userId}/{timestamp} for profile pics
+  const path = folder || `profile_pictures/${userId}`;
+  const storageRef = ref(storage, `${path}/${timestamp}_${sanitizedName}`);
   const snapshot = await uploadBytes(storageRef, file);
   const downloadURL = await getDownloadURL(snapshot.ref);
   return downloadURL;
+}
+
+/**
+ * Combined handler: upload profile photo to Storage → update Auth profile →
+ * update Firestore (photoURL + galleryPhotos) → refresh UI everywhere.
+ * Facebook-style instant refresh.
+ */
+async function handleProfilePhotoUpload(file, user) {
+  if (!file || !user) return;
+  if (!guardDb()) {
+    showMessage("Database unavailable. Please try again later.", "error");
+    return;
+  }
+
+  showSpinner();
+  try {
+    // 1. Local preview (instant)
+    const localPreviewUrl = URL.createObjectURL(file);
+    updateHeaderAvatar(localPreviewUrl, user.displayName || user.email?.split("@")[0]);
+    updateCurrentProfilePicUI(localPreviewUrl);
+
+    // 2. Upload to Firebase Storage under profile_pictures/{uid}/
+    const downloadURL = await uploadToFirebaseStorage(file, user.uid);
+
+    // 3. Update Firebase Auth profile
+    await updateProfile(user, { photoURL: downloadURL });
+
+    // 4. Update Firestore: set photoURL + append to galleryPhotos
+    const userRef = doc(db, "users", user.uid);
+    const snap = await getDoc(userRef);
+    const profile = snap.exists() ? snap.data() : {};
+    const existingGallery = profile.galleryPhotos || profile.photos || [];
+    // Avoid duplicates if same URL already exists
+    if (!existingGallery.includes(downloadURL)) {
+      existingGallery.push(downloadURL);
+    }
+    await setDoc(userRef, {
+      photoURL: downloadURL,
+      galleryPhotos: existingGallery
+    }, { merge: true });
+
+    // 5. Clean up local object URL
+    URL.revokeObjectURL(localPreviewUrl);
+
+    // 6. Refresh UI everywhere (Facebook-style)
+    updateHeaderAvatar(downloadURL, user.displayName || user.email?.split("@")[0]);
+    updateCurrentProfilePicUI(downloadURL);
+    renderPhotoGallery(user.uid);
+
+    showMessage("Profile picture updated successfully!", "success");
+  } catch (err) {
+    console.error("Profile photo upload error:", err);
+    showMessage("Failed to upload profile picture. Please try again.", "error");
+    // Revert local preview on error
+    const currentPhotoURL = user.photoURL || "";
+    updateHeaderAvatar(currentPhotoURL, user.displayName || user.email?.split("@")[0]);
+    updateCurrentProfilePicUI(currentPhotoURL);
+  } finally {
+    hideSpinner();
+    // Reset the file input so the same file can be re-selected
+    if (avatarUploadInput) avatarUploadInput.value = "";
+  }
 }
 
 /**
@@ -168,6 +275,7 @@ async function uploadToFirebaseStorage(file, userId, folder = "avatars") {
  */
 async function ensureUniqueId(user, profile) {
   if (profile.uniqueId) return profile.uniqueId;
+  if (!guardDb()) return "#GFHF-ERROR";
   const newId = generateUniqueId();
   const userRef = doc(db, "users", user.uid);
   await setDoc(userRef, { uniqueId: newId }, { merge: true });
@@ -239,7 +347,7 @@ async function renderPhotoGallery(userId) {
     });
   });
 
-  // Set as Profile Picture handler
+  // Set as Profile Picture handler — also refreshes #currentProfilePic and header
   photoGalleryContainer.querySelectorAll(".set-profile-btn").forEach(btn => {
     btn.addEventListener("click", async () => {
       const url = btn.dataset.url;
@@ -250,6 +358,8 @@ async function renderPhotoGallery(userId) {
         if (auth.currentUser) {
           await updateProfile(auth.currentUser, { photoURL: url });
         }
+        // Update dashboard #currentProfilePic immediately
+        updateCurrentProfilePicUI(url);
         // Update header immediately
         const displayName = profile.displayName || auth.currentUser?.displayName || auth.currentUser?.email?.split("@")[0] || "Member";
         updateHeaderAvatar(url, displayName);
@@ -309,39 +419,32 @@ onAuthStateChanged(auth, async (user) => {
     `;
   }
 
+  // ===== Load existing profile photo into #currentProfilePic =====
+  const existingPhotoURL = profile.photoURL || user.photoURL || "";
+  if (existingPhotoURL) {
+    updateCurrentProfilePicUI(existingPhotoURL);
+  }
+
   // Render photo gallery
   renderPhotoGallery(user.uid);
 
-  // Avatar upload handler — uses Firebase Storage, creates local preview, updates header immediately
+  // ===== Avatar Upload: #uploadAvatarBtn triggers hidden file input =====
+  if (uploadAvatarBtn && avatarUploadInput) {
+    uploadAvatarBtn.addEventListener("click", () => {
+      avatarUploadInput.click();
+    });
+  }
+
+  // ===== Avatar file handler — uses handleProfilePhotoUpload for full pipeline =====
   if (avatarUploadInput) {
     avatarUploadInput.addEventListener("change", async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      try {
-        // Show a local preview immediately in the header
-        const localPreviewUrl = URL.createObjectURL(file);
-        updateHeaderAvatar(localPreviewUrl, user.displayName || user.email?.split("@")[0]);
-
-        // Upload to Firebase Storage
-        const imageUrl = await uploadToFirebaseStorage(file, user.uid, "avatars");
-
-        // Update Firebase Auth profile and Firestore
-        await updateProfile(user, { photoURL: imageUrl });
-        await setDoc(doc(db, "users", user.uid), { photoURL: imageUrl }, { merge: true });
-
-        // Clean up the local object URL and update header with the permanent URL
-        URL.revokeObjectURL(localPreviewUrl);
-        updateHeaderAvatar(imageUrl, user.displayName || user.email?.split("@")[0]);
-
-        showMessage("Profile picture updated successfully!", "success");
-      } catch (err) {
-        showMessage("Failed to upload profile picture.", "error");
-        console.error(err);
-      }
+      await handleProfilePhotoUpload(file, user);
     });
   }
 
-  // Wire up the "Upload New Photo" button to trigger file input
+  // ===== Gallery Upload: "Upload New Photo" button triggers hidden input =====
   const uploadPhotoBtn = document.getElementById("uploadPhotoBtn");
   if (uploadPhotoBtn && photoUploadInput) {
     uploadPhotoBtn.addEventListener("click", () => {
@@ -349,37 +452,49 @@ onAuthStateChanged(auth, async (user) => {
     });
   }
 
-  // Photo gallery upload handler — stores in user_photos/{uid}/{timestamp}_{filename}
+  // ===== Photo gallery upload handler =====
   if (photoUploadInput) {
     photoUploadInput.addEventListener("change", async (e) => {
       const files = Array.from(e.target.files);
       if (files.length === 0) return;
+      if (!guardDb()) {
+        showMessage("Database unavailable. Please try again later.", "error");
+        return;
+      }
       try {
         for (const file of files) {
           const imageUrl = await uploadToFirebaseStorage(file, user.uid, `user_photos/${user.uid}`);
-          // Get existing galleryPhotos (or fallback to photos) and append
           const snap = await getDoc(doc(db, "users", user.uid));
           const currentProfile = snap.exists() ? snap.data() : {};
           const existing = currentProfile.galleryPhotos || currentProfile.photos || [];
           existing.push(imageUrl);
           await setDoc(doc(db, "users", user.uid), { galleryPhotos: existing }, { merge: true });
         }
-        showMessage(`${files.length} photo(s) uploaded!`, "success");
+        showMessage(`${files.length} photo(s) uploaded to gallery!`, "success");
         renderPhotoGallery(user.uid);
       } catch (err) {
+        console.error("Gallery upload error:", err);
         showMessage("Failed to upload photos.", "error");
-        console.error(err);
+      } finally {
+        photoUploadInput.value = "";
       }
     });
   }
 
-  const predictionsRef = collection(db, "predictions");
-  const q = query(predictionsRef, where("userId", "==", user.uid));
-  const predictionSnap = await getDocs(q);
-  const predictions = predictionSnap.docs.map((docSnap) => docSnap.data());
-
+  // ===== Predictions summary =====
+  let predictions = [];
+  if (guardDb()) {
+    try {
+      const predictionsRef = collection(db, "predictions");
+      const q = query(predictionsRef, where("userId", "==", user.uid));
+      const predictionSnap = await getDocs(q);
+      predictions = predictionSnap.docs.map((docSnap) => docSnap.data());
+    } catch (err) {
+      console.warn("Could not fetch predictions:", err);
+    }
+  }
   if (predictionSummary) {
-    const totalPoints = predictions.reduce((sum, prediction) => sum + (prediction.points || 0), 0);
+    const totalPoints = predictions.reduce((sum, p) => sum + (p.points || 0), 0);
     predictionSummary.innerHTML = `
       <p><strong>Predictions submitted:</strong> ${predictions.length}</p>
       <p><strong>Current points:</strong> ${totalPoints}</p>
