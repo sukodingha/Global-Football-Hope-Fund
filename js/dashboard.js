@@ -6,7 +6,6 @@
 import { auth, db } from "./firebase.js";
 import { onAuthStateChanged, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { doc, getDoc, setDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 import { updateHeaderAvatar } from "./auth.js";
 
 // ===== DOM refs =====
@@ -193,23 +192,72 @@ function updateCurrentProfilePicUI(photoURL) {
 }
 
 /**
- * Upload a file to Firebase Storage under profile_pictures/{userId}/{timestamp}
- * and return the download URL.
+ * Upload an image file to Cloudinary using the unsigned upload preset.
+ * Returns the secure URL from Cloudinary, or null on failure.
  */
-async function uploadToFirebaseStorage(file, userId, folder = null) {
-  const storage = getStorage();
-  const timestamp = Date.now();
-  const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
-  // Default to profile_pictures/{userId}/{timestamp} for profile pics
-  const path = folder || `profile_pictures/${userId}`;
-  const storageRef = ref(storage, `${path}/${timestamp}_${sanitizedName}`);
-  const snapshot = await uploadBytes(storageRef, file);
-  const downloadURL = await getDownloadURL(snapshot.ref);
-  return downloadURL;
+async function handleImageUpload(fileInput) {
+    const file = fileInput.files[0];
+    if (!file) {
+        alert('Please select an image first!');
+        return null;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', 'football_preset');
+
+    try {
+        const response = await fetch('https://api.cloudinary.com/v1_1/d8obkydb/image/upload', {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+        
+        if (data.secure_url) {
+            console.log('Upload successful:', data.secure_url);
+            return data.secure_url; // This URL goes straight to Firestore!
+        } else {
+            throw new Error(data.error?.message || 'Cloudinary upload failed.');
+        }
+    } catch (error) {
+        console.error('Error uploading image:', error);
+        alert('Image upload failed. Check your console for details.');
+        return null;
+    }
 }
 
 /**
- * Combined handler: upload profile photo to Storage → update Auth profile →
+ * Upload a file to Cloudinary and return the secure URL.
+ * Accepts a File object directly (not a file input element).
+ */
+async function uploadToCloudinary(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('upload_preset', 'football_preset');
+
+  try {
+    const response = await fetch('https://api.cloudinary.com/v1_1/d8obkydb/image/upload', {
+      method: 'POST',
+      body: formData
+    });
+
+    const data = await response.json();
+
+    if (data.secure_url) {
+      console.log('Upload successful:', data.secure_url);
+      return data.secure_url;
+    } else {
+      throw new Error(data.error?.message || 'Cloudinary upload failed.');
+    }
+  } catch (error) {
+    console.error('Error uploading image:', error);
+    throw error;
+  }
+}
+
+/**
+ * Combined handler: upload profile photo to Cloudinary → update Auth profile →
  * update Firestore (photoURL + galleryPhotos) → refresh UI everywhere.
  * Facebook-style instant refresh.
  */
@@ -227,8 +275,8 @@ async function handleProfilePhotoUpload(file, user) {
     updateHeaderAvatar(localPreviewUrl, user.displayName || user.email?.split("@")[0]);
     updateCurrentProfilePicUI(localPreviewUrl);
 
-    // 2. Upload to Firebase Storage under profile_pictures/{uid}/
-    const downloadURL = await uploadToFirebaseStorage(file, user.uid);
+    // 2. Upload to Cloudinary
+    const downloadURL = await uploadToCloudinary(file);
 
     // 3. Update Firebase Auth profile
     await updateProfile(user, { photoURL: downloadURL });
@@ -463,7 +511,7 @@ onAuthStateChanged(auth, async (user) => {
       }
       try {
         for (const file of files) {
-          const imageUrl = await uploadToFirebaseStorage(file, user.uid, `user_photos/${user.uid}`);
+          const imageUrl = await uploadToCloudinary(file);
           const snap = await getDoc(doc(db, "users", user.uid));
           const currentProfile = snap.exists() ? snap.data() : {};
           const existing = currentProfile.galleryPhotos || currentProfile.photos || [];
