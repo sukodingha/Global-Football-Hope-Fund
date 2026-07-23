@@ -1,22 +1,22 @@
-# Replace Firebase Storage with Cloudinary Upload — Dashboard
+# Cloudinary Migration + Editable Dashboard Profile — Complete
 
 ## ✅ Completed
 
-### TASK 1: Profile Photo & User Wall
-- [x] `pages/dashboard.html`: Added `#currentProfilePic`, `#uploadSpinner`, `#uploadAvatarBtn`, `#profilePicPlaceholder`
-- [x] `js/dashboard.js`: `handleProfilePhotoUpload()` with Storage → Auth → Firestore pipeline, `guardDb()`, spinner controls, instant UI refresh
-- [x] `css/style.css`: `.spinner` animation, `#currentProfilePic` styles, profile placeholder styles
-
-### TASK 2: Public User Profile View & Wall
-- [x] `pages/profile.html`: Full profile page template with header card, photo gallery, activity feed
-- [x] `js/profile.js`: Reads `?uid=` param, fetches Firestore doc `users/${uid}`, renders profile header, gallery, user posts from `posts` collection
-- [x] `js/community.js`: Post card header avatar + name wrapped in `<a href="profile.html?uid=...">`, comment author names also linked
-
-### TASK 3: Replace Firebase Storage with Cloudinary in dashboard.js ✅
-- [x] Added `handleImageUpload()` Cloudinary function (accepts file input element)
-- [x] Added `uploadToCloudinary()` helper function (accepts File object directly)
-- [x] Replaced `uploadToFirebaseStorage()` with Cloudinary-based upload
-- [x] Updated `handleProfilePhotoUpload()` to use Cloudinary
-- [x] Updated gallery photo upload handler to use Cloudinary
+### TASK 1: Replace Firebase Storage with Cloudinary in dashboard.js
+- [x] Added `handleImageUpload()` Cloudinary function (file-input-based)
+- [x] Added `uploadToCloudinary()` Cloudinary function (file-object-based)
+- [x] Replaced `uploadToFirebaseStorage()` → Cloudinary in `handleProfilePhotoUpload()`
+- [x] Replaced gallery upload handler to use Cloudinary
 - [x] Removed unused Firebase Storage imports (`getStorage`, `ref`, `uploadBytes`, `getDownloadURL`)
+
+### TASK 2: Editable Profile Fields (DisplayName + Bio)
+- [x] Added DOM refs for `#editDisplayName`, `#editBio`, `#saveProfileBtn`
+- [x] Added `loadEditableProfile()` — loads displayName + bio from Firestore into edit fields
+- [x] Added `handleSaveProfile()` — saves displayName/bio to Firestore + updates Auth displayName + refreshes UI
+- [x] Wired `saveProfileBtn` click handler
+- [x] Called `loadEditableProfile(user)` inside `onAuthStateChanged`
+
+### TASK 3: HTML + CSS
+- [x] `pages/dashboard.html`: Added profile edit form section with `#editDisplayName`, `#editBio`, `#saveProfileBtn`
+- [x] `css/style.css`: Added `.profile-edit-form`, `.profile-edit-row` styles
 

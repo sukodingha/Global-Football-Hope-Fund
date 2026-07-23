@@ -31,6 +31,34 @@ const googleSignInBtn = document.getElementById("googleSignInBtn");
 
 let authModalResolve = null;
 
+// ===== Password Visibility Toggle =====
+/**
+ * Set up password toggle for all .pwd-toggle buttons.
+ * Accepts an optional container element to scope the search.
+ */
+export function setupPasswordToggle(container = document) {
+  container.querySelectorAll(".pwd-toggle").forEach((btn) => {
+    // Remove existing listener to avoid duplicates
+    btn.removeEventListener("click", btn._pwdHandler);
+    const handler = () => {
+      const targetId = btn.dataset.target;
+      const input = document.getElementById(targetId);
+      if (!input) return;
+      const isPassword = input.type === "password";
+      input.type = isPassword ? "text" : "password";
+      btn.textContent = isPassword ? "🙈" : "👁️";
+      btn.classList.toggle("visible", isPassword);
+    };
+    btn._pwdHandler = handler;
+    btn.addEventListener("click", handler);
+  });
+}
+
+// Initialize password toggles on page load
+document.addEventListener("DOMContentLoaded", () => {
+  setupPasswordToggle();
+});
+
 // ===== Profile Avatar Helper (canvas-based initials) =====
 export function generateInitialsAvatar(name, size = 40) {
   const initials = (name || "?")

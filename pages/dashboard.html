@@ -78,8 +78,19 @@
                 <p id="userEmail">Please wait.</p>
             </div>
             <div class="form-section">
-                <h3>Your Profile</h3>
-                <div id="profileSummary"></div>
+                <h3>Your Profile <span style="font-size:13px;font-weight:400;color:#64748b;">(edit your details below)</span></h3>
+                <div id="profileSummary" style="margin-bottom:14px;"></div>
+                <div class="profile-edit-form">
+                    <div class="profile-edit-row">
+                        <label for="editDisplayName">Display Name</label>
+                        <input type="text" id="editDisplayName" placeholder="Enter your display name">
+                    </div>
+                    <div class="profile-edit-row">
+                        <label for="editBio">Bio</label>
+                        <textarea id="editBio" placeholder="Tell us about yourself, your football passion..."></textarea>
+                    </div>
+                    <button type="button" id="saveProfileBtn" class="btn" style="margin:4px 0 0;padding:12px 20px;font-size:14px;">💾 Save Changes</button>
+                </div>
             </div>
             <div class="form-section" id="uniqueIdSection">
                 <!-- Injected by dashboard.js -->

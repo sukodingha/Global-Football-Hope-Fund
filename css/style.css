@@ -3947,3 +3947,83 @@ footer {
   background: linear-gradient(90deg, #94a3b8 0%, #64748b 100%);
   box-shadow: none;
 }
+
+/* ===== PASSWORD VISIBILITY TOGGLE ===== */
+.pwd-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.pwd-wrapper input {
+  padding-right: 48px !important;
+}
+
+.pwd-toggle {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 8px;
+  line-height: 1;
+  transition: background 0.2s ease;
+  z-index: 2;
+}
+
+.pwd-toggle:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.pwd-toggle:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(11, 45, 77, 0.12);
+}
+
+.pwd-toggle.visible {
+  opacity: 0.7;
+}
+
+/* ===== EDITABLE DASHBOARD PROFILE ===== */
+.profile-edit-form {
+  display: grid;
+  gap: 14px;
+}
+
+.profile-edit-row label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 600;
+  color: #0b2d4d;
+  font-size: 13px;
+}
+
+.profile-edit-row input,
+.profile-edit-row textarea {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid #d6d9de;
+  border-radius: 12px;
+  font-size: 15px;
+  background: #fafafa;
+  color: #111;
+  box-sizing: border-box;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  font-family: inherit;
+}
+
+.profile-edit-row input:focus,
+.profile-edit-row textarea:focus {
+  outline: none;
+  border-color: #0b2d4d;
+  box-shadow: 0 0 0 4px rgba(11, 45, 77, 0.08);
+}
+
+.profile-edit-row textarea {
+  resize: vertical;
+  min-height: 80px;
+}

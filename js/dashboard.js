@@ -29,6 +29,11 @@ const wallPostText = document.getElementById("wallPostText");
 const wallMessage = document.getElementById("wallMessage");
 const wallFeed = document.getElementById("wallFeed");
 
+// Editable profile elements
+const editDisplayName = document.getElementById("editDisplayName");
+const editBio = document.getElementById("editBio");
+const saveProfileBtn = document.getElementById("saveProfileBtn");
+
 const WALL_POSTS_KEY = "gfhf_wall_posts";
 
 function showMessage(text, type = "success") {
@@ -422,6 +427,66 @@ async function renderPhotoGallery(userId) {
   });
 }
 
+// ===== Editable Profile =====
+/**
+ * Load the user's displayName and bio from Firestore into the edit fields.
+ */
+async function loadEditableProfile(user) {
+  if (!editDisplayName || !editBio) return;
+  const profileRef = doc(db, "users", user.uid);
+  const snap = await getDoc(profileRef);
+  if (snap.exists()) {
+    const data = snap.data();
+    editDisplayName.value = data.displayName || "";
+    editBio.value = data.bio || "";
+  }
+}
+
+/**
+ * Save displayName and bio to Firestore + update Firebase Auth displayName.
+ */
+async function handleSaveProfile(user) {
+  if (!user || !guardDb()) {
+    showMessage("Unable to save. Try again later.", "error");
+    return;
+  }
+  const newDisplayName = editDisplayName?.value?.trim() || "";
+  const newBio = editBio?.value?.trim() || "";
+
+  try {
+    // Update Firestore
+    const userRef = doc(db, "users", user.uid);
+    await setDoc(userRef, {
+      displayName: newDisplayName,
+      bio: newBio
+    }, { merge: true });
+
+    // Update Firebase Auth displayName
+    if (newDisplayName) {
+      await updateProfile(user, { displayName: newDisplayName });
+    }
+
+    // Refresh the welcome text and header avatar
+    if (welcomeText) {
+      welcomeText.textContent = `Welcome, ${newDisplayName || "friend"}!`;
+    }
+    const photoURL = user.photoURL || "";
+    updateHeaderAvatar(photoURL, newDisplayName || user.email?.split("@")[0]);
+
+    showMessage("Profile saved successfully!", "success");
+  } catch (err) {
+    console.error("Save profile error:", err);
+    showMessage("Failed to save profile.", "error");
+  }
+}
+
+// Wire up the Save Profile button
+if (saveProfileBtn) {
+  saveProfileBtn.addEventListener("click", () => {
+    handleSaveProfile(auth.currentUser);
+  });
+}
+
 onAuthStateChanged(auth, async (user) => {
   if (!user) {
     showMessage("Please sign in to access your dashboard.", "error");
@@ -472,6 +537,9 @@ onAuthStateChanged(auth, async (user) => {
   if (existingPhotoURL) {
     updateCurrentProfilePicUI(existingPhotoURL);
   }
+
+  // ===== Load editable profile fields =====
+  loadEditableProfile(user);
 
   // Render photo gallery
   renderPhotoGallery(user.uid);
