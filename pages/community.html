@@ -142,24 +142,22 @@
     ☰ Sidebar
   </button>
 
-  <!-- ===== RIGHT SIDEBAR (desktop) ===== -->
-  <aside class="fb-sidebar" id="fbSidebar">
+  <!-- ===== FLOATING CHAT SIDEBAR (fixed on right edge) ===== -->
+  <div id="floating-chat-sidebar">
     <!-- TOP BOX: Community Chat -->
-    <div class="fb-sidebar-card fb-sidebar-chat-card">
+    <div id="community-chat-box">
       <h4>💬 Community Chat</h4>
-      <div id="communityChatSection" class="chat-section">
-        <div id="communityChatList" class="chat-list"></div>
-        <form id="communityChatForm" class="comment-form sidebar-chat-form">
-          <input id="chatMessage" name="chatMessage" type="text" placeholder="Write a message..." required>
-          <button class="btn sidebar-chat-send-btn" type="submit">Send</button>
-        </form>
-      </div>
+      <div class="chat-messages-container" id="communityChatList"></div>
+      <form id="communityChatForm" class="comment-form">
+        <input id="chatMessage" name="chatMessage" type="text" placeholder="Write a message..." required>
+        <button class="btn" type="submit">Send</button>
+      </form>
     </div>
 
     <!-- BOTTOM BOX: My Teammates and Chat Box -->
-    <div class="fb-sidebar-card fb-sidebar-teammates-card">
+    <div id="teammate-chat-box">
       <h4>👥 My Teammates and Chat Box</h4>
-      <div id="teammatesList" class="teammates-list">
+      <div class="teammates-list-container" id="teammatesList">
         <p class="helper-text" style="font-size:13px;">Loading teammates...</p>
       </div>
       <div id="dmChatPanel" class="dm-chat-inner-panel" hidden>
@@ -172,7 +170,7 @@
         </form>
       </div>
     </div>
-  </aside>
+  </div>
 
   <!-- ===== FLOATING CHAT POPUP (Facebook-style, bottom-right) ===== -->
   <div id="floatingChatPopup" class="floating-chat-popup" style="display:none;">

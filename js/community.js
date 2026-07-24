@@ -1176,17 +1176,17 @@ window.addEventListener("load", hideAppSplash);
 
 // ===== MOBILE SIDEBAR TOGGLE =====
 const sidebarToggleBtn = document.getElementById("sidebarToggleBtn");
-const fbSidebar = document.getElementById("fbSidebar");
+const floatingChatSidebar = document.getElementById("floating-chat-sidebar");
 
-if (sidebarToggleBtn && fbSidebar) {
+if (sidebarToggleBtn && floatingChatSidebar) {
   sidebarToggleBtn.addEventListener("click", () => {
-    const isHidden = fbSidebar.hasAttribute("hidden");
+    const isHidden = floatingChatSidebar.hasAttribute("hidden");
     if (isHidden) {
-      fbSidebar.removeAttribute("hidden");
+      floatingChatSidebar.removeAttribute("hidden");
       sidebarToggleBtn.classList.add("active");
       sidebarToggleBtn.textContent = "✕ Close Sidebar";
     } else {
-      fbSidebar.setAttribute("hidden", "");
+      floatingChatSidebar.setAttribute("hidden", "");
       sidebarToggleBtn.classList.remove("active");
       sidebarToggleBtn.textContent = "☰ Sidebar";
     }
@@ -1195,7 +1195,7 @@ if (sidebarToggleBtn && fbSidebar) {
   // On window resize >= 768px, ensure sidebar is visible and button hidden
   window.addEventListener("resize", () => {
     if (window.innerWidth > 768) {
-      fbSidebar.removeAttribute("hidden");
+      floatingChatSidebar.removeAttribute("hidden");
       sidebarToggleBtn.classList.remove("active");
       sidebarToggleBtn.textContent = "☰ Sidebar";
     }

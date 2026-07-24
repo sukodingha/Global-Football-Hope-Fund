@@ -3723,15 +3723,12 @@ footer {
     box-shadow: 0 0 0 3px rgba(11,45,77,0.08);
 }
 
-/* ===== MAIN FEED (left column) and SIDEBAR (right column) ===== */
+/* ===== MAIN FEED (left column) with fixed right sidebar ===== */
 .fb-page {
     max-width: 1200px;
     margin: 0 auto;
     padding: 20px 16px 80px;
-    display: grid;
-    grid-template-columns: 1fr 340px;
-    gap: 20px;
-    align-items: start;
+    margin-right: 400px; /* so posts never overlap with the fixed right sidebar */
 }
 
 .fb-badge {
@@ -3750,38 +3747,30 @@ footer {
     display: none;
 }
 
-/* ===== FB SIDEBAR (right column) ===== */
-.fb-sidebar {
+/* ===== FLOATING CHAT SIDEBAR (fixed on right edge) ===== */
+#floating-chat-sidebar {
+    position: fixed !important;
+    top: 80px;
+    right: 20px;
+    width: 370px;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
+    z-index: 1000;
 }
 
-.fb-sidebar-card {
-    background: white;
-    border-radius: 16px;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
-    border: 1px solid #e2e8f0;
-    padding: 16px 18px;
+#community-chat-box {
+    height: 280px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    max-height: 380px;
-    overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: #cbd5e1 transparent;
+    background: #ffffff;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    padding: 14px 16px;
+    gap: 8px;
 }
 
-.fb-sidebar-card::-webkit-scrollbar {
-    width: 4px;
-}
-
-.fb-sidebar-card::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 8px;
-}
-
-.fb-sidebar-card h4 {
+#community-chat-box h4 {
     margin: 0;
     font-size: 15px;
     font-weight: 700;
@@ -3791,38 +3780,7 @@ footer {
     flex-shrink: 0;
 }
 
-.fb-sidebar-chat-card {
-    max-height: 400px;
-}
-
-.fb-sidebar-teammates-card {
-    max-height: 400px;
-}
-
-.fb-sidebar-chat-card .chat-section {
-    overflow-y: auto;
-    flex: 1;
-}
-
-.fb-sidebar-chat-card #communityChatList {
-    max-height: 220px;
-    overflow-y: auto;
-    display: grid;
-    gap: 6px;
-    padding: 4px 0;
-}
-
-.fb-sidebar-teammates-card #teammatesList {
-    max-height: 180px;
-    overflow-y: auto;
-}
-
-.fb-sidebar-teammates-card #dmChatMessages {
-    max-height: 160px;
-    overflow-y: auto;
-}
-
-.sidebar-chat-form {
+#community-chat-box .comment-form {
     display: flex;
     gap: 8px;
     align-items: center;
@@ -3831,7 +3789,7 @@ footer {
     flex-shrink: 0;
 }
 
-.sidebar-chat-form input {
+#community-chat-box .comment-form input {
     flex: 1;
     padding: 10px 14px;
     border: 1px solid #e2e8f0;
@@ -3841,17 +3799,52 @@ footer {
     box-sizing: border-box;
 }
 
-.sidebar-chat-form input:focus {
+#community-chat-box .comment-form input:focus {
     outline: none;
     border-color: #0b2d4d;
     box-shadow: 0 0 0 3px rgba(11,45,77,0.08);
 }
 
-.sidebar-chat-send-btn {
+#community-chat-box .comment-form .btn {
     padding: 8px 14px !important;
     font-size: 13px !important;
     margin-top: 0 !important;
     white-space: nowrap;
+}
+
+#teammate-chat-box {
+    height: 280px;
+    display: flex;
+    flex-direction: column;
+    background: #ffffff;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    padding: 14px 16px;
+    gap: 8px;
+}
+
+#teammate-chat-box h4 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    color: #0b2d4d;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #eef2f6;
+    flex-shrink: 0;
+}
+
+/* Internal scrolling for messages and teammates list */
+.chat-messages-container {
+    flex: 1;
+    overflow-y: auto;
+    display: grid;
+    gap: 6px;
+    padding: 4px 0;
+}
+
+.teammates-list-container {
+    flex: 1;
+    overflow-y: auto;
 }
 
 .dm-chat-header {
@@ -3874,18 +3867,27 @@ footer {
     margin: 6px 0;
 }
 
-/* ===== RESPONSIVE: ≤ 768px → single column ===== */
+/* ===== RESPONSIVE: ≤ 768px → fixed sidebar collapses to static ===== */
 @media (max-width: 768px) {
     .fb-page {
-        grid-template-columns: 1fr;
-        gap: 16px;
+        margin-right: 0;
     }
 
-    .fb-sidebar {
-        grid-column: 1;
-        position: static;
-        max-height: none;
-        overflow-y: visible;
+    #floating-chat-sidebar {
+        position: static !important;
+        width: 100%;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 0 16px 16px;
+        top: auto;
+        right: auto;
+        box-sizing: border-box;
+    }
+
+    #community-chat-box,
+    #teammate-chat-box {
+        height: auto;
+        min-height: 200px;
     }
 
     .sidebar-toggle-btn {
@@ -3903,6 +3905,7 @@ footer {
         cursor: pointer;
         text-align: center;
         transition: background 0.2s ease;
+        box-sizing: border-box;
     }
 
     .sidebar-toggle-btn:hover {
@@ -3913,26 +3916,8 @@ footer {
         background: #00c853;
     }
 
-    .fb-sidebar[hidden] {
+    #floating-chat-sidebar[hidden] {
         display: none;
-    }
-
-    /* Reset max-heights on mobile so content fully shows */
-    .fb-sidebar-chat-card,
-    .fb-sidebar-teammates-card {
-        max-height: none;
-    }
-
-    .fb-sidebar-chat-card #communityChatList {
-        max-height: 180px;
-    }
-
-    .fb-sidebar-teammates-card #teammatesList {
-        max-height: 150px;
-    }
-
-    .dm-chat-inner-panel #dmChatMessages {
-        max-height: 140px;
     }
 }
 
