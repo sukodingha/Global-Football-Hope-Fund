@@ -499,7 +499,7 @@ function renderPostCard(post) {
           authorName: currentUserName,
           authorAvatar: currentUserAvatar,
           text,
-          createdAt: serverTimestamp()
+          createdAt: new Date().toISOString()
         })
       });
       input.value = "";
