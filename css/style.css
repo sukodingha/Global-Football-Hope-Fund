@@ -3588,9 +3588,12 @@ footer {
 }
 .fb-post-image-single img {
     width: 100%;
-    max-height: 400px;
-    object-fit: cover;
+    max-height: 480px;
+    object-fit: contain;
+    background-color: #f8f9fa;
+    border-radius: 8px;
     display: block;
+    margin: 10px 0;
 }
 
 /* Stats Bar */
@@ -3730,7 +3733,7 @@ footer {
     gap: 20px;
     align-items: start;
     /* Prevent posts from going under fixed chat sidebar */
-    margin-right: 350px;
+    margin-right: 400px;
 }
 
 .fb-badge {
@@ -3754,7 +3757,7 @@ footer {
     position: fixed;
     top: 80px;
     right: 20px;
-    width: 320px;
+    width: 380px;
     display: flex;
     flex-direction: column;
     gap: 12px;
