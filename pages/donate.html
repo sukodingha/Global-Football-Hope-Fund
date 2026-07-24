@@ -133,13 +133,16 @@
             </div>
         </div>
 
-        <!-- Payment Method Tabs -->
+<!-- Payment Method Tabs -->
         <div class="payment-tabs">
             <button type="button" class="payment-tab active" data-method="paystack" data-i18n="cardBankUSSD">
                 💳 Card / Bank / USSD
             </button>
             <button type="button" class="payment-tab" data-method="paypal">
                 <span class="paypal-icon">P</span> PayPal
+            </button>
+            <button type="button" class="payment-tab" data-method="wallet">
+                💰 Wallet
             </button>
         </div>
 
@@ -150,6 +153,13 @@
 
         <!-- PayPal Button Container -->
         <div id="paypal-button-container" style="display:none;margin-top:8px;"></div>
+
+        <!-- Wallet Pay Section -->
+        <div id="walletPaySection" style="display:none;margin-top:8px;">
+            <div style="text-align:center;padding:16px;color:#64748b;">
+                <p>Loading wallet info...</p>
+            </div>
+        </div>
 
         <!-- Status Message -->
         <div id="donationMessage" class="message"></div>

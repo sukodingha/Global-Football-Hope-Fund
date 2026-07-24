@@ -1,14 +1,20 @@
 /**
  * GFHF Donation Module
- * Handles Paystack and PayPal payment processing with Firestore logging.
+ * Handles Paystack, PayPal, and Wallet payment processing with Firestore logging.
  */
 
-import { db } from "./firebase-config.js";
+import { auth, db } from "./firebase-config.js";
 import {
   collection,
   addDoc,
-  serverTimestamp
+  serverTimestamp,
+  doc, getDoc, setDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+// Import shared wallet module
+import {
+  loadWalletBalance, deductFromWallet, formatCurrency, getFundWalletModalHTML, initFundWalletModal
+} from "./wallet.js";
 
 // ===== DOM Refs =====
 const presetBtns = document.querySelectorAll(".donation-preset-btn");
@@ -19,11 +25,13 @@ const donorMessage = document.getElementById("donorMessage");
 const paymentTabs = document.querySelectorAll(".payment-tab");
 const paystackBtn = document.getElementById("paystackBtn");
 const paypalContainer = document.getElementById("paypal-button-container");
+const walletPayBtn = document.getElementById("walletPayBtn");
+const walletPaySection = document.getElementById("walletPaySection");
 const donationMessage = document.getElementById("donationMessage");
 
 // ===== State =====
 let selectedAmount = 10;
-let currentMethod = "paystack"; // "paystack" or "paypal"
+let currentMethod = "paystack"; // "paystack", "paypal", or "wallet"
 let paypalInitialized = false;
 
 // ===== Helpers =====
@@ -112,12 +120,21 @@ paymentTabs.forEach((tab) => {
     if (currentMethod === "paystack") {
       paystackBtn.style.display = "block";
       paypalContainer.style.display = "none";
-    } else {
+      if (walletPaySection) walletPaySection.style.display = "none";
+    } else if (currentMethod === "paypal") {
       paystackBtn.style.display = "none";
       paypalContainer.style.display = "block";
+      if (walletPaySection) walletPaySection.style.display = "none";
       if (!paypalInitialized) {
         initPayPalButton();
         paypalInitialized = true;
+      }
+    } else if (currentMethod === "wallet") {
+      paystackBtn.style.display = "none";
+      paypalContainer.style.display = "none";
+      if (walletPaySection) {
+        walletPaySection.style.display = "block";
+        updateWalletPayUI();
       }
     }
   });
@@ -271,5 +288,127 @@ document.addEventListener("DOMContentLoaded", () => {
     initPayPalButton();
     paypalInitialized = true;
   }
+});
+
+// ===== WALLET PAYMENT =====
+
+/**
+ * Update the wallet payment section UI with current balance
+ */
+async function updateWalletPayUI() {
+  if (!walletPaySection) return;
+  const user = auth.currentUser;
+  if (!user) {
+    walletPaySection.innerHTML = `
+      <div style="text-align:center;padding:16px;color:#64748b;">
+        <p>Please sign in to use your wallet.</p>
+      </div>`;
+    return;
+  }
+
+  const balance = await loadWalletBalance(user.uid);
+  walletPaySection.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:linear-gradient(135deg,#0b2d4d,#123f63);color:white;border-radius:14px;">
+        <span style="font-weight:600;">💰 Wallet Balance</span>
+        <span style="font-size:22px;font-weight:900;">${formatCurrency(balance)}</span>
+      </div>
+      <p style="font-size:14px;color:#475569;margin:0;">Pay with your GFHF wallet balance. Your donation will be deducted immediately.</p>
+      <button type="button" id="walletPayBtn" class="btn" style="width:100%;margin:0;">
+        💰 Pay with Wallet
+      </button>
+      <button type="button" class="fund-wallet-trigger-btn btn btn-secondary" style="width:100%;margin:0;padding:12px 20px;font-size:14px;background:linear-gradient(90deg, #00c853 0%, #00b34a 100%);">
+        💳 Fund Wallet via Paystack
+      </button>
+    </div>
+  `;
+
+  // Wire up the wallet pay button
+  const walletPayBtn = document.getElementById("walletPayBtn");
+  if (walletPayBtn) {
+    walletPayBtn.addEventListener("click", processWalletPayment);
+  }
+}
+
+/**
+ * Process a donation using wallet balance
+ */
+async function processWalletPayment() {
+  const user = auth.currentUser;
+  if (!user) {
+    showDonationMessage("Please sign in to pay with your wallet.", "error");
+    return;
+  }
+
+  const data = getFormData();
+  if (!data.amount || data.amount < 1) {
+    showDonationMessage("Please select or enter a donation amount of at least $1.", "error");
+    return;
+  }
+
+  showDonationMessage("Processing wallet payment...", "success");
+
+  const result = await deductFromWallet(user.uid, data.amount, {
+    description: "Donation to GFHF",
+    reference: "GFHF-DON-" + Math.floor(Math.random() * 1000000000) + "-" + Date.now()
+  });
+
+  if (result.success) {
+    showDonationMessage(
+      `✅ Thank you, ${data.name || "Anonymous"}! Your donation of ${formatCurrency(data.amount)} was successful via wallet.`,
+      "success"
+    );
+
+    // Save donation record
+    saveDonationRecord({
+      name: data.name,
+      email: data.email,
+      message: data.message,
+      amount: data.amount,
+      paymentRef: result.reference || "wallet-donation",
+      method: "wallet"
+    });
+
+    // Reset form
+    donorName.value = "";
+    donorEmail.value = "";
+    donorMessage.value = "";
+    customAmount.value = "";
+    presetBtns.forEach((b) => b.classList.remove("active"));
+    if (presetBtns[0]) presetBtns[0].classList.add("active");
+    selectedAmount = 10;
+
+    // Update wallet UI
+    setTimeout(updateWalletPayUI, 500);
+  } else {
+    // Insufficient funds
+    showDonationMessage(
+      `❌ ${result.error || "Payment failed."} <button class="fund-wallet-trigger-btn btn" style="margin-top:8px;padding:8px 16px;font-size:13px;">💰 Top Up Wallet</button>`,
+      "error"
+    );
+  }
+}
+
+// Update the payment tab switching to include wallet
+document.addEventListener('DOMContentLoaded', () => {
+  // Ensure walletPaySection exists and update wallet tab switching logic
+  const walletTab = document.querySelector('.payment-tab[data-method="wallet"]');
+  if (walletTab && walletPaySection) {
+    walletTab.addEventListener('click', async () => {
+      await updateWalletPayUI();
+    });
+  }
+
+  // Inject Fund Wallet modal if not present
+  if (!document.getElementById('fundWalletModal')) {
+    const modalHTML = getFundWalletModalHTML();
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+  }
+  initFundWalletModal(() => {
+    // Refresh wallet pay UI after successful funding
+    if (currentMethod === 'wallet') {
+      updateWalletPayUI();
+    }
+  });
 });
 

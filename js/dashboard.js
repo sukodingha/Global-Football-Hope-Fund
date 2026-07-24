@@ -8,6 +8,14 @@ import { onAuthStateChanged, signOut, updateProfile } from "https://www.gstatic.
 import { doc, getDoc, setDoc, addDoc, collection, query, where, orderBy, onSnapshot, getDocs, increment, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { updateHeaderAvatar } from "./auth.js";
 
+// Import shared wallet module
+import {
+  loadWalletBalance, formatCurrency, getBalanceVisible, setBalanceVisible,
+  guardDb, listenToTransactions, renderTransactionHistoryTable,
+  getFundWalletModalHTML, initFundWalletModal,
+  creditWallet, deductFromWallet
+} from "./wallet.js";
+
 // ===== DOM refs =====
 const welcomeText = document.getElementById("welcomeText");
 const userEmail = document.getElementById("userEmail");
@@ -952,6 +960,229 @@ function listenToTransactions(userId) {
     } catch (err2) {
       console.error('Fallback transaction query also failed:', err2);
     }
+  }
+}
+
+// ===== FUND WALLET MODAL (Paystack) =====
+let fundSelectedAmount = 10; // in NGN (kobo = amount * 100)
+
+const fundWalletModal = document.getElementById("fundWalletModal");
+const fundWalletModalOverlay = document.getElementById("fundWalletModalOverlay");
+const fundWalletModalClose = document.getElementById("fundWalletModalClose");
+const fundWalletBtn = document.getElementById("fundWalletBtn");
+const fundCustomAmount = document.getElementById("fundCustomAmount");
+const fundPresetBtns = document.querySelectorAll(".fund-preset");
+const fundWalletPayBtn = document.getElementById("fundWalletPayBtn");
+const fundWalletStatus = document.getElementById("fundWalletStatus");
+
+function showFundWalletStatus(msg, type) {
+  if (!fundWalletStatus) return;
+  fundWalletStatus.textContent = msg;
+  fundWalletStatus.className = `message ${type}`;
+}
+
+function openFundWalletModal() {
+  if (!fundWalletModal) return;
+  fundSelectedAmount = 10;
+  fundWalletModal.hidden = false;
+  if (fundCustomAmount) fundCustomAmount.value = "";
+  fundPresetBtns.forEach((b) => b.classList.remove("active"));
+  if (fundPresetBtns[0]) fundPresetBtns[0].classList.add("active");
+  showFundWalletStatus("", "success");
+}
+
+function closeFundWalletModal() {
+  if (fundWalletModal) fundWalletModal.hidden = true;
+}
+
+if (fundWalletBtn) fundWalletBtn.addEventListener("click", openFundWalletModal);
+if (fundWalletModalOverlay) fundWalletModalOverlay.addEventListener("click", closeFundWalletModal);
+if (fundWalletModalClose) fundWalletModalClose.addEventListener("click", closeFundWalletModal);
+
+// Fund preset buttons
+fundPresetBtns.forEach((btn) => {
+  btn.addEventListener("click", () => {
+    fundPresetBtns.forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    fundSelectedAmount = parseFloat(btn.dataset.amount);
+    if (fundCustomAmount) fundCustomAmount.value = "";
+  });
+});
+
+if (fundCustomAmount) {
+  fundCustomAmount.addEventListener("input", () => {
+    fundPresetBtns.forEach((b) => b.classList.remove("active"));
+  });
+}
+
+function getFundAmount() {
+  const customVal = fundCustomAmount ? parseFloat(fundCustomAmount.value) : NaN;
+  if (customVal && customVal > 0) return customVal;
+  return fundSelectedAmount;
+}
+
+/**
+ * Process a wallet funding via Paystack
+ */
+function processFundWallet() {
+  const user = auth.currentUser;
+  if (!user) {
+    showFundWalletStatus("Please sign in first.", "error");
+    return;
+  }
+
+  const amount = getFundAmount();
+  if (amount < 1) {
+    showFundWalletStatus("Amount must be at least ₦100.", "error");
+    return;
+  }
+
+  if (typeof PaystackPop === "undefined") {
+    showFundWalletStatus("Paystack is not loaded. Please refresh.", "error");
+    return;
+  }
+
+  const email = user.email || "user@gfhf.com";
+  const amountInKobo = Math.round(amount * 100);
+
+  const handler = PaystackPop.setup({
+    key: "YOUR_PAYSTACK_PUBLIC_KEY",
+    email: email,
+    amount: amountInKobo,
+    currency: "NGN",
+    ref: "GFHF-FUND-" + Math.floor(Math.random() * 1000000000) + "-" + Date.now(),
+    metadata: {
+      custom_fields: [
+        {
+          display_name: "User ID",
+          variable_name: "user_id",
+          value: user.uid
+        }
+      ]
+    },
+    callback: async function (response) {
+      // Payment successful — credit the wallet
+      if (!guardDb()) {
+        showFundWalletStatus("Database unavailable. Please contact support.", "error");
+        return;
+      }
+      try {
+        const userRef = doc(db, "users", user.uid);
+        const snap = await getDoc(userRef);
+        const currentBalance = snap.exists() ? (snap.data().walletBalance || 0) : 0;
+        const newBalance = currentBalance + amount;
+
+        await setDoc(userRef, { walletBalance: newBalance }, { merge: true });
+
+        // Log the credit transaction
+        try {
+          await addDoc(collection(db, "wallet_transactions"), {
+            userId: user.uid,
+            type: "credit",
+            amount: amount,
+            description: "Wallet funding via Paystack",
+            reference: response.reference,
+            status: "Successful",
+            createdAt: serverTimestamp()
+          });
+        } catch (txErr) {
+          console.warn("Could not log transaction:", txErr);
+        }
+
+        showFundWalletStatus(
+          `✅ Wallet funded successfully! ₦${amount.toLocaleString()} added. Reference: ${response.reference}`,
+          "success"
+        );
+
+        // Refresh balance display
+        renderWalletBalance();
+
+        // Close modal after 2 seconds
+        setTimeout(closeFundWalletModal, 2000);
+      } catch (err) {
+        console.error("Fund wallet credit error:", err);
+        showFundWalletStatus("Payment succeeded but wallet credit failed. Contact support.", "error");
+      }
+    },
+    onClose: function () {
+      showFundWalletStatus("Payment window was closed.", "error");
+    }
+  });
+
+  handler.openIframe();
+}
+
+if (fundWalletPayBtn) {
+  fundWalletPayBtn.addEventListener("click", processFundWallet);
+}
+
+// ===== WALLET DEBIT: Deduct from wallet balance (atomic via Firestore) =====
+/**
+ * Deduct an amount from the user's wallet balance.
+ * Returns { success: boolean, newBalance: number, error?: string }
+ * @param {string} userId - The Firestore user ID
+ * @param {number} amount - Amount to deduct (in NGN decimal)
+ * @param {object} options - { description, reference, redirectUrl }
+ */
+async function deductFromWallet(userId, amount, options = {}) {
+  if (!userId || !amount || amount <= 0) {
+    return { success: false, newBalance: 0, error: "Invalid userId or amount." };
+  }
+  if (!guardDb()) {
+    return { success: false, newBalance: 0, error: "Database unavailable." };
+  }
+
+  try {
+    const userRef = doc(db, "users", userId);
+    const snap = await getDoc(userRef);
+    if (!snap.exists()) {
+      return { success: false, newBalance: 0, error: "User profile not found." };
+    }
+
+    const currentBalance = snap.data().walletBalance || 0;
+
+    if (currentBalance < amount) {
+      return {
+        success: false,
+        newBalance: currentBalance,
+        error: `Insufficient balance. You have ₦${currentBalance.toLocaleString()} but need ₦${amount.toLocaleString()}.`
+      };
+    }
+
+    const newBalance = currentBalance - amount;
+
+    // Atomic update: set the new balance
+    await setDoc(userRef, { walletBalance: newBalance }, { merge: true });
+
+    // Log the debit transaction
+    try {
+      await addDoc(collection(db, "wallet_transactions"), {
+        userId: userId,
+        type: "debit",
+        amount: amount,
+        description: options.description || "Wallet debit",
+        reference: options.reference || "WALLET-DEBIT-" + Date.now(),
+        status: "Successful",
+        createdAt: serverTimestamp()
+      });
+    } catch (txErr) {
+      console.warn("Could not log debit transaction:", txErr);
+    }
+
+    // Refresh balance display on dashboard
+    renderWalletBalance();
+
+    // If a redirect URL is provided, navigate after short delay
+    if (options.redirectUrl) {
+      setTimeout(() => {
+        window.location.href = options.redirectUrl;
+      }, 1500);
+    }
+
+    return { success: true, newBalance };
+  } catch (err) {
+    console.error("deductFromWallet error:", err);
+    return { success: false, newBalance: 0, error: err.message || "Unknown error." };
   }
 }
 

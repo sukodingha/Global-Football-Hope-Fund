@@ -12,6 +12,11 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { createNotification } from "./notifications.js";
 
+// Import shared wallet module
+import {
+  loadWalletBalance, formatCurrency, getFundWalletModalHTML, initFundWalletModal
+} from "./wallet.js";
+
 // ===== CONFIG =====
 const CLOUDINARY_CLOUD_NAME = "d8obkydb";
 const CLOUDINARY_UPLOAD_PRESET = "football_preset";
@@ -1202,6 +1207,61 @@ if (sidebarToggleBtn && floatingSidebar) {
   });
 }
 
+// ===== WALLET: ADD FUND WALLET BUTTON TO SIDEBAR =====
+(function initCommunityWallet() {
+  // Inject "Fund Wallet" button into the teammate-chat-box header area
+  const teammateChatBox = document.getElementById("teammate-chat-box");
+  if (teammateChatBox) {
+    const header = teammateChatBox.querySelector("h4");
+    if (header) {
+      // Add Fund Wallet button next to the header
+      const walletBtn = document.createElement("button");
+      walletBtn.className = "mini-btn fund-wallet-trigger-btn";
+      walletBtn.type = "button";
+      walletBtn.textContent = "💰 Fund Wallet";
+      walletBtn.style.cssText = "margin-left:8px;padding:4px 12px;font-size:11px;background:#00c853;color:white;border:none;border-radius:999px;font-weight:700;cursor:pointer;";
+      header.appendChild(walletBtn);
+    }
+  }
+
+  // Show wallet balance in the sidebar when user is logged in
+  async function renderSidebarWalletBalance() {
+    if (!currentUser) return;
+    // Add wallet balance display below teammates list if not exists
+    const teammatesContainer = document.getElementById("teammatesList");
+    if (!teammatesContainer) return;
+
+    // Check if wallet balance element already exists
+    let balanceEl = document.getElementById("communityWalletBalance");
+    if (!balanceEl) {
+      balanceEl = document.createElement("div");
+      balanceEl.id = "communityWalletBalance";
+      balanceEl.style.cssText = "padding:8px 12px;margin:6px 0;background:linear-gradient(135deg,#0b2d4d,#123f63);color:white;border-radius:12px;display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;";
+      teammatesContainer.parentNode.insertBefore(balanceEl, teammatesContainer);
+    }
+
+    const balance = await loadWalletBalance(currentUser.uid);
+    balanceEl.innerHTML = `
+      <span>💰 Wallet: <strong>${formatCurrency(balance)}</strong></span>
+      <button class="fund-wallet-trigger-btn" type="button" style="padding:4px 10px;background:#00c853;color:white;border:none;border-radius:999px;font-size:11px;font-weight:700;cursor:pointer;">➕ Top Up</button>
+    `;
+  }
+
+  // Listen to auth changes for wallet balance display
+  const origAuthHandler = window._communityAuthPatched;
+  if (!origAuthHandler) {
+    window._communityAuthPatched = true;
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        renderSidebarWalletBalance();
+      } else {
+        const balanceEl = document.getElementById("communityWalletBalance");
+        if (balanceEl) balanceEl.remove();
+      }
+    });
+  }
+})();
+
 // ===== INIT =====
 renderStories();
 loadFeed();
@@ -1209,4 +1269,14 @@ listenToChat();
 renderMembers();
 renderFriendRequests();
 loadUserDirectory(); // Load @mention directory
+
+// Initialize the Fund Wallet modal (must be called after modal HTML is in DOM)
+document.addEventListener('DOMContentLoaded', () => {
+  // The modal HTML is already in community.html from dashboard, but if not, inject it
+  if (!document.getElementById('fundWalletModal')) {
+    const modalHTML = getFundWalletModalHTML();
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+  }
+  initFundWalletModal();
+});
 
