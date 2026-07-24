@@ -1,25 +1,23 @@
-# Community Page Layout Update - COMPLETED ✅
+# Community Page 3-Feature Implementation
 
-## ✅ Step 1: Edit community.html
-- [x] Removed old Members card, reordered sidebar to: Community Chat (top) → My Teammates & Chat (bottom)
-- [x] Added `sidebar-toggle-btn` for mobile responsiveness
-- [x] Restructured to Facebook-style layout (stories bar, create post card, feed filter bar)
+## Feature 1: Nested Comment Replies & Emoji Reactions ✅
+- [x] **js/community.js**: Add UUID generation for comments (`generateCommentId()`), structured comment objects with `id`, `reactions`, `replies` fields
+- [x] **js/community.js**: Rewrite comment section to support reply threading (Reply button → inline reply form with `cmt-reply-toggle-btn`)
+- [x] **js/community.js**: Add emoji reaction picker (❤️👍😂😮🔥) on comments with `cmt-emoji-picker`, toggle on/off via `cmt-emoji-toggle-btn`
+- [x] **js/community.js**: Update comment submit & reply submit to handle nested replies via `replies` array in Firestore
+- [x] **js/community.js**: Add event delegation for reply toggle, emoji picker toggle, emoji reactions, existing reaction buttons, and reply form submit with Enter key support
+- [x] **css/style.css**: Add `.cmt-actions-bar`, `.cmt-action-btn`, `.cmt-reactions-bar`, `.cmt-reaction-btn`, `.cmt-emoji-picker`, `.cmt-emoji-btn`, `.cmt-reply-form`, `.cmt-replies`, `.cmt-reply-item` styles
 
-## ✅ Step 2: Edit css/style.css
-- [x] Switched to single-column layout with fixed chat sidebar (320px wide, right side)
-- [x] Added `margin-right: 350px` on `.fb-page` to prevent content overlap
-- [x] Mobile responsive: sidebar hidden by default, toggle button appears at ≤ 768px
-- [x] All Facebook-style UI styles (stories, posts, comments, modals)
-- [x] Removed duplicate/conflicting `.fb-page` grid rules
+## Feature 2: Block/Mute/Favorite Privacy Controls
+- [ ] **js/privacy.js** (new): `loadPrivacySettings`, `blockUser`, `muteUser`, `favoriteUser`, `isBlocked`, `isMuted`
+- [ ] **js/community.js**: Add dropdown menu on post options (•••) with Block/Mute/Favorite
+- [ ] **js/community.js**: Filter blocked/muted users from feed and comments
+- [ ] **css/style.css**: Add `.privacy-dropdown`, `.privacy-dropdown-item` styles
 
-## ✅ Step 3: Edit js/community.js
-- [x] Mobile sidebar toggle handler using `floatingChatSidebar.visible` class
-- [x] Removed duplicate toggle block (old `fbSidebar` reference)
-- [x] Full community functionality: posts, likes, comments, @mentions, DMs, floating chat popup
-
-## ✅ Step 4: Verify (complete)
-- [x] Structure: Stories bar → Create Post → Feed Filter → Feed (left), Chat sidebar (right)
-- [x] Desktop: single-column feed with fixed 320px sidebar, `margin-right: 350px`
-- [x] Mobile (≤ 768px): sidebar hidden, toggle button "☰ Chat" shown, sidebar appears as overlay
-- [x] No duplicate JS handlers or CSS conflicts
+## Feature 3: Unread Chat Badges & Alerts
+- [ ] **js/community.js**: Add real-time `onSnapshot` listener for unread message counts
+- [ ] **js/community.js**: Track `lastReadTimestamps` in localStorage per chat key
+- [ ] **js/community.js**: Add badge count to sidebar "Community Chat" and "My Teammates" headers
+- [ ] **js/community.js**: Highlight teammates with unread messages + notification chime
+- [ ] **css/style.css**: Add `.unread-badge`, `.unread-dot`, `.teammate-item.unread` styles
 

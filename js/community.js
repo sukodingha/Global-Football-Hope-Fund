@@ -377,6 +377,14 @@ async function resolveAvatarHTML(uid, photoURL, displayName, size = 40) {
   return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:linear-gradient(135deg,#0b2d4d,#123f63);color:white;display:flex;align-items:center;justify-content:center;font-size:${Math.round(size * 0.35)}px;font-weight:700;flex-shrink:0;">${initials}</div>`;
 }
 
+// ===== UUID / SHORT ID GENERATOR =====
+function generateCommentId() {
+  return 'cmt_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6);
+}
+
+// ===== EMOJI REACTION OPTIONS =====
+const COMMENT_EMOJIS = ['❤️', '👍', '😂', '😮', '🔥'];
+
 // ===== POST CARD RENDERER =====
 function timeAgo(timestamp) {
   const now = Date.now();
@@ -495,8 +503,50 @@ function renderPostCard(post) {
   (post.comments || []).forEach((c) => {
     const ci = document.createElement("div");
     ci.className = "fb-comment-item";
+    ci.dataset.commentId = c.commentId || "";
     const commentProfileLink = `profile.html?uid=${encodeURIComponent(c.authorId || "")}`;
-    ci.innerHTML = `<span class="fb-comment-avatar"><a href="${commentProfileLink}" style="text-decoration:none;color:inherit;">${c.authorAvatar || "👤"}</a></span><div class="fb-comment-body"><strong><a href="${commentProfileLink}" style="text-decoration:none;color:inherit;">${c.authorName || "Guest"}</a></strong><p>${escapeHtml(c.text || "")}</p><span class="fb-comment-time">${timeAgo(c.createdAt)}</span></div>`;
+
+    // Compute emoji reactions counts
+    const reactions = c.reactions || {};
+    let reactionsHtml = COMMENT_EMOJIS.map(emoji => {
+      const count = (reactions[emoji] || []).length;
+      const hasReacted = currentUser && (reactions[emoji] || []).includes(currentUser.uid);
+      return count > 0
+        ? `<button class="cmt-reaction-btn ${hasReacted ? 'reacted' : ''}" data-emoji="${emoji}">${emoji} ${count}</button>`
+        : '';
+    }).filter(Boolean).join(' ');
+
+    // Build replies HTML
+    let repliesHtml = '';
+    if (c.replies && c.replies.length > 0) {
+      repliesHtml = `<div class="cmt-replies">${c.replies.map(r => {
+        const rLink = `profile.html?uid=${encodeURIComponent(r.authorId || "")}`;
+        return `<div class="cmt-reply-item"><span class="fb-comment-avatar" style="width:24px;height:24px;font-size:11px;"><a href="${rLink}" style="text-decoration:none;color:inherit;">${r.authorAvatar || "👤"}</a></span><div class="fb-comment-body" style="font-size:13px;"><strong><a href="${rLink}" style="text-decoration:none;color:inherit;">${r.authorName || "Guest"}</a></strong><p>${escapeHtml(r.text || "")}</p><span class="fb-comment-time">${timeAgo(r.createdAt)}</span></div></div>`;
+      }).join('')}</div>`;
+    }
+
+    ci.innerHTML = `
+      <div style="display:flex;gap:8px;align-items:flex-start;width:100%;">
+        <span class="fb-comment-avatar"><a href="${commentProfileLink}" style="text-decoration:none;color:inherit;">${c.authorAvatar || "👤"}</a></span>
+        <div class="fb-comment-body" style="flex:1;">
+          <strong><a href="${commentProfileLink}" style="text-decoration:none;color:inherit;">${c.authorName || "Guest"}</a></strong>
+          <p>${escapeHtml(c.text || "")}</p>
+          <span class="fb-comment-time">${timeAgo(c.createdAt)}</span>
+          <div class="cmt-actions-bar">
+            <button class="cmt-action-btn cmt-reply-toggle-btn" type="button">💬 Reply</button>
+            <button class="cmt-action-btn cmt-emoji-toggle-btn" type="button">😊 React</button>
+          </div>
+          ${reactionsHtml ? `<div class="cmt-reactions-bar">${reactionsHtml}</div>` : ''}
+          <div class="cmt-emoji-picker" hidden>
+            ${COMMENT_EMOJIS.map(e => `<button class="cmt-emoji-btn" data-emoji="${e}" type="button">${e}</button>`).join('')}
+          </div>
+          <form class="cmt-reply-form" hidden>
+            <input type="text" placeholder="Write a reply..." required style="flex:1;padding:8px 12px;border:1px solid #e2e8f0;border-radius:999px;font-size:13px;background:#f8fafc;">
+            <button type="submit" style="padding:6px 12px;background:#0b2d4d;color:white;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">Reply</button>
+          </form>
+          ${repliesHtml}
+        </div>
+      </div>`;
     commentList.appendChild(ci);
   });
   commentSection.appendChild(commentList);
@@ -583,6 +633,144 @@ function renderPostCard(post) {
         createNotification(post.authorId, 'comment', `${currentUserName} commented on your post: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
       }
     } catch (err) { console.error(err); }
+  });
+
+  // ===== EVENT DELEGATION for reply toggle, emoji picker, reactions, and reply submit =====
+  // Reply toggle button
+  card.querySelectorAll('.cmt-reply-toggle-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const replyForm = btn.closest('.fb-comment-body').querySelector('.cmt-reply-form');
+      if (replyForm) {
+        replyForm.hidden = !replyForm.hidden;
+        if (!replyForm.hidden) replyForm.querySelector('input')?.focus();
+      }
+    });
+  });
+
+  // Emoji picker toggle
+  card.querySelectorAll('.cmt-emoji-toggle-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const picker = btn.closest('.fb-comment-body').querySelector('.cmt-emoji-picker');
+      if (picker) picker.hidden = !picker.hidden;
+    });
+  });
+
+  // Emoji button click (add reaction)
+  card.querySelectorAll('.cmt-emoji-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!currentUser) { document.getElementById("authModal")?.classList.add("auth-modal--open"); return; }
+      const emoji = btn.dataset.emoji;
+      const commentItem = btn.closest('.fb-comment-item');
+      const commentId = commentItem?.dataset.commentId;
+      if (!commentId || !post.id) return;
+
+      try {
+        const ref = doc(db, "posts", post.id);
+        const snap = await getDoc(ref);
+        const comments = snap.data()?.comments || [];
+        const idx = comments.findIndex(c => c.commentId === commentId);
+        if (idx === -1) return;
+
+        const comment = { ...comments[idx] };
+        const reactions = comment.reactions || {};
+        const reactedUsers = reactions[emoji] || [];
+        if (reactedUsers.includes(currentUser.uid)) {
+          // Remove reaction
+          reactions[emoji] = reactedUsers.filter(uid => uid !== currentUser.uid);
+          if (reactions[emoji].length === 0) delete reactions[emoji];
+        } else {
+          // Add reaction
+          reactions[emoji] = [...reactedUsers, currentUser.uid];
+        }
+        comment.reactions = reactions;
+        comments[idx] = comment;
+        await updateDoc(ref, { comments });
+      } catch (err) { console.error(err); }
+    });
+  });
+
+  // Existing reaction button click (toggle in existing reactions bar)
+  card.querySelectorAll('.cmt-reaction-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!currentUser) { document.getElementById("authModal")?.classList.add("auth-modal--open"); return; }
+      const emoji = btn.dataset.emoji;
+      const commentItem = btn.closest('.fb-comment-item');
+      const commentId = commentItem?.dataset.commentId;
+      if (!commentId || !post.id) return;
+
+      try {
+        const ref = doc(db, "posts", post.id);
+        const snap = await getDoc(ref);
+        const comments = snap.data()?.comments || [];
+        const idx = comments.findIndex(c => c.commentId === commentId);
+        if (idx === -1) return;
+
+        const comment = { ...comments[idx] };
+        const reactions = comment.reactions || {};
+        const reactedUsers = reactions[emoji] || [];
+        if (reactedUsers.includes(currentUser.uid)) {
+          reactions[emoji] = reactedUsers.filter(uid => uid !== currentUser.uid);
+          if (reactions[emoji].length === 0) delete reactions[emoji];
+        } else {
+          reactions[emoji] = [...reactedUsers, currentUser.uid];
+        }
+        comment.reactions = reactions;
+        comments[idx] = comment;
+        await updateDoc(ref, { comments });
+      } catch (err) { console.error(err); }
+    });
+  });
+
+  // Reply form submit
+  card.querySelectorAll('.cmt-reply-form').forEach(form => {
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!currentUser) { document.getElementById("authModal")?.classList.add("auth-modal--open"); return; }
+      const input = form.querySelector('input');
+      const text = input.value.trim();
+      if (!text) return;
+      const commentItem = form.closest('.fb-comment-item');
+      const commentId = commentItem?.dataset.commentId;
+      if (!commentId || !post.id) return;
+
+      try {
+        const ref = doc(db, "posts", post.id);
+        const snap = await getDoc(ref);
+        const comments = snap.data()?.comments || [];
+        const idx = comments.findIndex(c => c.commentId === commentId);
+        if (idx === -1) return;
+
+        const comment = { ...comments[idx] };
+        const replies = comment.replies || [];
+        replies.push({
+          authorId: currentUser.uid,
+          authorName: currentUserName,
+          authorAvatar: currentUserAvatar,
+          text,
+          createdAt: new Date().toISOString()
+        });
+        comment.replies = replies;
+        comments[idx] = comment;
+        await updateDoc(ref, { comments });
+        input.value = "";
+        form.hidden = true;
+      } catch (err) { console.error(err); }
+    });
+
+    // Enter key support for reply input
+    const replyInput = form.querySelector('input');
+    if (replyInput) {
+      replyInput.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' && !ev.shiftKey) {
+          ev.preventDefault();
+          form.dispatchEvent(new Event('submit'));
+        }
+      });
+    }
   });
 
   return card;
@@ -998,12 +1186,29 @@ window.addEventListener("load", hideAppSplash);
 
 // ===== MOBILE SIDEBAR TOGGLE =====
 const sidebarToggleBtn = document.getElementById("sidebarToggleBtn");
-const floatingChatSidebar = document.getElementById("floatingChatSidebar");
-if (sidebarToggleBtn && floatingChatSidebar) {
+const fbSidebar = document.getElementById("fbSidebar");
+
+if (sidebarToggleBtn && fbSidebar) {
   sidebarToggleBtn.addEventListener("click", () => {
-    const isVisible = floatingChatSidebar.classList.toggle("visible");
-    sidebarToggleBtn.classList.toggle("active", isVisible);
-    sidebarToggleBtn.textContent = isVisible ? "✕ Close Chat" : "☰ Chat";
+    const isHidden = fbSidebar.hasAttribute("hidden");
+    if (isHidden) {
+      fbSidebar.removeAttribute("hidden");
+      sidebarToggleBtn.classList.add("active");
+      sidebarToggleBtn.textContent = "✕ Close Sidebar";
+    } else {
+      fbSidebar.setAttribute("hidden", "");
+      sidebarToggleBtn.classList.remove("active");
+      sidebarToggleBtn.textContent = "☰ Sidebar";
+    }
+  });
+
+  // On window resize >= 768px, ensure sidebar is visible and button hidden
+  window.addEventListener("resize", () => {
+    if (window.innerWidth > 768) {
+      fbSidebar.removeAttribute("hidden");
+      sidebarToggleBtn.classList.remove("active");
+      sidebarToggleBtn.textContent = "☰ Sidebar";
+    }
   });
 }
 
