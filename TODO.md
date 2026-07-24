@@ -1,25 +1,25 @@
-# Community Page Layout Update - TODO
+# Community Page Layout Update - COMPLETE ✅
 
 ## ✅ Step 1: Edit community.html
-- [x] Remove Members card (`.fb-sidebar-card` with `#membersList` and `#friendRequestsList`)
-- [x] Reorder sidebar: Community Chat (top) → My Teammates & Chat (bottom)
-- [x] Ensure `#dmChatPanel` is inside the Teammates card
-- [x] Add `sidebar-toggle-btn` for mobile responsiveness
+- [x] Removed Members card (`#membersList` and `#friendRequestsList`)
+- [x] Reordered sidebar: Community Chat (top) → My Teammates & Chat (bottom)
+- [x] Moved `#dmChatPanel` inside the Teammates card
+- [x] Added `sidebar-toggle-btn` for mobile responsiveness
 
 ## ✅ Step 2: Edit css/style.css
-- [x] Update `.fb-sidebar` with sticky positioning and scroll constraints
-- [x] Set max-height with overflow for chat-list and teammates-list inside sidebar
-- [x] Update responsive breakpoint from 980px → 768px
-- [x] Add mobile sidebar toggle button styles
-- [x] Ensure proper column widths (flex: 1 for main, ~320-360px for sidebar)
+- [x] Updated `.fb-sidebar` with sticky positioning (`top: 20px; max-height: 90vh; overflow-y: auto`)
+- [x] Added scrollable constrain: Community Chat (max-height: 380px), chat list (max-height: 220px)
+- [x] Added scrollable constrain: Teammates card (max-height: 400px), teammates list (max-height: 180px), DM messages (max-height: 160px)
+- [x] Changed responsive breakpoint from 980px → 768px
+- [x] Added `.sidebar-toggle-btn` styles (hidden on desktop, visible on mobile)
+- [x] Sidebar grid `1fr 340px`, on mobile collapses to `1fr`
 
 ## ✅ Step 3: Edit js/community.js
-- [x] Add mobile sidebar toggle handler (show/hide `#fbSidebar`)
-- [x] Add resize listener to restore sidebar on screens > 768px
+- [x] Fixed toggle handler to reference `#fbSidebar` (was incorrectly referencing non-existent `#floating-chat-sidebar`)
+- [x] Added `window.addEventListener("resize", ...)` to restore sidebar visibility on screens > 768px
 
-## Step 4: Verify
-- [x] Open `pages/community.html` in browser
-- [x] Test sticky sidebar behavior on scroll
-- [x] Test responsive single-column layout at ≤ 768px
-- [x] Test mobile sidebar toggle button
+## ✅ All Files Complete
+- `pages/community.html` — restructured sidebar with 2 cards only
+- `css/style.css` — sticky sidebar, scroll constraints, mobile toggle, responsive breakpoint
+- `js/community.js` — correct sidebar toggle handler + resize listener
 
