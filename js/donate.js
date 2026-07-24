@@ -348,7 +348,7 @@ async function processWalletPayment() {
 
   showDonationMessage("Processing wallet payment...", "success");
 
-  const result = await deductFromWallet(user.uid, data.amount, {
+  const result = await deductFromWallet(user.uid, data.amount, "USD", {
     description: "Donation to GFHF",
     reference: "GFHF-DON-" + Math.floor(Math.random() * 1000000000) + "-" + Date.now()
   });

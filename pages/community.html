@@ -262,6 +262,34 @@
     </div>
   </div>
 
+  <!-- Paystack SDK for wallet funding -->
+  <script src="https://js.paystack.co/v1/inline.js"></script>
+
+  <!-- ===== FUND WALLET MODAL (hidden by default) ===== -->
+  <div id="fundWalletModal" class="fb-modal" hidden>
+    <div class="fb-modal-overlay" id="fundWalletModalOverlay"></div>
+    <div class="fb-modal-card" style="max-width:440px;">
+      <div class="fb-modal-header">
+        <h3>💰 Fund Wallet</h3>
+        <button class="fb-modal-close" id="fundWalletModalClose">&times;</button>
+      </div>
+      <div class="create-post-modal-body">
+        <p style="font-size:14px;color:#475569;margin:0 0 12px;">Enter the amount you want to add to your wallet. Payment is processed securely via Paystack.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+          <button type="button" class="donation-preset-btn fund-preset active" data-amount="10">₦1,000</button>
+          <button type="button" class="donation-preset-btn fund-preset" data-amount="25">₦2,500</button>
+          <button type="button" class="donation-preset-btn fund-preset" data-amount="50">₦5,000</button>
+          <button type="button" class="donation-preset-btn fund-preset" data-amount="100">₦10,000</button>
+        </div>
+        <div class="donation-custom-wrap" style="margin-bottom:12px;">
+          <input type="number" id="fundCustomAmount" class="donation-custom-input" placeholder="Custom amount (₦)" min="100">
+        </div>
+        <div id="fundWalletStatus" class="message"></div>
+        <button type="button" id="fundWalletPayBtn" class="btn" style="width:100%;margin:0;">💳 Pay with Paystack</button>
+      </div>
+    </div>
+  </div>
+
   <script src="../js/pwa.js"></script>
   <script type="module" src="../js/auth.js"></script>
   <script type="module" src="../js/notifications.js"></script>

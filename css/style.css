@@ -4336,6 +4336,93 @@ footer {
   }
 }
 
+/* ===== WALLET FUNDING & PAYMENT STYLES ===== */
+.fund-wallet-trigger-btn {
+  padding: 6px 14px;
+  background: #00c853;
+  color: white;
+  border: none;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.fund-wallet-trigger-btn:hover {
+  background: #00b34a;
+  transform: scale(1.03);
+}
+
+.fund-wallet-trigger-btn:active {
+  transform: scale(0.97);
+}
+
+#walletPaySection {
+  margin-top: 8px;
+}
+
+#walletPaySection .btn {
+  margin-top: 0;
+}
+
+#walletPaySection .btn-secondary {
+  background: linear-gradient(90deg, #00c853 0%, #00b34a 100%);
+  box-shadow: 0 6px 14px rgba(0, 200, 83, 0.2);
+}
+
+#communityWalletBalance {
+  padding: 8px 12px;
+  margin: 6px 0;
+  background: linear-gradient(135deg, #0b2d4d, #123f63);
+  color: white;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+}
+
+#communityWalletBalance .fund-wallet-trigger-btn {
+  font-size: 11px;
+  padding: 4px 10px;
+}
+
+/* Wallet balance card in donation page */
+.wallet-balance-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, #0b2d4d, #123f63);
+  color: white;
+  border-radius: 14px;
+  margin-bottom: 12px;
+}
+
+.wallet-balance-label {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.wallet-balance-amount {
+  font-size: 22px;
+  font-weight: 900;
+}
+
+/* Wallet pay button container */
+.wallet-pay-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
 /* ===== COMMENT SEND BUTTON (Community) ===== */
 .comment-send-btn {
   padding: 8px 16px;

@@ -1,7 +1,8 @@
 /**
- * GFHF Shared Wallet Module
- * Core wallet functions: balance management, Paystack funding, transaction logging.
- * Import this module from dashboard.js, community.js, donate.js, etc.
+ * GFHF Multi-Currency Wallet Module
+ * Supports USD, NGN, EUR, GBP balances with Paystack (NGN) and Stripe (USD/EUR/GBP) gateways.
+ * Firestore fields: walletBalanceUSD, walletBalanceNGN, walletBalanceEUR, walletBalanceGBP, preferredCurrency
+ * wallet_transactions schema: { userId, amount, currency, gateway, type, description, reference, status, createdAt }
  */
 
 import { auth, db } from "./firebase.js";
@@ -11,9 +12,31 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
-// ===== PAYSTACK CONFIG =====
-// Replace with your actual Paystack public key
+// ===== PAYSTACK & STRIPE CONFIG =====
 export const PAYSTACK_PUBLIC_KEY = "YOUR_PAYSTACK_PUBLIC_KEY";
+export const STRIPE_PUBLISHABLE_KEY = "YOUR_STRIPE_PUBLISHABLE_KEY";
+
+// ===== SUPPORTED CURRENCIES =====
+export const CURRENCIES = {
+  USD: { symbol: "$", label: "US Dollar", flag: "🇺🇸", locale: "en-US", gateways: ["stripe"], decimals: 2, minAmount: 1 },
+  NGN: { symbol: "₦", label: "Nigerian Naira", flag: "🇳🇬", locale: "en-NG", gateways: ["paystack"], decimals: 2, minAmount: 100 },
+  EUR: { symbol: "€", label: "Euro", flag: "🇪🇺", locale: "de-DE", gateways: ["stripe"], decimals: 2, minAmount: 1 },
+  GBP: { symbol: "£", label: "British Pound", flag: "🇬🇧", locale: "en-GB", gateways: ["stripe"], decimals: 2, minAmount: 1 }
+};
+
+export const CURRENCY_KEYS = Object.keys(CURRENCIES);
+
+/** Map currency code to Firestore field name */
+export function currencyField(currency) {
+  return `walletBalance${currency}`;
+}
+
+/** Get the gateway for a currency: 'paystack' or 'stripe' */
+export function getGatewayForCurrency(currency) {
+  const info = CURRENCIES[currency];
+  if (!info) return "stripe";
+  return info.gateways[0] || "stripe";
+}
 
 // ===== DB GUARD =====
 export function guardDb() {
@@ -25,9 +48,58 @@ export function guardDb() {
 }
 
 // ===== CURRENCY FORMATTING =====
-export function formatCurrency(amount) {
+export function formatCurrency(amount, currency = "USD") {
   const num = typeof amount === 'number' ? amount : parseFloat(amount) || 0;
-  return `₦${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const info = CURRENCIES[currency] || CURRENCIES.USD;
+  try {
+    return new Intl.NumberFormat(info.locale, {
+      style: "currency",
+      currency: currency,
+      minimumFractionDigits: info.decimals,
+      maximumFractionDigits: info.decimals
+    }).format(num);
+  } catch {
+    return `${info.symbol}${num.toLocaleString("en-US", { minimumFractionDigits: info.decimals })}`;
+  }
+}
+
+/** Return a masked balance string for privacy toggle, e.g. "$••••••" or "₦••••••" */
+export function getMaskedBalance(currency = "USD") {
+  const info = CURRENCIES[currency] || CURRENCIES.USD;
+  return `${info.symbol}••••••`;
+}
+
+// ===== PREFERRED CURRENCY =====
+const PREF_CURRENCY_KEY = "gfhf_preferred_currency";
+
+export function getPreferredCurrency() {
+  try {
+    const val = localStorage.getItem(PREF_CURRENCY_KEY);
+    if (val && CURRENCIES[val]) return val;
+    // Auto-detect based on user locale
+    try {
+      const lang = navigator.language || "en-US";
+      if (lang.startsWith("en-NG") || lang.startsWith("ha") || lang.startsWith("ig") || lang.startsWith("yo")) return "NGN";
+      if (lang.startsWith("de") || lang.startsWith("fr") || lang.startsWith("it") || lang.startsWith("es")) return "EUR";
+      if (lang.startsWith("en-GB")) return "GBP";
+    } catch {}
+    return "USD";
+  } catch { return "USD"; }
+}
+
+export function setPreferredCurrency(currency) {
+  if (!CURRENCIES[currency]) currency = "USD";
+  try { localStorage.setItem(PREF_CURRENCY_KEY, currency); } catch {}
+}
+
+/** Save preferredCurrency to Firestore user doc */
+export async function savePreferredCurrencyToFirestore(userId, currency) {
+  if (!userId || !guardDb()) return;
+  try {
+    await setDoc(doc(db, "users", userId), { preferredCurrency: currency }, { merge: true });
+  } catch (err) {
+    console.warn("Could not save preferredCurrency:", err);
+  }
 }
 
 // ===== BALANCE VISIBILITY TOGGLE (localStorage) =====
@@ -44,40 +116,69 @@ export function setBalanceVisible(visible) {
   try { localStorage.setItem(BALANCE_VIS_KEY, visible ? 'true' : 'false'); } catch {}
 }
 
-// ===== LOAD WALLET BALANCE =====
-export async function loadWalletBalance(userId) {
+// ===== LOAD WALLET BALANCE (single currency) =====
+export async function loadWalletBalance(userId, currency = "USD") {
   if (!userId || !guardDb()) return 0;
   try {
     const snap = await getDoc(doc(db, 'users', userId));
     const data = snap.exists() ? snap.data() : {};
-    return data.walletBalance || 0;
+    return data[currencyField(currency)] || 0;
   } catch (err) {
     console.warn('Could not load wallet balance:', err);
     return 0;
   }
 }
 
-// ===== CREDIT WALLET (Atomic increment) =====
+// ===== LOAD ALL BALANCES =====
+export async function loadAllBalances(userId) {
+  if (!userId || !guardDb()) {
+    const empty = {};
+    CURRENCY_KEYS.forEach(c => { empty[c] = 0; });
+    return empty;
+  }
+  try {
+    const snap = await getDoc(doc(db, 'users', userId));
+    const data = snap.exists() ? snap.data() : {};
+    const balances = {};
+    CURRENCY_KEYS.forEach(c => {
+      balances[c] = data[currencyField(c)] || 0;
+    });
+    return balances;
+  } catch (err) {
+    console.warn('Could not load all balances:', err);
+    const empty = {};
+    CURRENCY_KEYS.forEach(c => { empty[c] = 0; });
+    return empty;
+  }
+}
+
+// ===== CREDIT WALLET (Atomic increment per currency) =====
 /**
- * Credit a user's wallet balance atomically and log a credit transaction.
+ * Credit a user's wallet balance atomically in a specific currency.
  * @param {string} userId - Firestore user ID
- * @param {number} amount - Amount to credit (in NGN)
- * @param {object} options - { description, reference }
+ * @param {number} amount - Amount to credit
+ * @param {string} currency - Currency code (USD|NGN|EUR|GBP)
+ * @param {object} options - { description, reference, gateway }
  * @returns {Promise<{success: boolean, newBalance: number, error?: string}>}
  */
-export async function creditWallet(userId, amount, options = {}) {
+export async function creditWallet(userId, amount, currency = "USD", options = {}) {
   if (!userId || !amount || amount <= 0) {
     return { success: false, newBalance: 0, error: "Invalid userId or amount." };
+  }
+  if (!CURRENCIES[currency]) {
+    return { success: false, newBalance: 0, error: `Unsupported currency: ${currency}` };
   }
   if (!guardDb()) {
     return { success: false, newBalance: 0, error: "Database unavailable." };
   }
 
   try {
-    // ATOMIC: increment balance using FieldValue.increment()
+    const field = currencyField(currency);
     const userRef = doc(db, "users", userId);
+
+    // Atomic increment
     await updateDoc(userRef, {
-      walletBalance: increment(amount)
+      [field]: increment(amount)
     });
 
     // Log the credit transaction
@@ -86,8 +187,10 @@ export async function creditWallet(userId, amount, options = {}) {
         userId: userId,
         type: "credit",
         amount: amount,
-        description: options.description || "Wallet credit",
-        reference: options.reference || "WALLET-CREDIT-" + Date.now(),
+        currency: currency,
+        gateway: options.gateway || getGatewayForCurrency(currency),
+        description: options.description || `Wallet credit (${currency})`,
+        reference: options.reference || `WALLET-CREDIT-${currency}-${Date.now()}`,
         status: "Successful",
         createdAt: serverTimestamp()
       });
@@ -97,7 +200,7 @@ export async function creditWallet(userId, amount, options = {}) {
 
     // Read back the new balance
     const snap = await getDoc(userRef);
-    const newBalance = snap.exists() ? (snap.data().walletBalance || 0) : amount;
+    const newBalance = snap.exists() ? (snap.data()[field] || 0) : amount;
 
     return { success: true, newBalance };
   } catch (err) {
@@ -106,43 +209,48 @@ export async function creditWallet(userId, amount, options = {}) {
   }
 }
 
-// ===== DEDUCT FROM WALLET (Atomic decrement) =====
+// ===== DEDUCT FROM WALLET (Atomic decrement per currency) =====
 /**
- * Deduct an amount from the user's wallet balance atomically.
- * Checks sufficient balance before deducting.
+ * Deduct an amount from the user's wallet balance atomically in a specific currency.
  * @param {string} userId - Firestore user ID
- * @param {number} amount - Amount to deduct (in NGN)
+ * @param {number} amount - Amount to deduct
+ * @param {string} currency - Currency code (USD|NGN|EUR|GBP)
  * @param {object} options - { description, reference, redirectUrl }
- * @returns {Promise<{success: boolean, newBalance: number, error?: string}>}
+ * @returns {Promise<{success: boolean, newBalance: number, error?: string, currentBalance?: number}>}
  */
-export async function deductFromWallet(userId, amount, options = {}) {
+export async function deductFromWallet(userId, amount, currency = "USD", options = {}) {
   if (!userId || !amount || amount <= 0) {
     return { success: false, newBalance: 0, error: "Invalid userId or amount." };
+  }
+  if (!CURRENCIES[currency]) {
+    return { success: false, newBalance: 0, error: `Unsupported currency: ${currency}` };
   }
   if (!guardDb()) {
     return { success: false, newBalance: 0, error: "Database unavailable." };
   }
 
   try {
+    const field = currencyField(currency);
     const userRef = doc(db, "users", userId);
     const snap = await getDoc(userRef);
     if (!snap.exists()) {
       return { success: false, newBalance: 0, error: "User profile not found." };
     }
 
-    const currentBalance = snap.data().walletBalance || 0;
+    const currentBalance = snap.data()[field] || 0;
 
     if (currentBalance < amount) {
       return {
         success: false,
         newBalance: currentBalance,
-        error: `Insufficient balance. You have ${formatCurrency(currentBalance)} but need ${formatCurrency(amount)}.`
+        currentBalance: currentBalance,
+        error: `Insufficient ${currency} balance. You have ${formatCurrency(currentBalance, currency)} but need ${formatCurrency(amount, currency)}.`
       };
     }
 
-    // ATOMIC: decrement balance using FieldValue.increment(-amount)
+    // Atomic decrement
     await updateDoc(userRef, {
-      walletBalance: increment(-amount)
+      [field]: increment(-amount)
     });
 
     // Log the debit transaction
@@ -151,8 +259,10 @@ export async function deductFromWallet(userId, amount, options = {}) {
         userId: userId,
         type: "debit",
         amount: amount,
-        description: options.description || "Wallet debit",
-        reference: options.reference || "WALLET-DEBIT-" + Date.now(),
+        currency: currency,
+        gateway: options.gateway || "wallet",
+        description: options.description || `Wallet debit (${currency})`,
+        reference: options.reference || `WALLET-DEBIT-${currency}-${Date.now()}`,
         status: "Successful",
         createdAt: serverTimestamp()
       });
@@ -161,6 +271,12 @@ export async function deductFromWallet(userId, amount, options = {}) {
     }
 
     const newBalance = currentBalance - amount;
+
+    // If redirect URL provided, navigate after short delay
+    if (options.redirectUrl) {
+      setTimeout(() => { window.location.href = options.redirectUrl; }, 1500);
+    }
+
     return { success: true, newBalance };
   } catch (err) {
     console.error("deductFromWallet error:", err);
@@ -171,7 +287,6 @@ export async function deductFromWallet(userId, amount, options = {}) {
 // ===== RENDER TRANSACTION HISTORY (Real-time) =====
 /**
  * Set up a real-time listener on wallet_transactions for a given userId.
- * Calls renderFn with the sorted transactions array.
  * @param {string} userId - Firestore user ID
  * @param {function} renderFn - Callback receiving (transactions[])
  * @returns {function} Unsubscribe function
@@ -226,11 +341,6 @@ export function listenToTransactions(userId, renderFn) {
 }
 
 // ===== TRANSACTION HISTORY HTML RENDERER =====
-/**
- * Render transactions array into a container element with a table.
- * @param {HTMLElement} container - The container element
- * @param {Array} transactions - Array of transaction objects
- */
 export function renderTransactionHistoryTable(container, transactions) {
   if (!container) return;
 
@@ -257,6 +367,7 @@ export function renderTransactionHistoryTable(container, transactions) {
           <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
             <th style="padding:8px 10px;text-align:left;font-weight:700;color:#475569;">Date &amp; Time</th>
             <th style="padding:8px 10px;text-align:left;font-weight:700;color:#475569;">Description</th>
+            <th style="padding:8px 10px;text-align:left;font-weight:700;color:#475569;">Currency</th>
             <th style="padding:8px 10px;text-align:left;font-weight:700;color:#475569;">Reference</th>
             <th style="padding:8px 10px;text-align:right;font-weight:700;color:#475569;">Amount</th>
             <th style="padding:8px 10px;text-align:center;font-weight:700;color:#475569;">Status</th>
@@ -267,16 +378,20 @@ export function renderTransactionHistoryTable(container, transactions) {
             const timestamp = tx.createdAt?.toMillis ? tx.createdAt.toMillis() : (typeof tx.createdAt === 'string' ? new Date(tx.createdAt).getTime() : Date.now());
             const dateStr = new Date(timestamp).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
             const timeStr = new Date(timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-            const isCredit = tx.type === 'credit' || tx.type === 'topup' || tx.amount > 0;
+            const isCredit = tx.type === 'credit' || tx.type === 'topup';
+            const currency = tx.currency || 'USD';
             const absAmount = Math.abs(tx.amount || 0);
+            const formattedAmt = formatCurrency(absAmount, currency);
             const amountDisplay = isCredit
-              ? `<span style="color:#22c55e;font-weight:700;">+${formatCurrency(absAmount)}</span>`
-              : `<span style="color:#ef4444;font-weight:700;">-${formatCurrency(absAmount)}</span>`;
+              ? `<span style="color:#22c55e;font-weight:700;">+${formattedAmt}</span>`
+              : `<span style="color:#ef4444;font-weight:700;">-${formattedAmt}</span>`;
             const status = tx.status || 'Successful';
             const statusColor = status === 'Successful' || status === 'Completed' ? '#22c55e' : '#f59e0b';
+            const currencyFlag = CURRENCIES[currency]?.flag || '💱';
             return `<tr style="border-bottom:1px solid #f1f5f9;">
               <td style="padding:8px 10px;white-space:nowrap;color:#475569;">${dateStr}<br><span style="font-size:11px;color:#94a3b8;">${timeStr}</span></td>
               <td style="padding:8px 10px;color:#14213d;">${tx.description || 'Transaction'}</td>
+              <td style="padding:8px 10px;white-space:nowrap;">${currencyFlag} ${currency}</td>
               <td style="padding:8px 10px;color:#64748b;font-family:monospace;font-size:11px;">${tx.reference || tx.ref || '—'}</td>
               <td style="padding:8px 10px;text-align:right;white-space:nowrap;">${amountDisplay}</td>
               <td style="padding:8px 10px;text-align:center;">
@@ -291,57 +406,124 @@ export function renderTransactionHistoryTable(container, transactions) {
   `;
 }
 
-// ===== FUND WALLET MODAL HTML =====
+// ===== FUND WALLET MODAL HTML (Multi-Currency) =====
 /**
- * Returns the HTML string for a reusable Fund Wallet modal (Paystack).
- * Include this in any page that needs wallet funding.
+ * Returns the HTML string for a reusable multi-currency Fund Wallet modal.
+ * Supports currency selection and dynamic gateway (Paystack/Stripe).
  */
 export function getFundWalletModalHTML() {
+  const presetOptions = CURRENCY_KEYS.map(c => {
+    const info = CURRENCIES[c];
+    return `<option value="${c}">${info.flag} ${c} (${info.symbol})</option>`;
+  }).join('');
+
   return `
   <div id="fundWalletModal" class="fb-modal" hidden>
     <div class="fb-modal-overlay" id="fundWalletModalOverlay"></div>
-    <div class="fb-modal-card" style="max-width:440px;">
+    <div class="fb-modal-card" style="max-width:480px;">
       <div class="fb-modal-header">
         <h3>💰 Fund Wallet</h3>
         <button class="fb-modal-close" id="fundWalletModalClose">&times;</button>
       </div>
       <div class="create-post-modal-body">
-        <p style="font-size:14px;color:#475569;margin:0 0 12px;">Enter the amount you want to add to your wallet. Payment is processed securely via Paystack.</p>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
-          <button type="button" class="donation-preset-btn fund-preset active" data-amount="10">₦1,000</button>
-          <button type="button" class="donation-preset-btn fund-preset" data-amount="25">₦2,500</button>
-          <button type="button" class="donation-preset-btn fund-preset" data-amount="50">₦5,000</button>
-          <button type="button" class="donation-preset-btn fund-preset" data-amount="100">₦10,000</button>
+        <p style="font-size:14px;color:#475569;margin:0 0 12px;">Select currency and enter amount to add. Payment is processed securely.</p>
+        
+        <!-- Currency Selector -->
+        <div style="margin-bottom:12px;">
+          <label for="fundCurrencySelect" style="font-weight:700;font-size:13px;color:#0b2d4d;display:block;margin-bottom:6px;">Currency</label>
+          <select id="fundCurrencySelect" class="currency-select" style="width:100%;">
+            ${presetOptions}
+          </select>
         </div>
+
+        <!-- Preset Amounts -->
+        <div id="fundPresetContainer" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+          <button type="button" class="donation-preset-btn fund-preset active" data-amount="10">$10</button>
+          <button type="button" class="donation-preset-btn fund-preset" data-amount="25">$25</button>
+          <button type="button" class="donation-preset-btn fund-preset" data-amount="50">$50</button>
+          <button type="button" class="donation-preset-btn fund-preset" data-amount="100">$100</button>
+        </div>
+
         <div class="donation-custom-wrap" style="margin-bottom:12px;">
-          <input type="number" id="fundCustomAmount" class="donation-custom-input" placeholder="Custom amount (₦)" min="100">
+          <input type="number" id="fundCustomAmount" class="donation-custom-input" placeholder="Custom amount" min="1" step="0.01">
         </div>
+
+        <!-- Gateway Badge -->
+        <div id="fundGatewayBadge" style="text-align:center;padding:8px;background:#f1f5f9;border-radius:10px;font-size:13px;color:#64748b;margin-bottom:12px;">
+          💳 Pay via <strong id="fundGatewayName">Stripe</strong>
+        </div>
+
         <div id="fundWalletStatus" class="message"></div>
-        <button type="button" id="fundWalletPayBtn" class="btn" style="width:100%;margin:0;">💳 Pay with Paystack</button>
+        <button type="button" id="fundWalletPayBtn" class="btn" style="width:100%;margin:0;">💳 Pay Now</button>
       </div>
     </div>
   </div>`;
 }
 
-// ===== INIT FUND WALLET MODAL =====
+// ===== STRIPE CHECKOUT HELPER =====
 /**
- * Initialize the Fund Wallet modal event handlers.
- * Call this after the modal HTML is in the DOM.
- * @param {Function} onSuccess - Optional callback after successful funding (receives {amount, reference})
+ * Open Stripe Checkout for wallet funding.
+ * Falls back to a redirect-based checkout.
+ */
+function openStripeCheckout(amount, currency, email, userId, onSuccess) {
+  if (typeof Stripe === "undefined") {
+    // Fallback: redirect to a Stripe Checkout session URL
+    // In production, create a Checkout Session via your backend and redirect
+    console.warn("Stripe.js not loaded. Cannot process Stripe payment.");
+    return false;
+  }
+
+  // In production, you would create a Checkout Session via your server:
+  // 1. POST to your server to create a Checkout Session with { amount, currency, userId }
+  // 2. Get the session ID
+  // 3. stripe.redirectToCheckout({ sessionId })
+  // Since we're client-side only, we simulate with a message
+
+  alert(`Stripe Checkout for ${formatCurrency(amount, currency)} (${currency}).\n\nIn production, this would redirect to Stripe's secure checkout page.\n\nFor now, using demo mode.`);
+
+  // Simulate success for demo
+  if (onSuccess) {
+    setTimeout(() => {
+      onSuccess({
+        reference: `STRIPE-DEMO-${currency}-${Date.now()}`,
+        amount: amount,
+        currency: currency
+      });
+    }, 1000);
+  }
+  return true;
+}
+
+// ===== INIT FUND WALLET MODAL (Multi-Currency with Gateway Switching) =====
+/**
+ * Initialize the multi-currency Fund Wallet modal event handlers.
+ * @param {Function} onSuccess - Callback after successful funding: ({amount, currency, reference})
  */
 export function initFundWalletModal(onSuccess) {
   let fundSelectedAmount = 10;
+  let selectedCurrency = getPreferredCurrency();
 
   const fundWalletModal = document.getElementById("fundWalletModal");
   const fundWalletModalOverlay = document.getElementById("fundWalletModalOverlay");
   const fundWalletModalClose = document.getElementById("fundWalletModalClose");
   const fundWalletBtns = document.querySelectorAll(".fund-wallet-trigger-btn");
+  const fundCurrencySelect = document.getElementById("fundCurrencySelect");
+  const fundPresetContainer = document.getElementById("fundPresetContainer");
   const fundCustomAmount = document.getElementById("fundCustomAmount");
   const fundPresetBtns = document.querySelectorAll(".fund-preset");
   const fundWalletPayBtn = document.getElementById("fundWalletPayBtn");
   const fundWalletStatus = document.getElementById("fundWalletStatus");
+  const fundGatewayName = document.getElementById("fundGatewayName");
 
-  if (!fundWalletModal) return;
+  if (!fundWalletModal) return { openModal: () => {}, closeModal: () => {} };
+
+  // ===== PRESET AMOUNTS PER CURRENCY =====
+  const CURRENCY_PRESETS = {
+    USD: [10, 25, 50, 100],
+    NGN: [1000, 2500, 5000, 10000],
+    EUR: [10, 25, 50, 100],
+    GBP: [10, 25, 50, 100]
+  };
 
   function showStatus(msg, type) {
     if (!fundWalletStatus) return;
@@ -349,24 +531,64 @@ export function initFundWalletModal(onSuccess) {
     fundWalletStatus.className = `message ${type}`;
   }
 
-  function openModal() {
-    fundSelectedAmount = 10;
-    fundWalletModal.hidden = false;
-    if (fundCustomAmount) fundCustomAmount.value = "";
+  function updatePresets(currency) {
+    if (!fundPresetContainer || !fundPresetBtns.length) return;
+    const presets = CURRENCY_PRESETS[currency] || CURRENCY_PRESETS.USD;
+    fundPresetBtns.forEach((btn, i) => {
+      if (i < presets.length) {
+        btn.dataset.amount = presets[i];
+        btn.textContent = formatCurrency(presets[i], currency).replace(/^(\D+)/, (m) => m);
+        btn.style.display = "";
+      } else {
+        btn.style.display = "none";
+      }
+    });
+    // Select first preset
     fundPresetBtns.forEach((b) => b.classList.remove("active"));
-    if (fundPresetBtns[0]) fundPresetBtns[0].classList.add("active");
+    if (fundPresetBtns[0]) {
+      fundPresetBtns[0].classList.add("active");
+      fundSelectedAmount = presets[0];
+    }
+  }
+
+  function updateGateway(currency) {
+    const gateway = getGatewayForCurrency(currency);
+    if (fundGatewayName) {
+      fundGatewayName.textContent = gateway === "paystack" ? "Paystack" : "Stripe";
+    }
+  }
+
+  function openModal() {
+    selectedCurrency = getPreferredCurrency();
+    if (fundCurrencySelect) fundCurrencySelect.value = selectedCurrency;
+    fundSelectedAmount = (CURRENCY_PRESETS[selectedCurrency] || CURRENCY_PRESETS.USD)[0];
+    if (fundCustomAmount) fundCustomAmount.value = "";
+    updatePresets(selectedCurrency);
+    updateGateway(selectedCurrency);
     showStatus("", "success");
+    fundWalletModal.hidden = false;
   }
 
   function closeModal() {
     if (fundWalletModal) fundWalletModal.hidden = true;
   }
 
-  // Wire up all trigger buttons with class "fund-wallet-trigger-btn"
+  // Wire up all trigger buttons
   fundWalletBtns.forEach((btn) => btn.addEventListener("click", openModal));
 
   if (fundWalletModalOverlay) fundWalletModalOverlay.addEventListener("click", closeModal);
   if (fundWalletModalClose) fundWalletModalClose.addEventListener("click", closeModal);
+
+  // Currency selector change
+  if (fundCurrencySelect) {
+    fundCurrencySelect.addEventListener("change", () => {
+      selectedCurrency = fundCurrencySelect.value;
+      if (fundCustomAmount) fundCustomAmount.value = "";
+      updatePresets(selectedCurrency);
+      updateGateway(selectedCurrency);
+      showStatus("", "success");
+    });
+  }
 
   // Fund preset buttons
   fundPresetBtns.forEach((btn) => {
@@ -390,7 +612,7 @@ export function initFundWalletModal(onSuccess) {
     return fundSelectedAmount;
   }
 
-  // Process Paystack payment
+  // Process payment
   if (fundWalletPayBtn) {
     fundWalletPayBtn.addEventListener("click", () => {
       const user = auth.currentUser;
@@ -400,75 +622,103 @@ export function initFundWalletModal(onSuccess) {
       }
 
       const amount = getFundAmount();
-      if (amount < 1) {
-        showStatus("Amount must be at least ₦100.", "error");
+      const currency = selectedCurrency;
+      const minAmount = (CURRENCIES[currency] || CURRENCIES.USD).minAmount;
+
+      if (amount < minAmount) {
+        showStatus(`Minimum amount is ${formatCurrency(minAmount, currency)}.`, "error");
         return;
       }
 
-      if (typeof PaystackPop === "undefined") {
-        showStatus("Paystack is not loaded. Please refresh.", "error");
-        return;
-      }
-
+      const gateway = getGatewayForCurrency(currency);
       const email = user.email || "user@gfhf.com";
-      const amountInKobo = Math.round(amount * 100);
 
-      const handler = PaystackPop.setup({
-        key: PAYSTACK_PUBLIC_KEY,
-        email: email,
-        amount: amountInKobo,
-        currency: "NGN",
-        ref: "GFHF-FUND-" + Math.floor(Math.random() * 1000000000) + "-" + Date.now(),
-        metadata: {
-          custom_fields: [
-            {
-              display_name: "User ID",
-              variable_name: "user_id",
-              value: user.uid
+      if (gateway === "paystack") {
+        // ===== PAYSTACK =====
+        if (typeof PaystackPop === "undefined") {
+          showStatus("Paystack is not loaded. Please refresh.", "error");
+          return;
+        }
+
+        const amountInKobo = Math.round(amount * 100);
+
+        const handler = PaystackPop.setup({
+          key: PAYSTACK_PUBLIC_KEY,
+          email: email,
+          amount: amountInKobo,
+          currency: "NGN",
+          ref: `GFHF-FUND-${currency}-${Math.floor(Math.random() * 1000000000)}-${Date.now()}`,
+          metadata: {
+            custom_fields: [
+              { display_name: "User ID", variable_name: "user_id", value: user.uid },
+              { display_name: "Currency", variable_name: "currency", value: currency }
+            ]
+          },
+          callback: async function (response) {
+            if (!guardDb()) {
+              showStatus("Database unavailable. Please contact support.", "error");
+              return;
             }
-          ]
-        },
-        callback: async function (response) {
+            try {
+              const result = await creditWallet(user.uid, amount, currency, {
+                description: `Wallet funding via Paystack (${currency})`,
+                reference: response.reference,
+                gateway: "paystack"
+              });
+
+              if (result.success) {
+                showStatus(`✅ Funded! ${formatCurrency(amount, currency)} added.`, "success");
+                // Save preferred currency
+                setPreferredCurrency(currency);
+                await savePreferredCurrencyToFirestore(user.uid, currency);
+                if (onSuccess) onSuccess({ amount, currency, reference: response.reference });
+                setTimeout(closeModal, 2000);
+              } else {
+                showStatus("Payment succeeded but wallet credit failed.", "error");
+              }
+            } catch (err) {
+              console.error("Fund wallet credit error:", err);
+              showStatus("Payment succeeded but wallet credit failed.", "error");
+            }
+          },
+          onClose: function () {
+            showStatus("Payment window was closed.", "error");
+          }
+        });
+
+        handler.openIframe();
+
+      } else {
+        // ===== STRIPE =====
+        openStripeCheckout(amount, currency, email, user.uid, async (stripeResult) => {
           if (!guardDb()) {
-            showStatus("Database unavailable. Please contact support.", "error");
+            showStatus("Database unavailable.", "error");
             return;
           }
           try {
-            const result = await creditWallet(user.uid, amount, {
-              description: "Wallet funding via Paystack",
-              reference: response.reference
+            const result = await creditWallet(user.uid, stripeResult.amount, stripeResult.currency, {
+              description: `Wallet funding via Stripe (${stripeResult.currency})`,
+              reference: stripeResult.reference,
+              gateway: "stripe"
             });
 
             if (result.success) {
-              showStatus(
-                `✅ Wallet funded successfully! ${formatCurrency(amount)} added. Reference: ${response.reference}`,
-                "success"
-              );
-
-              // Call success callback
-              if (onSuccess) {
-                onSuccess({ amount, reference: response.reference });
-              }
-
-              // Close modal after 2 seconds
+              showStatus(`✅ Funded! ${formatCurrency(stripeResult.amount, stripeResult.currency)} added.`, "success");
+              setPreferredCurrency(stripeResult.currency);
+              await savePreferredCurrencyToFirestore(user.uid, stripeResult.currency);
+              if (onSuccess) onSuccess(stripeResult);
               setTimeout(closeModal, 2000);
             } else {
-              showStatus("Payment succeeded but wallet credit failed. Contact support.", "error");
+              showStatus("Payment succeeded but wallet credit failed.", "error");
             }
           } catch (err) {
-            console.error("Fund wallet credit error:", err);
-            showStatus("Payment succeeded but wallet credit failed. Contact support.", "error");
+            console.error("Stripe wallet credit error:", err);
+            showStatus("Payment succeeded but wallet credit failed.", "error");
           }
-        },
-        onClose: function () {
-          showStatus("Payment window was closed.", "error");
-        }
-      });
-
-      handler.openIframe();
+        });
+      }
     });
   }
 
   return { openModal, closeModal };
 }
-

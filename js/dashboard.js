@@ -8,12 +8,15 @@ import { onAuthStateChanged, signOut, updateProfile } from "https://www.gstatic.
 import { doc, getDoc, setDoc, addDoc, collection, query, where, orderBy, onSnapshot, getDocs, increment, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { updateHeaderAvatar } from "./auth.js";
 
-// Import shared wallet module
+// Import shared multi-currency wallet module
 import {
-  loadWalletBalance, formatCurrency, getBalanceVisible, setBalanceVisible,
-  guardDb, listenToTransactions, renderTransactionHistoryTable,
+  loadWalletBalance, loadAllBalances, formatCurrency, getMaskedBalance,
+  getBalanceVisible, setBalanceVisible,
+  guardDb as walletGuardDb, listenToTransactions, renderTransactionHistoryTable,
   getFundWalletModalHTML, initFundWalletModal,
-  creditWallet, deductFromWallet
+  creditWallet, deductFromWallet,
+  getPreferredCurrency, setPreferredCurrency, savePreferredCurrencyToFirestore,
+  CURRENCIES, CURRENCY_KEYS
 } from "./wallet.js";
 
 // ===== DOM refs =====
@@ -780,27 +783,16 @@ async function fetchLiveScores() {
 // Kick off the fetch when the dashboard loads
 document.addEventListener('DOMContentLoaded', fetchLiveScores);
 
-// ===== WALLET BALANCE TOGGLE & TRANSACTION HISTORY =====
+// ===== MULTI-CURRENCY WALLET BALANCE TOGGLE & TRANSACTION HISTORY =====
 
-// 1. Balance visibility toggle (localStorage)
-const BALANCE_VIS_KEY = 'gfhf_balance_visible';
-
-function getBalanceVisible() {
-  try {
-    const val = localStorage.getItem(BALANCE_VIS_KEY);
-    return val === null ? true : val === 'true'; // default visible
-  } catch { return true; }
-}
-
-function setBalanceVisible(visible) {
-  try { localStorage.setItem(BALANCE_VIS_KEY, visible ? 'true' : 'false'); } catch {}
-}
+// Track selected currency for display (default to preferred)
+let displayCurrency = getPreferredCurrency();
+let unsubscribeTransactions = null;
 
 const toggleBalanceBtn = document.getElementById('toggle-balance-btn');
 const walletBalanceDisplay = document.getElementById('walletBalanceDisplay');
 
 if (toggleBalanceBtn && walletBalanceDisplay) {
-  // Set initial icon based on saved state
   let isVisible = getBalanceVisible();
   toggleBalanceBtn.textContent = isVisible ? '👁️' : '👁️‍🗨️';
 
@@ -808,114 +800,37 @@ if (toggleBalanceBtn && walletBalanceDisplay) {
     isVisible = !isVisible;
     setBalanceVisible(isVisible);
     toggleBalanceBtn.textContent = isVisible ? '👁️' : '👁️‍🗨️';
-    // Re-render the balance with the new visibility
     renderWalletBalance();
   });
 }
 
-// 2. Wallet balance formatting & render
-function formatCurrency(amount) {
-  const num = typeof amount === 'number' ? amount : parseFloat(amount) || 0;
-  return `₦${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
-async function loadWalletBalance(userId) {
-  if (!userId || !guardDb()) return 0;
-  try {
-    const snap = await getDoc(doc(db, 'users', userId));
-    const data = snap.exists() ? snap.data() : {};
-    return data.walletBalance || 0;
-  } catch (err) {
-    console.warn('Could not load wallet balance:', err);
-    return 0;
-  }
-}
-
+// Multi-currency wallet balance renderer
 async function renderWalletBalance() {
   if (!walletBalanceDisplay) return;
   if (!auth.currentUser) {
-    walletBalanceDisplay.textContent = '₦0.00';
+    walletBalanceDisplay.textContent = formatCurrency(0, displayCurrency);
     return;
   }
 
-  const balance = await loadWalletBalance(auth.currentUser.uid);
+  const balance = await loadWalletBalance(auth.currentUser.uid, displayCurrency);
   const visible = getBalanceVisible();
-  walletBalanceDisplay.textContent = visible ? formatCurrency(balance) : '₦••••••';
+  walletBalanceDisplay.textContent = visible ? formatCurrency(balance, displayCurrency) : getMaskedBalance(displayCurrency);
 }
 
-// 3. Transaction history from Firestore (real-time)
-let unsubscribeTransactions = null;
-
+// Transaction history using shared module
 function renderTransactionHistory(transactions) {
   const container = document.getElementById('transactionHistoryContainer');
   if (!container) return;
-
-  if (!transactions || transactions.length === 0) {
-    container.innerHTML = `
-      <div style="text-align:center;padding:24px 8px;color:#94a3b8;">
-        <div style="font-size:48px;margin-bottom:10px;">📭</div>
-        <p style="font-size:15px;font-weight:600;color:#64748b;margin:0 0 4px;">No transactions yet</p>
-        <p style="font-size:13px;margin:0;">Your donation and top-up activity will appear here.</p>
-      </div>`;
-    return;
-  }
-
-  // Sort by createdAt descending (newest first)
-  const sorted = [...transactions].sort((a, b) => {
-    const ta = a.createdAt?.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt || 0).getTime();
-    const tb = b.createdAt?.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt || 0).getTime();
-    return tb - ta;
-  });
-
-  container.innerHTML = `
-    <div style="overflow-x:auto;">
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">
-        <thead>
-          <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
-            <th style="padding:8px 10px;text-align:left;font-weight:700;color:#475569;">Date &amp; Time</th>
-            <th style="padding:8px 10px;text-align:left;font-weight:700;color:#475569;">Description</th>
-            <th style="padding:8px 10px;text-align:left;font-weight:700;color:#475569;">Reference</th>
-            <th style="padding:8px 10px;text-align:right;font-weight:700;color:#475569;">Amount</th>
-            <th style="padding:8px 10px;text-align:center;font-weight:700;color:#475569;">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${sorted.map(tx => {
-            const timestamp = tx.createdAt?.toMillis ? tx.createdAt.toMillis() : (typeof tx.createdAt === 'string' ? new Date(tx.createdAt).getTime() : Date.now());
-            const dateStr = new Date(timestamp).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-            const timeStr = new Date(timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-            const isCredit = tx.type === 'credit' || tx.type === 'topup' || tx.amount > 0;
-            const absAmount = Math.abs(tx.amount || 0);
-            const amountDisplay = isCredit
-              ? `<span style="color:#22c55e;font-weight:700;">+${formatCurrency(absAmount)}</span>`
-              : `<span style="color:#ef4444;font-weight:700;">-${formatCurrency(absAmount)}</span>`;
-            const status = tx.status || 'Successful';
-            const statusColor = status === 'Successful' || status === 'Completed' ? '#22c55e' : '#f59e0b';
-            return `<tr style="border-bottom:1px solid #f1f5f9;">
-              <td style="padding:8px 10px;white-space:nowrap;color:#475569;">${dateStr}<br><span style="font-size:11px;color:#94a3b8;">${timeStr}</span></td>
-              <td style="padding:8px 10px;color:#14213d;">${tx.description || 'Transaction'}</td>
-              <td style="padding:8px 10px;color:#64748b;font-family:monospace;font-size:11px;">${tx.reference || tx.ref || '—'}</td>
-              <td style="padding:8px 10px;text-align:right;white-space:nowrap;">${amountDisplay}</td>
-              <td style="padding:8px 10px;text-align:center;">
-                <span style="display:inline-block;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700;background:${statusColor}16;color:${statusColor};">${status}</span>
-              </td>
-            </tr>`;
-          }).join('')}
-        </tbody>
-      </table>
-    </div>
-    <p style="font-size:12px;color:#94a3b8;text-align:center;margin:10px 0 0;">Showing ${sorted.length} transaction(s)</p>
-  `;
+  renderTransactionHistoryTable(container, transactions);
 }
 
 function listenToTransactions(userId) {
-  if (!userId || !guardDb()) {
+  if (!userId) {
     const container = document.getElementById('transactionHistoryContainer');
     if (container) container.innerHTML = '<p class="helper-text">Sign in to see your transaction history.</p>';
     return;
   }
 
-  // Unsubscribe previous listener
   if (unsubscribeTransactions) {
     unsubscribeTransactions();
     unsubscribeTransactions = null;
@@ -924,277 +839,100 @@ function listenToTransactions(userId) {
   const container = document.getElementById('transactionHistoryContainer');
   if (container) container.innerHTML = '<p class="helper-text">Loading transactions...</p>';
 
-  try {
-    const q = query(
-      collection(db, 'wallet_transactions'),
-      where('userId', '==', userId),
-      orderBy('createdAt', 'desc')
-    );
+  unsubscribeTransactions = listenToTransactions(userId, (transactions) => {
+    renderTransactionHistory(transactions);
+  });
+}
 
-    unsubscribeTransactions = onSnapshot(q, (snapshot) => {
-      const transactions = snapshot.docs.map(docSnap => ({
-        id: docSnap.id,
-        ...docSnap.data()
-      }));
-      renderTransactionHistory(transactions);
-    }, (err) => {
-      console.error('Transaction history error:', err);
-      const container = document.getElementById('transactionHistoryContainer');
-      if (container) container.innerHTML = '<p class="helper-text" style="color:#ef4444;">Could not load transactions.</p>';
-    });
-  } catch (err) {
-    console.warn('Transactions query error (may need composite index):', err);
-    // Fallback: query without orderBy
-    try {
-      const q = query(
-        collection(db, 'wallet_transactions'),
-        where('userId', '==', userId)
-      );
-      unsubscribeTransactions = onSnapshot(q, (snapshot) => {
-        const transactions = snapshot.docs.map(docSnap => ({
-          id: docSnap.id,
-          ...docSnap.data()
-        }));
-        renderTransactionHistory(transactions);
-      }, () => {});
-    } catch (err2) {
-      console.error('Fallback transaction query also failed:', err2);
+// ===== CURRENCY SELECTOR IN WALLET CARD =====
+// Add a small currency switcher inline in the wallet section
+(function addCurrencySwitcher() {
+  const walletSection = document.getElementById('walletSection');
+  if (!walletSection) return;
+  
+  // Check if switcher already exists
+  if (walletSection.querySelector('.wallet-currency-switcher')) return;
+
+  const currencyOptions = CURRENCY_KEYS.map(c => {
+    const info = CURRENCIES[c];
+    return `<option value="${c}" ${c === displayCurrency ? 'selected' : ''}>${info.flag} ${c}</option>`;
+  }).join('');
+
+  const balanceDisplay = walletSection.querySelector('#walletBalanceDisplay');
+  if (balanceDisplay) {
+    balanceDisplay.insertAdjacentHTML('afterend', `
+      <div class="wallet-currency-switcher" style="display:flex;align-items:center;gap:8px;margin:4px 0 8px;">
+        <label style="font-size:12px;font-weight:600;color:#64748b;">Currency:</label>
+        <select id="walletCurrencySelect" style="padding:6px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;font-weight:600;background:#f8fafc;cursor:pointer;">
+          ${currencyOptions}
+        </select>
+      </div>
+    `);
+
+    const select = document.getElementById('walletCurrencySelect');
+    if (select) {
+      select.addEventListener('change', () => {
+        displayCurrency = select.value;
+        setPreferredCurrency(displayCurrency);
+        if (auth.currentUser) {
+          savePreferredCurrencyToFirestore(auth.currentUser.uid, displayCurrency);
+        }
+        renderWalletBalance();
+      });
     }
   }
+})();
+
+// ===== FUND WALLET MODAL (Multi-Currency via shared module) =====
+// Initialize the shared multi-currency fund wallet modal
+let fundWalletModalInstance = null;
+
+// Wire up the fund wallet button
+const fundWalletBtn = document.getElementById('fundWalletBtn');
+if (fundWalletBtn) {
+  // Add 'fund-wallet-trigger-btn' class so initFundWalletModal picks it up
+  fundWalletBtn.classList.add('fund-wallet-trigger-btn');
 }
 
-// ===== FUND WALLET MODAL (Paystack) =====
-let fundSelectedAmount = 10; // in NGN (kobo = amount * 100)
-
-const fundWalletModal = document.getElementById("fundWalletModal");
-const fundWalletModalOverlay = document.getElementById("fundWalletModalOverlay");
-const fundWalletModalClose = document.getElementById("fundWalletModalClose");
-const fundWalletBtn = document.getElementById("fundWalletBtn");
-const fundCustomAmount = document.getElementById("fundCustomAmount");
-const fundPresetBtns = document.querySelectorAll(".fund-preset");
-const fundWalletPayBtn = document.getElementById("fundWalletPayBtn");
-const fundWalletStatus = document.getElementById("fundWalletStatus");
-
-function showFundWalletStatus(msg, type) {
-  if (!fundWalletStatus) return;
-  fundWalletStatus.textContent = msg;
-  fundWalletStatus.className = `message ${type}`;
-}
-
-function openFundWalletModal() {
-  if (!fundWalletModal) return;
-  fundSelectedAmount = 10;
-  fundWalletModal.hidden = false;
-  if (fundCustomAmount) fundCustomAmount.value = "";
-  fundPresetBtns.forEach((b) => b.classList.remove("active"));
-  if (fundPresetBtns[0]) fundPresetBtns[0].classList.add("active");
-  showFundWalletStatus("", "success");
-}
-
-function closeFundWalletModal() {
-  if (fundWalletModal) fundWalletModal.hidden = true;
-}
-
-if (fundWalletBtn) fundWalletBtn.addEventListener("click", openFundWalletModal);
-if (fundWalletModalOverlay) fundWalletModalOverlay.addEventListener("click", closeFundWalletModal);
-if (fundWalletModalClose) fundWalletModalClose.addEventListener("click", closeFundWalletModal);
-
-// Fund preset buttons
-fundPresetBtns.forEach((btn) => {
-  btn.addEventListener("click", () => {
-    fundPresetBtns.forEach((b) => b.classList.remove("active"));
-    btn.classList.add("active");
-    fundSelectedAmount = parseFloat(btn.dataset.amount);
-    if (fundCustomAmount) fundCustomAmount.value = "";
-  });
+// Initialize the shared modal
+fundWalletModalInstance = initFundWalletModal(({ amount, currency, reference }) => {
+  // On funding success, refresh the balance display
+  displayCurrency = currency;
+  setPreferredCurrency(currency);
+  if (auth.currentUser) {
+    savePreferredCurrencyToFirestore(auth.currentUser.uid, currency);
+  }
+  renderWalletBalance();
+  // Update currency selector if it exists
+  const select = document.getElementById('walletCurrencySelect');
+  if (select) select.value = currency;
 });
 
-if (fundCustomAmount) {
-  fundCustomAmount.addEventListener("input", () => {
-    fundPresetBtns.forEach((b) => b.classList.remove("active"));
-  });
-}
+// Expose a quick fund function for other parts of the dashboard
+window.openFundWallet = () => {
+  if (fundWalletModalInstance) fundWalletModalInstance.openModal();
+};
 
-function getFundAmount() {
-  const customVal = fundCustomAmount ? parseFloat(fundCustomAmount.value) : NaN;
-  if (customVal && customVal > 0) return customVal;
-  return fundSelectedAmount;
-}
-
-/**
- * Process a wallet funding via Paystack
- */
-function processFundWallet() {
-  const user = auth.currentUser;
-  if (!user) {
-    showFundWalletStatus("Please sign in first.", "error");
-    return;
-  }
-
-  const amount = getFundAmount();
-  if (amount < 1) {
-    showFundWalletStatus("Amount must be at least ₦100.", "error");
-    return;
-  }
-
-  if (typeof PaystackPop === "undefined") {
-    showFundWalletStatus("Paystack is not loaded. Please refresh.", "error");
-    return;
-  }
-
-  const email = user.email || "user@gfhf.com";
-  const amountInKobo = Math.round(amount * 100);
-
-  const handler = PaystackPop.setup({
-    key: "YOUR_PAYSTACK_PUBLIC_KEY",
-    email: email,
-    amount: amountInKobo,
-    currency: "NGN",
-    ref: "GFHF-FUND-" + Math.floor(Math.random() * 1000000000) + "-" + Date.now(),
-    metadata: {
-      custom_fields: [
-        {
-          display_name: "User ID",
-          variable_name: "user_id",
-          value: user.uid
-        }
-      ]
-    },
-    callback: async function (response) {
-      // Payment successful — credit the wallet
-      if (!guardDb()) {
-        showFundWalletStatus("Database unavailable. Please contact support.", "error");
-        return;
-      }
-      try {
-        const userRef = doc(db, "users", user.uid);
-        const snap = await getDoc(userRef);
-        const currentBalance = snap.exists() ? (snap.data().walletBalance || 0) : 0;
-        const newBalance = currentBalance + amount;
-
-        await setDoc(userRef, { walletBalance: newBalance }, { merge: true });
-
-        // Log the credit transaction
-        try {
-          await addDoc(collection(db, "wallet_transactions"), {
-            userId: user.uid,
-            type: "credit",
-            amount: amount,
-            description: "Wallet funding via Paystack",
-            reference: response.reference,
-            status: "Successful",
-            createdAt: serverTimestamp()
-          });
-        } catch (txErr) {
-          console.warn("Could not log transaction:", txErr);
-        }
-
-        showFundWalletStatus(
-          `✅ Wallet funded successfully! ₦${amount.toLocaleString()} added. Reference: ${response.reference}`,
-          "success"
-        );
-
-        // Refresh balance display
-        renderWalletBalance();
-
-        // Close modal after 2 seconds
-        setTimeout(closeFundWalletModal, 2000);
-      } catch (err) {
-        console.error("Fund wallet credit error:", err);
-        showFundWalletStatus("Payment succeeded but wallet credit failed. Contact support.", "error");
-      }
-    },
-    onClose: function () {
-      showFundWalletStatus("Payment window was closed.", "error");
-    }
-  });
-
-  handler.openIframe();
-}
-
-if (fundWalletPayBtn) {
-  fundWalletPayBtn.addEventListener("click", processFundWallet);
-}
-
-// ===== WALLET DEBIT: Deduct from wallet balance (atomic via Firestore) =====
-/**
- * Deduct an amount from the user's wallet balance.
- * Returns { success: boolean, newBalance: number, error?: string }
- * @param {string} userId - The Firestore user ID
- * @param {number} amount - Amount to deduct (in NGN decimal)
- * @param {object} options - { description, reference, redirectUrl }
- */
-async function deductFromWallet(userId, amount, options = {}) {
-  if (!userId || !amount || amount <= 0) {
-    return { success: false, newBalance: 0, error: "Invalid userId or amount." };
-  }
-  if (!guardDb()) {
-    return { success: false, newBalance: 0, error: "Database unavailable." };
-  }
-
-  try {
-    const userRef = doc(db, "users", userId);
-    const snap = await getDoc(userRef);
-    if (!snap.exists()) {
-      return { success: false, newBalance: 0, error: "User profile not found." };
-    }
-
-    const currentBalance = snap.data().walletBalance || 0;
-
-    if (currentBalance < amount) {
-      return {
-        success: false,
-        newBalance: currentBalance,
-        error: `Insufficient balance. You have ₦${currentBalance.toLocaleString()} but need ₦${amount.toLocaleString()}.`
-      };
-    }
-
-    const newBalance = currentBalance - amount;
-
-    // Atomic update: set the new balance
-    await setDoc(userRef, { walletBalance: newBalance }, { merge: true });
-
-    // Log the debit transaction
-    try {
-      await addDoc(collection(db, "wallet_transactions"), {
-        userId: userId,
-        type: "debit",
-        amount: amount,
-        description: options.description || "Wallet debit",
-        reference: options.reference || "WALLET-DEBIT-" + Date.now(),
-        status: "Successful",
-        createdAt: serverTimestamp()
-      });
-    } catch (txErr) {
-      console.warn("Could not log debit transaction:", txErr);
-    }
-
-    // Refresh balance display on dashboard
-    renderWalletBalance();
-
-    // If a redirect URL is provided, navigate after short delay
-    if (options.redirectUrl) {
-      setTimeout(() => {
-        window.location.href = options.redirectUrl;
-      }, 1500);
-    }
-
-    return { success: true, newBalance };
-  } catch (err) {
-    console.error("deductFromWallet error:", err);
-    return { success: false, newBalance: 0, error: err.message || "Unknown error." };
-  }
-}
-
-// 4. Integrate with existing auth state — extend the onAuthStateChanged logic
-// We hook into the existing listener by patching render calls after auth loads
+// 4. Integrate with existing auth state
 const origOnAuth = window._dashboardAuthPatched;
 if (!origOnAuth) {
   window._dashboardAuthPatched = true;
 
-  // Also listen to auth changes for wallet
   onAuthStateChanged(auth, (user) => {
     if (user) {
+      // Load preferred currency from Firestore
+      getDoc(doc(db, 'users', user.uid)).then(snap => {
+        if (snap.exists()) {
+          const pref = snap.data().preferredCurrency;
+          if (pref && CURRENCIES[pref]) {
+            displayCurrency = pref;
+            setPreferredCurrency(pref);
+            // Update currency selector
+            const select = document.getElementById('walletCurrencySelect');
+            if (select) select.value = pref;
+          }
+        }
+      }).catch(() => {});
       renderWalletBalance();
       listenToTransactions(user.uid);
     } else {
@@ -1204,12 +942,12 @@ if (!origOnAuth) {
       }
       const container = document.getElementById('transactionHistoryContainer');
       if (container) container.innerHTML = '<p class="helper-text">Sign in to see your transaction history.</p>';
-      if (walletBalanceDisplay) walletBalanceDisplay.textContent = '₦0.00';
+      if (walletBalanceDisplay) walletBalanceDisplay.textContent = formatCurrency(0, displayCurrency);
     }
   });
 }
 
-// Render wallet balance on page load too (in case auth is already cached)
+// Render on page load
 document.addEventListener('DOMContentLoaded', () => {
   if (auth.currentUser) {
     renderWalletBalance();
