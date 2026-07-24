@@ -11,7 +11,7 @@ import { updateHeaderAvatar } from "./auth.js";
 // Import shared multi-currency wallet module
 import {
   loadWalletBalance, loadAllBalances, formatCurrency, getMaskedBalance,
-  getBalanceVisible, setBalanceVisible,
+  getBalanceVisible, setBalanceVisible, toggleBalanceVisibility,
   guardDb as walletGuardDb, listenToTransactions, renderTransactionHistoryTable,
   getFundWalletModalHTML, initFundWalletModal,
   creditWallet, deductFromWallet,
@@ -797,8 +797,7 @@ if (toggleBalanceBtn && walletBalanceDisplay) {
   toggleBalanceBtn.textContent = isVisible ? '👁️' : '👁️‍🗨️';
 
   toggleBalanceBtn.addEventListener('click', () => {
-    isVisible = !isVisible;
-    setBalanceVisible(isVisible);
+    isVisible = toggleBalanceVisibility();
     toggleBalanceBtn.textContent = isVisible ? '👁️' : '👁️‍🗨️';
     renderWalletBalance();
   });

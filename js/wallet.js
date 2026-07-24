@@ -103,17 +103,26 @@ export async function savePreferredCurrencyToFirestore(userId, currency) {
 }
 
 // ===== BALANCE VISIBILITY TOGGLE (localStorage) =====
-const BALANCE_VIS_KEY = 'gfhf_balance_visible';
+const BALANCE_VIS_KEY = 'hideWalletBalance';
 
 export function getBalanceVisible() {
   try {
     const val = localStorage.getItem(BALANCE_VIS_KEY);
-    return val === null ? true : val === 'true';
+    // hideWalletBalance: 'true' means hidden, 'false' means visible; default visible
+    return val === 'true' ? false : true;
   } catch { return true; }
 }
 
+export function toggleBalanceVisibility() {
+  const current = getBalanceVisible();
+  const newVal = !current;
+  setBalanceVisible(newVal);
+  return newVal;
+}
+
 export function setBalanceVisible(visible) {
-  try { localStorage.setItem(BALANCE_VIS_KEY, visible ? 'true' : 'false'); } catch {}
+  // Store inverted: hideWalletBalance = 'true' means hidden, 'false' means visible
+  try { localStorage.setItem(BALANCE_VIS_KEY, visible ? 'false' : 'true'); } catch {}
 }
 
 // ===== LOAD WALLET BALANCE (single currency) =====
