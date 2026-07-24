@@ -7,7 +7,7 @@
 import { auth, db } from "./firebase.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  collection, addDoc, query, where, orderBy, onSnapshot,
+  collection, addDoc, query, where, orderBy, onSnapshot, limit,
   serverTimestamp, doc, updateDoc, arrayUnion, getDoc, getDocs, deleteDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
@@ -63,6 +63,17 @@ const dmChatForm = document.getElementById("dmChatForm");
 const dmMessageInput = document.getElementById("dmMessageInput");
 const communityChatList = document.getElementById("communityChatList");
 const communityChatForm = document.getElementById("communityChatForm");
+
+// Teammates
+const teammatesList = document.getElementById("teammatesList");
+
+// Floating Chat Popup
+const floatingChatPopup = document.getElementById("floatingChatPopup");
+const floatingChatTitle = document.getElementById("floatingChatTitle");
+const floatingChatMessages = document.getElementById("floatingChatMessages");
+const floatingChatForm = document.getElementById("floatingChatForm");
+const floatingChatInput = document.getElementById("floatingChatInput");
+const floatingChatClose = document.getElementById("floatingChatClose");
 
 // Filter buttons
 const filterBtns = document.querySelectorAll(".feed-filter-btn");
@@ -423,11 +434,22 @@ function renderPostCard(post) {
   commentForm.className = "fb-comment-form";
   commentForm.innerHTML = `
     <span class="fb-comment-form-avatar">${currentUserAvatar}</span>
-    <input type="text" placeholder="Write a comment..." required>
-    <button type="submit" hidden></button>
+    <input type="text" class="comment-input" placeholder="Write a comment..." required>
+    <button type="submit" class="comment-send-btn" style="padding:8px 16px;background:#0b2d4d;color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;white-space:nowrap;">Send</button>
   `;
   commentSection.appendChild(commentForm);
   card.appendChild(commentSection);
+
+  // Enter key support for comment input (Shift+Enter = newline, Enter = submit)
+  const commentInput = commentForm.querySelector('.comment-input');
+  if (commentInput) {
+    commentInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        commentForm.dispatchEvent(new Event('submit'));
+      }
+    });
+  }
 
   // Attach clickable avatars
   card.querySelectorAll(".fb-avatar-clickable").forEach((el) => {
@@ -715,6 +737,158 @@ function listenToChat() {
   }, console.error);
 }
 
+// ===== TEAMMATES SYSTEM (Firestore-based) =====
+/**
+ * Load teammates from the logged-in user's Firestore subcollection
+ */
+async function loadTeammates() {
+  if (!teammatesList) return;
+  if (!currentUser) {
+    teammatesList.innerHTML = '<p class="helper-text" style="font-size:13px;">Sign in to see your teammates.</p>';
+    return;
+  }
+
+  try {
+    const teammatesSnap = await getDocs(collection(db, "users", currentUser.uid, "teammates"));
+
+    if (teammatesSnap.empty) {
+      teammatesList.innerHTML = '<p class="helper-text" style="font-size:13px;">No teammates yet. Add teammates from user profiles!</p>';
+      return;
+    }
+
+    teammatesList.innerHTML = "";
+    teammatesSnap.docs.forEach(async (docSnap) => {
+      const teammateId = docSnap.id;
+      // Fetch the teammate's user profile for display name & photo
+      const userSnap = await getDoc(doc(db, "users", teammateId));
+      const userData = userSnap.exists() ? userSnap.data() : {};
+      const displayName = userData.displayName || userData.firstName || "Unknown";
+      const photoURL = userData.photoURL || "";
+      const initials = displayName.split(" ").map(s => s[0]).join("").substring(0, 2).toUpperCase() || "?";
+
+      const item = document.createElement("div");
+      item.className = "teammate-item";
+      item.style.cssText = "display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid #eef2f6;cursor:pointer;";
+      item.innerHTML = `
+        <div style="position:relative;width:36px;height:36px;flex-shrink:0;">
+          ${photoURL ? `<img src="${photoURL}" alt="" style="width:36px;height:36px;border-radius:50%;object-fit:cover;">` : `<div style="width:36px;height:36px;border-radius:50%;background:#0b2d4d;color:white;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;">${initials}</div>`}
+          <span class="status-dot online" style="position:absolute;bottom:0;right:0;width:10px;height:10px;border-radius:50%;border:2px solid white;background:#22c55e;"></span>
+        </div>
+        <div style="flex:1;">
+          <div style="font-weight:600;font-size:14px;color:#0b2d4d;">${displayName}</div>
+          <div style="font-size:11px;color:#22c55e;">● Online</div>
+        </div>
+        <button class="mini-btn chat-teammate-btn" data-id="${teammateId}" data-name="${displayName}" style="padding:6px 12px;background:#0b2d4d;color:white;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">💬</button>
+      `;
+      teammatesList.appendChild(item);
+
+      // Click to open floating chat
+      const chatBtn = item.querySelector(".chat-teammate-btn");
+      chatBtn.addEventListener("click", () => openFloatingChat(teammateId, displayName));
+    });
+  } catch (err) {
+    console.error("Error loading teammates:", err);
+    teammatesList.innerHTML = '<p class="helper-text" style="font-size:13px;">Could not load teammates.</p>';
+  }
+}
+
+// ===== FLOATING CHAT POPUP (Facebook-style) =====
+let activeFloatingChatPartnerId = null;
+let activeFloatingChatPartnerName = "";
+let unsubscribeFloatingChat = null;
+
+function openFloatingChat(partnerId, partnerName) {
+  if (!floatingChatPopup || !floatingChatMessages || !floatingChatForm || !floatingChatInput) return;
+
+  activeFloatingChatPartnerId = partnerId;
+  activeFloatingChatPartnerName = partnerName;
+
+  // Unsubscribe any previous chat listener
+  if (unsubscribeFloatingChat) {
+    unsubscribeFloatingChat();
+    unsubscribeFloatingChat = null;
+  }
+
+  // Show popup
+  floatingChatPopup.style.display = "flex";
+  if (floatingChatTitle) floatingChatTitle.textContent = `💬 ${partnerName}`;
+
+  // Build chat key
+  const uid1 = currentUser?.uid || "anon";
+  const chatKey = [uid1, partnerId].sort().join("_");
+  const messagesRef = collection(db, "liveChats", chatKey, "messages");
+  const q = query(messagesRef, orderBy("createdAt", "asc"), limit(100));
+
+  floatingChatMessages.innerHTML = '<p class="helper-text" style="padding:16px;text-align:center;font-size:14px;color:#64748b;">Loading messages...</p>';
+
+  unsubscribeFloatingChat = onSnapshot(q, (snapshot) => {
+    floatingChatMessages.innerHTML = "";
+    if (snapshot.empty) {
+      floatingChatMessages.innerHTML = '<p class="helper-text" style="padding:16px;text-align:center;font-size:14px;color:#64748b;">No messages yet. Say hello! 👋</p>';
+      return;
+    }
+    snapshot.docs.forEach((docSnap) => {
+      const msg = docSnap.data();
+      const isOwn = msg.authorId === currentUser?.uid;
+      const bubble = document.createElement("div");
+      bubble.style.cssText = `padding:8px 12px;margin:4px 8px;border-radius:${isOwn ? '16px 4px 16px 16px' : '4px 16px 16px 16px'};background:${isOwn ? '#0b2d4d' : '#eef4f8'};color:${isOwn ? 'white' : '#0b2d4d'};max-width:80%;align-self:${isOwn ? 'flex-end' : 'flex-start'};font-size:14px;`;
+      bubble.textContent = msg.text || "";
+      floatingChatMessages.appendChild(bubble);
+    });
+    floatingChatMessages.scrollTop = floatingChatMessages.scrollHeight;
+  }, (err) => {
+    console.error("Floating chat listen error:", err);
+    floatingChatMessages.innerHTML = '<p class="helper-text" style="padding:16px;text-align:center;font-size:14px;color:#ef4444;">Could not load messages.</p>';
+  });
+}
+
+function closeFloatingChat() {
+  if (unsubscribeFloatingChat) {
+    unsubscribeFloatingChat();
+    unsubscribeFloatingChat = null;
+  }
+  if (floatingChatPopup) floatingChatPopup.style.display = "none";
+  activeFloatingChatPartnerId = null;
+  activeFloatingChatPartnerName = "";
+}
+
+// Floating chat close button
+if (floatingChatClose) {
+  floatingChatClose.addEventListener("click", closeFloatingChat);
+}
+
+// Floating chat form submit
+if (floatingChatForm) {
+  floatingChatForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!activeFloatingChatPartnerId || !floatingChatInput || !currentUser) return;
+    const text = floatingChatInput.value.trim();
+    if (!text) return;
+
+    try {
+      const uid1 = currentUser.uid;
+      const chatKey = [uid1, activeFloatingChatPartnerId].sort().join("_");
+      await addDoc(collection(db, "liveChats", chatKey, "messages"), {
+        authorId: currentUser.uid,
+        authorName: currentUserName,
+        text,
+        createdAt: serverTimestamp()
+      });
+      floatingChatInput.value = "";
+    } catch (err) {
+      console.error("Floating chat send error:", err);
+    }
+  });
+
+  // Enter key support for floating chat input
+  floatingChatInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      floatingChatForm.dispatchEvent(new Event('submit'));
+    }
+  });
+}
+
 // ===== HIDE SPLASH =====
 function hideAppSplash() {
   document.getElementById("appSplash")?.classList.add("hidden");
@@ -733,6 +907,7 @@ onAuthStateChanged(auth, (user) => {
   hideAppSplash();
   renderMembers();
   renderFriendRequests();
+  loadTeammates(); // Load teammates on auth change
 });
 
 window.addEventListener("load", hideAppSplash);

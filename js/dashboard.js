@@ -1,6 +1,6 @@
 /**
- * GFHF Dashboard Module — Account overview + User Wall (localStorage)
- * Features: profile photo upload (Firebase Storage), photo gallery, unique ID display
+* GFHF Dashboard Module — Account overview + User Wall (localStorage)
+ * Features: profile photo upload (Cloudinary), photo gallery, unique ID display
  */
 
 import { auth, db } from "./firebase.js";

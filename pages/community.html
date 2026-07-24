@@ -157,6 +157,12 @@
         </form>
       </div>
     </div>
+    <div class="fb-sidebar-card">
+      <h4>👥 My Teammates</h4>
+      <div id="teammatesList" class="teammates-list">
+        <p class="helper-text" style="font-size:13px;">Loading teammates...</p>
+      </div>
+    </div>
     <div class="fb-sidebar-card" id="dmChatPanel" hidden>
       <h4 id="dmChatWith">💬 Direct Message</h4>
       <div id="dmChatMessages" class="chat-list"></div>
@@ -166,6 +172,21 @@
       </form>
     </div>
   </aside>
+
+  <!-- ===== FLOATING CHAT POPUP (Facebook-style, bottom-right) ===== -->
+  <div id="floatingChatPopup" class="floating-chat-popup" style="display:none;">
+    <div class="floating-chat-header" id="floatingChatHeader">
+      <span id="floatingChatTitle">💬 Chat</span>
+      <button id="floatingChatClose" class="floating-chat-close" type="button">&times;</button>
+    </div>
+    <div class="floating-chat-messages" id="floatingChatMessages">
+      <p class="helper-text" style="padding:16px;text-align:center;font-size:14px;color:#64748b;">Select a teammate to chat</p>
+    </div>
+    <form class="floating-chat-form" id="floatingChatForm">
+      <input type="text" id="floatingChatInput" placeholder="Type a message..." required>
+      <button type="submit" class="floating-chat-send-btn">Send</button>
+    </form>
+  </div>
 
   <footer>
     <p>Global Football Hope Fund © 2026</p>
