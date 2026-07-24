@@ -137,39 +137,40 @@
     </div>
   </div>
 
+  <!-- ===== SIDEBAR TOGGLE BUTTON (mobile) ===== -->
+  <button id="sidebarToggleBtn" class="sidebar-toggle-btn" type="button" aria-label="Toggle sidebar">
+    ☰ Sidebar
+  </button>
+
   <!-- ===== RIGHT SIDEBAR (desktop) ===== -->
   <aside class="fb-sidebar" id="fbSidebar">
-    <div class="fb-sidebar-card">
-      <h4>👥 Members</h4>
-      <div id="membersList" class="members-list"></div>
-    </div>
-    <div class="fb-sidebar-card">
-      <h4>📨 Friend Requests <span id="friendRequestCount" class="fb-badge">0</span></h4>
-      <div id="friendRequestsList" class="friend-requests-list"></div>
-    </div>
-    <div class="fb-sidebar-card">
+    <!-- TOP BOX: Community Chat -->
+    <div class="fb-sidebar-card fb-sidebar-chat-card">
       <h4>💬 Community Chat</h4>
       <div id="communityChatSection" class="chat-section">
         <div id="communityChatList" class="chat-list"></div>
-        <form id="communityChatForm" class="comment-form">
+        <form id="communityChatForm" class="comment-form sidebar-chat-form">
           <input id="chatMessage" name="chatMessage" type="text" placeholder="Write a message..." required>
-          <button class="btn" type="submit">Send</button>
+          <button class="btn sidebar-chat-send-btn" type="submit">Send</button>
         </form>
       </div>
     </div>
-    <div class="fb-sidebar-card">
-      <h4>👥 My Teammates</h4>
+
+    <!-- BOTTOM BOX: My Teammates and Chat Box -->
+    <div class="fb-sidebar-card fb-sidebar-teammates-card">
+      <h4>👥 My Teammates and Chat Box</h4>
       <div id="teammatesList" class="teammates-list">
         <p class="helper-text" style="font-size:13px;">Loading teammates...</p>
       </div>
-    </div>
-    <div class="fb-sidebar-card" id="dmChatPanel" hidden>
-      <h4 id="dmChatWith">💬 Direct Message</h4>
-      <div id="dmChatMessages" class="chat-list"></div>
-      <form id="dmChatForm" class="comment-form">
-        <input id="dmMessageInput" type="text" placeholder="Type a message..." required>
-        <button class="btn" type="submit">Send</button>
-      </form>
+      <div id="dmChatPanel" class="dm-chat-inner-panel" hidden>
+        <div class="dm-chat-divider"></div>
+        <h4 id="dmChatWith" class="dm-chat-header">💬 Direct Message</h4>
+        <div id="dmChatMessages" class="chat-list"></div>
+        <form id="dmChatForm" class="comment-form">
+          <input id="dmMessageInput" type="text" placeholder="Type a message..." required>
+          <button class="btn" type="submit">Send</button>
+        </form>
+      </div>
     </div>
   </aside>
 
