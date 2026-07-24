@@ -26,6 +26,7 @@ let activeInterest = "All";
 let activeDMUserId = null;
 let pendingFiles = [];
 let userDirectory = {}; // uniqueId -> { displayName, uid }
+let userPhotoCache = {}; // uid -> photoURL (cached to avoid repeated Firestore reads)
 
 // ===== DOM REFS =====
 const feed = document.getElementById("communityFeed");
@@ -320,6 +321,62 @@ filterBtns.forEach((btn) => {
   });
 });
 
+// ===== DYNAMIC AVATAR RESOLVER =====
+/**
+ * Fetch a user's photoURL from Firestore (cached after first fetch)
+ * @param {string} uid - The user ID to look up
+ * @returns {Promise<string>} The photoURL or empty string
+ */
+async function getUserPhotoURL(uid) {
+  if (!uid) return "";
+  if (userPhotoCache[uid] !== undefined) return userPhotoCache[uid];
+  try {
+    const snap = await getDoc(doc(db, "users", uid));
+    const data = snap.exists() ? snap.data() : {};
+    const url = data.photoURL || data.profilePic || "";
+    userPhotoCache[uid] = url;
+    return url;
+  } catch {
+    userPhotoCache[uid] = "";
+    return "";
+  }
+}
+
+/**
+ * Generate initials avatar HTML for a user
+ */
+function getInitialsAvatar(name) {
+  const initials = (name || "?")
+    .split(" ")
+    .map(s => s[0])
+    .join("")
+    .substring(0, 2)
+    .toUpperCase() || "?";
+  return `<div style="width:100%;height:100%;border-radius:50%;background:linear-gradient(135deg,#0b2d4d,#123f63);color:white;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;">${initials}</div>`;
+}
+
+/**
+ * Render an avatar image element (either <img> with photoURL or initials fallback)
+ * @param {string} uid - User ID
+ * @param {string} photoURL - Direct photoURL if known, or empty to fetch
+ * @param {string} displayName - Display name for initials fallback
+ * @param {number} size - Size in pixels
+ * @returns {Promise<string>} HTML string for the avatar
+ */
+async function resolveAvatarHTML(uid, photoURL, displayName, size = 40) {
+  const url = photoURL || (uid ? await getUserPhotoURL(uid) : "");
+  if (url) {
+    return `<img src="${url}" alt="" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;" onerror="this.style.display='none'">`;
+  }
+  const initials = (displayName || "?")
+    .split(" ")
+    .map(s => s[0])
+    .join("")
+    .substring(0, 2)
+    .toUpperCase() || "?";
+  return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:linear-gradient(135deg,#0b2d4d,#123f63);color:white;display:flex;align-items:center;justify-content:center;font-size:${Math.round(size * 0.35)}px;font-weight:700;flex-shrink:0;">${initials}</div>`;
+}
+
 // ===== POST CARD RENDERER =====
 function timeAgo(timestamp) {
   const now = Date.now();
@@ -360,11 +417,24 @@ function renderPostCard(post) {
   // Build profile link
   const profileLink = `profile.html?uid=${encodeURIComponent(post.authorId || "")}`;
 
+  // Resolve author avatar (photoURL or initials)
+  const authorPhotoURL = userPhotoCache[post.authorId] || post.authorPhotoURL || "";
+  const authorInitials = (post.authorName || "?")
+    .split(" ")
+    .map(s => s[0])
+    .join("")
+    .substring(0, 2)
+    .toUpperCase() || "?";
+  let authorAvatarHtml = `<div class="fb-post-avatar" style="overflow:hidden;">${authorInitials.substring(0, 1)}</div>`;
+  if (authorPhotoURL) {
+    authorAvatarHtml = `<div class="fb-post-avatar" style="overflow:hidden;"><img src="${authorPhotoURL}" alt="" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none'"></div>`;
+  }
+
   // Header
   card.innerHTML = `
     <div class="fb-post-header">
       <a href="${profileLink}" class="fb-post-avatar-link" style="text-decoration:none;color:inherit;">
-        <div class="fb-post-avatar">${post.authorAvatar || "👤"}</div>
+        ${authorAvatarHtml}
       </a>
       <div class="fb-post-meta">
         <a href="${profileLink}" style="text-decoration:none;color:inherit;">
@@ -884,6 +954,11 @@ if (floatingChatForm) {
         createdAt: serverTimestamp()
       });
       floatingChatInput.value = "";
+
+      // Send notification to the recipient about the new message
+      if (activeFloatingChatPartnerId !== currentUser.uid) {
+        createNotification(activeFloatingChatPartnerId, 'message', `${currentUserName} sent you a message: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
+      }
     } catch (err) {
       console.error("Floating chat send error:", err);
     }

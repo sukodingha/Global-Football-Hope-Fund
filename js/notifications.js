@@ -381,7 +381,6 @@ export async function createNotification(targetUid, type, message) {
 
   try {
     const notificationsRef = collection(db, "notifications", targetUid, "items");
-    const { addDoc } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js");
     await addDoc(notificationsRef, {
       type,
       message,
