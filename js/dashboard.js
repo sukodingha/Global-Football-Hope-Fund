@@ -5,7 +5,7 @@
 
 import { auth, db } from "./firebase.js";
 import { onAuthStateChanged, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { doc, getDoc, setDoc, addDoc, collection, query, where, getDocs, increment, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { doc, getDoc, setDoc, addDoc, collection, query, where, orderBy, onSnapshot, getDocs, increment, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { updateHeaderAvatar } from "./auth.js";
 
 // ===== DOM refs =====
@@ -771,4 +771,218 @@ async function fetchLiveScores() {
 
 // Kick off the fetch when the dashboard loads
 document.addEventListener('DOMContentLoaded', fetchLiveScores);
+
+// ===== WALLET BALANCE TOGGLE & TRANSACTION HISTORY =====
+
+// 1. Balance visibility toggle (localStorage)
+const BALANCE_VIS_KEY = 'gfhf_balance_visible';
+
+function getBalanceVisible() {
+  try {
+    const val = localStorage.getItem(BALANCE_VIS_KEY);
+    return val === null ? true : val === 'true'; // default visible
+  } catch { return true; }
+}
+
+function setBalanceVisible(visible) {
+  try { localStorage.setItem(BALANCE_VIS_KEY, visible ? 'true' : 'false'); } catch {}
+}
+
+const toggleBalanceBtn = document.getElementById('toggle-balance-btn');
+const walletBalanceDisplay = document.getElementById('walletBalanceDisplay');
+
+if (toggleBalanceBtn && walletBalanceDisplay) {
+  // Set initial icon based on saved state
+  let isVisible = getBalanceVisible();
+  toggleBalanceBtn.textContent = isVisible ? '👁️' : '👁️‍🗨️';
+
+  toggleBalanceBtn.addEventListener('click', () => {
+    isVisible = !isVisible;
+    setBalanceVisible(isVisible);
+    toggleBalanceBtn.textContent = isVisible ? '👁️' : '👁️‍🗨️';
+    // Re-render the balance with the new visibility
+    renderWalletBalance();
+  });
+}
+
+// 2. Wallet balance formatting & render
+function formatCurrency(amount) {
+  const num = typeof amount === 'number' ? amount : parseFloat(amount) || 0;
+  return `₦${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+async function loadWalletBalance(userId) {
+  if (!userId || !guardDb()) return 0;
+  try {
+    const snap = await getDoc(doc(db, 'users', userId));
+    const data = snap.exists() ? snap.data() : {};
+    return data.walletBalance || 0;
+  } catch (err) {
+    console.warn('Could not load wallet balance:', err);
+    return 0;
+  }
+}
+
+async function renderWalletBalance() {
+  if (!walletBalanceDisplay) return;
+  if (!auth.currentUser) {
+    walletBalanceDisplay.textContent = '₦0.00';
+    return;
+  }
+
+  const balance = await loadWalletBalance(auth.currentUser.uid);
+  const visible = getBalanceVisible();
+  walletBalanceDisplay.textContent = visible ? formatCurrency(balance) : '₦••••••';
+}
+
+// 3. Transaction history from Firestore (real-time)
+let unsubscribeTransactions = null;
+
+function renderTransactionHistory(transactions) {
+  const container = document.getElementById('transactionHistoryContainer');
+  if (!container) return;
+
+  if (!transactions || transactions.length === 0) {
+    container.innerHTML = `
+      <div style="text-align:center;padding:24px 8px;color:#94a3b8;">
+        <div style="font-size:48px;margin-bottom:10px;">📭</div>
+        <p style="font-size:15px;font-weight:600;color:#64748b;margin:0 0 4px;">No transactions yet</p>
+        <p style="font-size:13px;margin:0;">Your donation and top-up activity will appear here.</p>
+      </div>`;
+    return;
+  }
+
+  // Sort by createdAt descending (newest first)
+  const sorted = [...transactions].sort((a, b) => {
+    const ta = a.createdAt?.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt || 0).getTime();
+    const tb = b.createdAt?.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt || 0).getTime();
+    return tb - ta;
+  });
+
+  container.innerHTML = `
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
+            <th style="padding:8px 10px;text-align:left;font-weight:700;color:#475569;">Date &amp; Time</th>
+            <th style="padding:8px 10px;text-align:left;font-weight:700;color:#475569;">Description</th>
+            <th style="padding:8px 10px;text-align:left;font-weight:700;color:#475569;">Reference</th>
+            <th style="padding:8px 10px;text-align:right;font-weight:700;color:#475569;">Amount</th>
+            <th style="padding:8px 10px;text-align:center;font-weight:700;color:#475569;">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${sorted.map(tx => {
+            const timestamp = tx.createdAt?.toMillis ? tx.createdAt.toMillis() : (typeof tx.createdAt === 'string' ? new Date(tx.createdAt).getTime() : Date.now());
+            const dateStr = new Date(timestamp).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+            const timeStr = new Date(timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+            const isCredit = tx.type === 'credit' || tx.type === 'topup' || tx.amount > 0;
+            const absAmount = Math.abs(tx.amount || 0);
+            const amountDisplay = isCredit
+              ? `<span style="color:#22c55e;font-weight:700;">+${formatCurrency(absAmount)}</span>`
+              : `<span style="color:#ef4444;font-weight:700;">-${formatCurrency(absAmount)}</span>`;
+            const status = tx.status || 'Successful';
+            const statusColor = status === 'Successful' || status === 'Completed' ? '#22c55e' : '#f59e0b';
+            return `<tr style="border-bottom:1px solid #f1f5f9;">
+              <td style="padding:8px 10px;white-space:nowrap;color:#475569;">${dateStr}<br><span style="font-size:11px;color:#94a3b8;">${timeStr}</span></td>
+              <td style="padding:8px 10px;color:#14213d;">${tx.description || 'Transaction'}</td>
+              <td style="padding:8px 10px;color:#64748b;font-family:monospace;font-size:11px;">${tx.reference || tx.ref || '—'}</td>
+              <td style="padding:8px 10px;text-align:right;white-space:nowrap;">${amountDisplay}</td>
+              <td style="padding:8px 10px;text-align:center;">
+                <span style="display:inline-block;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700;background:${statusColor}16;color:${statusColor};">${status}</span>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:12px;color:#94a3b8;text-align:center;margin:10px 0 0;">Showing ${sorted.length} transaction(s)</p>
+  `;
+}
+
+function listenToTransactions(userId) {
+  if (!userId || !guardDb()) {
+    const container = document.getElementById('transactionHistoryContainer');
+    if (container) container.innerHTML = '<p class="helper-text">Sign in to see your transaction history.</p>';
+    return;
+  }
+
+  // Unsubscribe previous listener
+  if (unsubscribeTransactions) {
+    unsubscribeTransactions();
+    unsubscribeTransactions = null;
+  }
+
+  const container = document.getElementById('transactionHistoryContainer');
+  if (container) container.innerHTML = '<p class="helper-text">Loading transactions...</p>';
+
+  try {
+    const q = query(
+      collection(db, 'wallet_transactions'),
+      where('userId', '==', userId),
+      orderBy('createdAt', 'desc')
+    );
+
+    unsubscribeTransactions = onSnapshot(q, (snapshot) => {
+      const transactions = snapshot.docs.map(docSnap => ({
+        id: docSnap.id,
+        ...docSnap.data()
+      }));
+      renderTransactionHistory(transactions);
+    }, (err) => {
+      console.error('Transaction history error:', err);
+      const container = document.getElementById('transactionHistoryContainer');
+      if (container) container.innerHTML = '<p class="helper-text" style="color:#ef4444;">Could not load transactions.</p>';
+    });
+  } catch (err) {
+    console.warn('Transactions query error (may need composite index):', err);
+    // Fallback: query without orderBy
+    try {
+      const q = query(
+        collection(db, 'wallet_transactions'),
+        where('userId', '==', userId)
+      );
+      unsubscribeTransactions = onSnapshot(q, (snapshot) => {
+        const transactions = snapshot.docs.map(docSnap => ({
+          id: docSnap.id,
+          ...docSnap.data()
+        }));
+        renderTransactionHistory(transactions);
+      }, () => {});
+    } catch (err2) {
+      console.error('Fallback transaction query also failed:', err2);
+    }
+  }
+}
+
+// 4. Integrate with existing auth state — extend the onAuthStateChanged logic
+// We hook into the existing listener by patching render calls after auth loads
+const origOnAuth = window._dashboardAuthPatched;
+if (!origOnAuth) {
+  window._dashboardAuthPatched = true;
+
+  // Also listen to auth changes for wallet
+  onAuthStateChanged(auth, (user) => {
+    if (user) {
+      renderWalletBalance();
+      listenToTransactions(user.uid);
+    } else {
+      if (unsubscribeTransactions) {
+        unsubscribeTransactions();
+        unsubscribeTransactions = null;
+      }
+      const container = document.getElementById('transactionHistoryContainer');
+      if (container) container.innerHTML = '<p class="helper-text">Sign in to see your transaction history.</p>';
+      if (walletBalanceDisplay) walletBalanceDisplay.textContent = '₦0.00';
+    }
+  });
+}
+
+// Render wallet balance on page load too (in case auth is already cached)
+document.addEventListener('DOMContentLoaded', () => {
+  if (auth.currentUser) {
+    renderWalletBalance();
+    listenToTransactions(auth.currentUser.uid);
+  }
+});
 

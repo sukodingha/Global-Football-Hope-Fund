@@ -128,11 +128,7 @@ window.addEventListener('beforeinstallprompt', (event) => {
   showInstallBanner();
 });
 
-// ===== Hide install button when app is installed =====
-window.addEventListener('appinstalled', () => {
-  const navBtn = document.getElementById('installNavBtn');
-  if (navBtn) navBtn.classList.add('hidden');
-});
+// appinstalled is handled in the consolidated listener below
 
 // ===== Handle Install Button Click =====
 if (installBtn) {
