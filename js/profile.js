@@ -138,7 +138,8 @@ async function loadProfile(uid) {
 
 /**
  * Load all posts by a user from the `posts` collection
- * Uses `timestamp` field for ordering with fallback to `createdAt`.
+ * Fetches without orderBy to avoid Firestore composite index requirement,
+ * then sorts locally in JavaScript.
  */
 async function loadUserPosts(uid) {
   if (!profileWallFeed) return;
@@ -148,33 +149,38 @@ async function loadUserPosts(uid) {
   }
 
   try {
-    // Try with "timestamp" first (new schema), fall back to "createdAt" for older posts
-    let querySnap;
-    try {
-      const postsQuery = query(
-        collection(db, "posts"),
-        where("authorId", "==", uid),
-        orderBy("timestamp", "desc")
-      );
-      querySnap = await getDocs(postsQuery);
-    } catch (e) {
-      // Fall back to createdAt if timestamp index doesn't exist
-      const postsQuery = query(
-        collection(db, "posts"),
-        where("authorId", "==", uid),
-        orderBy("createdAt", "desc")
-      );
-      querySnap = await getDocs(postsQuery);
-    }
+    // Fetch posts without orderBy to avoid needing a composite index
+    const postsQuery = query(
+      collection(db, "posts"),
+      where("authorId", "==", uid)
+    );
+    const querySnap = await getDocs(postsQuery);
 
     if (querySnap.empty) {
       profileWallFeed.innerHTML = '<p style="color:#64748b;font-size:14px;">This user has not posted anything yet.</p>';
       return;
     }
 
-    profileWallFeed.innerHTML = "";
+    // Convert to array and sort locally by timestamp (newest first)
+    const posts = [];
     querySnap.docs.forEach((docSnap) => {
-      const post = { id: docSnap.id, ...docSnap.data() };
+      const data = { id: docSnap.id, ...docSnap.data() };
+      // Normalize timestamp field for sorting
+      data._sortTime = data.timestamp?.toMillis
+        ? data.timestamp.toMillis()
+        : data.createdAt?.toMillis
+          ? data.createdAt.toMillis()
+          : typeof data.timestamp === "string"
+            ? new Date(data.timestamp).getTime()
+            : typeof data.createdAt === "string"
+              ? new Date(data.createdAt).getTime()
+              : 0;
+      posts.push(data);
+    });
+    posts.sort((a, b) => b._sortTime - a._sortTime);
+
+    profileWallFeed.innerHTML = "";
+    posts.forEach((post) => {
 
       // Support both rawText and text fields
       const displayText = post.rawText || post.text || "";
