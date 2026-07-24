@@ -1,33 +1,25 @@
-# Community Page — Facebook-Style Comment/Reply/Reaction UI
+# Community Page Layout Update - TODO
 
-## ✅ Completed
+## ✅ Step 1: Edit community.html
+- [x] Remove Members card (`.fb-sidebar-card` with `#membersList` and `#friendRequestsList`)
+- [x] Reorder sidebar: Community Chat (top) → My Teammates & Chat (bottom)
+- [x] Ensure `#dmChatPanel` is inside the Teammates card
+- [x] Add `sidebar-toggle-btn` for mobile responsiveness
 
-### community.html
-- [x] Sidebar restructured: 2 cards (Community Chat + My Teammates & Chat Box)
-- [x] Removed Members & Friend Requests cards
-- [x] Added `sidebar-toggle-btn` for mobile toggle
+## ✅ Step 2: Edit css/style.css
+- [x] Update `.fb-sidebar` with sticky positioning and scroll constraints
+- [x] Set max-height with overflow for chat-list and teammates-list inside sidebar
+- [x] Update responsive breakpoint from 980px → 768px
+- [x] Add mobile sidebar toggle button styles
+- [x] Ensure proper column widths (flex: 1 for main, ~320-360px for sidebar)
 
-### css/style.css
-- [x] Added `.cmt-actions-bar`, `.cmt-action-btn` (Reply / React buttons)
-- [x] Added `.cmt-reactions-bar`, `.cmt-reaction-btn`, `.reacted` state
-- [x] Added `.cmt-emoji-picker`, `.cmt-emoji-btn` (❤️ 👍 😂 😮 🔥)
-- [x] Added `.cmt-reply-form`, `.cmt-replies`, `.cmt-reply-item` (nested replies)
-- [x] Updated `.fb-post-image-single img` to `object-fit: contain`
-- [x] Updated `.fb-page` layout with `margin-right` for sidebar offset
-- [x] Added `#floatingChatSidebar` fixed sidebar styles
-- [x] Responsive breakpoint at 768px with sidebar toggle
+## ✅ Step 3: Edit js/community.js
+- [x] Add mobile sidebar toggle handler (show/hide `#fbSidebar`)
+- [x] Add resize listener to restore sidebar on screens > 768px
 
-### js/community.js
-- [x] `generateCommentId()` — unique per-comment ID
-- [x] `COMMENT_EMOJIS` — 5 emoji options for reactions
-- [x] Comments section in `renderPostCard`:
-  - Each comment rendered with `data-comment-id` attribute
-  - Reply toggle button toggles inline `.cmt-reply-form`
-  - Emoji toggle button shows/hides `.cmt-emoji-picker`
-  - Reaction buttons show count + `reacted` class
-  - Sub-replies rendered in `.cmt-replies` div with indentation
-- [x] `toggleCommentReaction(commentId, emoji)` — reads/writes Firestore
-- [x] Reply submit appends to `comment.replies[]` in Firestore
-- [x] Enter key support on all inputs
-- [x] Mobile sidebar toggle handler
+## Step 4: Verify
+- [x] Open `pages/community.html` in browser
+- [x] Test sticky sidebar behavior on scroll
+- [x] Test responsive single-column layout at ≤ 768px
+- [x] Test mobile sidebar toggle button
 

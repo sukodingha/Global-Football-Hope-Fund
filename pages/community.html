@@ -137,46 +137,42 @@
     </div>
   </div>
 
-<!-- ===== SIDEBAR TOGGLE BUTTON (mobile) ===== -->
+  <!-- ===== SIDEBAR TOGGLE BUTTON (mobile) ===== -->
   <button id="sidebarToggleBtn" class="sidebar-toggle-btn" type="button" aria-label="Toggle sidebar">
-    ☰ Chat
+    ☰ Sidebar
   </button>
 
-  <!-- ===== FIXED FLOATING CHAT SIDEBAR (right edge) ===== -->
-  <div id="floatingChatSidebar">
+  <!-- ===== RIGHT SIDEBAR (desktop) ===== -->
+  <aside class="fb-sidebar" id="fbSidebar">
     <!-- TOP BOX: Community Chat -->
-    <div class="floating-chat-box">
-      <div class="floating-chat-box-header">💬 Community Chat</div>
-      <div class="floating-chat-box-body chat-scroll-area" id="communityChatSection">
-        <div id="communityChatList" class="chat-msg-list"></div>
-      </div>
-      <div class="floating-chat-box-footer">
-        <form id="communityChatForm" class="floating-chat-input-row">
+    <div class="fb-sidebar-card fb-sidebar-chat-card">
+      <h4>💬 Community Chat</h4>
+      <div id="communityChatSection" class="chat-section">
+        <div id="communityChatList" class="chat-list"></div>
+        <form id="communityChatForm" class="comment-form sidebar-chat-form">
           <input id="chatMessage" name="chatMessage" type="text" placeholder="Write a message..." required>
-          <button class="floating-chat-send-mini" type="submit">Send</button>
+          <button class="btn sidebar-chat-send-btn" type="submit">Send</button>
         </form>
       </div>
     </div>
 
-    <!-- BOTTOM BOX: My Teammates & Direct Chat -->
-    <div class="floating-chat-box">
-      <div class="floating-chat-box-header">👥 My Teammates & Direct Chat</div>
-      <div class="floating-chat-box-body chat-scroll-area">
-        <div id="teammatesList" class="teammates-list-compact">
-          <p class="helper-text" style="font-size:12px;padding:8px;text-align:center;">Loading teammates...</p>
-        </div>
-        <div id="dmChatPanel" class="dm-chat-inner-panel" hidden>
-          <div class="dm-chat-divider"></div>
-          <strong id="dmChatWith" class="dm-chat-label">💬 Direct Message</strong>
-          <div id="dmChatMessages" class="chat-msg-list dm-msg-list"></div>
-          <form id="dmChatForm" class="floating-chat-input-row">
-            <input id="dmMessageInput" type="text" placeholder="Type a message..." required>
-            <button class="floating-chat-send-mini" type="submit">Send</button>
-          </form>
-        </div>
+    <!-- BOTTOM BOX: My Teammates and Chat Box -->
+    <div class="fb-sidebar-card fb-sidebar-teammates-card">
+      <h4>👥 My Teammates and Chat Box</h4>
+      <div id="teammatesList" class="teammates-list">
+        <p class="helper-text" style="font-size:13px;">Loading teammates...</p>
+      </div>
+      <div id="dmChatPanel" class="dm-chat-inner-panel" hidden>
+        <div class="dm-chat-divider"></div>
+        <h4 id="dmChatWith" class="dm-chat-header">💬 Direct Message</h4>
+        <div id="dmChatMessages" class="chat-list"></div>
+        <form id="dmChatForm" class="comment-form">
+          <input id="dmMessageInput" type="text" placeholder="Type a message..." required>
+          <button class="btn" type="submit">Send</button>
+        </form>
       </div>
     </div>
-  </div>
+  </aside>
 
   <!-- ===== FLOATING CHAT POPUP (Facebook-style, bottom-right) ===== -->
   <div id="floatingChatPopup" class="floating-chat-popup" style="display:none;">

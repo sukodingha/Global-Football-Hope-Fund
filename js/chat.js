@@ -1,6 +1,7 @@
 /**
  * GFHF Real-Time Chat Module
  * Firestore-backed direct messaging with friend-request integration
+ * Includes audio notifications for incoming messages
  */
 
 import { auth, db } from "./firebase-config.js";
@@ -9,12 +10,14 @@ import {
   collection, addDoc, query, where, orderBy, onSnapshot,
   serverTimestamp, limit
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { playMessageAlert } from "./chatAudio.js";
 
 // ===== DOM refs (injected by community.js or dashboard.js) =====
 let currentUser = null;
 let activeChatPartnerId = null;
 let activeChatPartnerName = "";
 let unsubscribeChat = null;
+let previousMessageCount = 0; // Track message count to detect new messages
 
 // ===== Chat bubble rendering =====
 function formatTimestamp(timestamp) {
@@ -81,9 +84,20 @@ export function openRealTimeChat(partnerId, partnerName, containerEl, formEl, in
   const messagesRef = collection(db, "liveChats", chatKey, "messages");
   const q = query(messagesRef, orderBy("createdAt", "asc"), limit(100));
 
-  containerEl.innerHTML = '<div class="chat-loading">Loading messages...</div>';
+containerEl.innerHTML = '<div class="chat-loading">Loading messages...</div>';
 
   unsubscribeChat = onSnapshot(q, (snapshot) => {
+    // Detect new incoming messages for audio notification
+    const currentCount = snapshot.docs.length;
+    if (previousMessageCount > 0 && currentCount > previousMessageCount) {
+      // Check if the newest message is from someone else (not the current user)
+      const newestMsg = snapshot.docs[currentCount - 1]?.data();
+      if (newestMsg && newestMsg.authorId !== currentUser?.uid) {
+        playMessageAlert();
+      }
+    }
+    previousMessageCount = currentCount;
+
     containerEl.innerHTML = "";
 
     if (snapshot.empty) {
