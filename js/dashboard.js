@@ -824,7 +824,7 @@ function renderTransactionHistory(transactions) {
   renderTransactionHistoryTable(container, transactions);
 }
 
-function listenToTransactions(userId) {
+function setupTransactionListener(userId) {
   if (!userId) {
     const container = document.getElementById('transactionHistoryContainer');
     if (container) container.innerHTML = '<p class="helper-text">Sign in to see your transaction history.</p>';
@@ -934,7 +934,7 @@ if (!origOnAuth) {
         }
       }).catch(() => {});
       renderWalletBalance();
-      listenToTransactions(user.uid);
+      setupTransactionListener(user.uid);
     } else {
       if (unsubscribeTransactions) {
         unsubscribeTransactions();
@@ -951,7 +951,7 @@ if (!origOnAuth) {
 document.addEventListener('DOMContentLoaded', () => {
   if (auth.currentUser) {
     renderWalletBalance();
-    listenToTransactions(auth.currentUser.uid);
+    setupTransactionListener(auth.currentUser.uid);
   }
 });
 
