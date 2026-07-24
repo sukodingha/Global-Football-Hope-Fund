@@ -78,16 +78,29 @@
                 <p id="userEmail">Please wait.</p>
             </div>
             <div class="form-section">
-                <h3>Your Profile <span style="font-size:13px;font-weight:400;color:#64748b;">(edit your details below)</span></h3>
+                <h3>Your Profile</h3>
                 <div id="profileSummary" style="margin-bottom:14px;"></div>
-                <div class="profile-edit-form">
+                <button type="button" id="editProfileToggleBtn" class="btn" style="margin:0 0 12px;padding:10px 18px;font-size:14px;">✏️ Edit Profile</button>
+                <div id="profileEditSection" class="profile-edit-form" style="display:none;">
                     <div class="profile-edit-row">
                         <label for="editDisplayName">Display Name</label>
-                        <input type="text" id="editDisplayName" placeholder="Enter your display name">
+                        <input type="text" id="editDisplayName" placeholder="Enter your display name" readonly>
                     </div>
                     <div class="profile-edit-row">
                         <label for="editBio">Bio</label>
                         <textarea id="editBio" placeholder="Tell us about yourself, your football passion..."></textarea>
+                    </div>
+                    <div class="profile-edit-row">
+                        <label for="editCountry">Country</label>
+                        <input type="text" id="editCountry" placeholder="e.g. Brazil">
+                    </div>
+                    <div class="profile-edit-row">
+                        <label for="editCity">City</label>
+                        <input type="text" id="editCity" placeholder="e.g. Rio de Janeiro">
+                    </div>
+                    <div class="profile-edit-row">
+                        <label for="editFavTeam">Favorite Team</label>
+                        <input type="text" id="editFavTeam" placeholder="e.g. Flamengo">
                     </div>
                     <button type="button" id="saveProfileBtn" class="btn" style="margin:4px 0 0;padding:12px 20px;font-size:14px;">💾 Save Changes</button>
                 </div>

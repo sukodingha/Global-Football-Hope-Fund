@@ -5,7 +5,7 @@
 
 import { auth, db } from "./firebase.js";
 import { onAuthStateChanged, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { doc, getDoc, setDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { doc, getDoc, setDoc, addDoc, collection, query, where, getDocs, increment, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { updateHeaderAvatar } from "./auth.js";
 
 // ===== DOM refs =====
@@ -32,7 +32,12 @@ const wallFeed = document.getElementById("wallFeed");
 // Editable profile elements
 const editDisplayName = document.getElementById("editDisplayName");
 const editBio = document.getElementById("editBio");
+const editCountry = document.getElementById("editCountry");
+const editCity = document.getElementById("editCity");
+const editFavTeam = document.getElementById("editFavTeam");
 const saveProfileBtn = document.getElementById("saveProfileBtn");
+const editProfileToggleBtn = document.getElementById("editProfileToggleBtn");
+const profileEditSection = document.getElementById("profileEditSection");
 
 const WALL_POSTS_KEY = "gfhf_wall_posts";
 
@@ -429,7 +434,7 @@ async function renderPhotoGallery(userId) {
 
 // ===== Editable Profile =====
 /**
- * Load the user's displayName and bio from Firestore into the edit fields.
+ * Load the user's profile fields from Firestore into the edit fields.
  */
 async function loadEditableProfile(user) {
   if (!editDisplayName || !editBio) return;
@@ -439,45 +444,112 @@ async function loadEditableProfile(user) {
     const data = snap.data();
     editDisplayName.value = data.displayName || "";
     editBio.value = data.bio || "";
+    if (editCountry) editCountry.value = data.country || "";
+    if (editCity) editCity.value = data.city || "";
+    if (editFavTeam) editFavTeam.value = data.club || data.nationalTeam || "";
   }
 }
 
 /**
- * Save displayName and bio to Firestore + update Firebase Auth displayName.
+ * Save profile fields to Firestore with edit limit (max 10 edits).
+ * If editCount < 10: update directly and increment editCount.
+ * If editCount >= 10: save to pendingEdits collection for admin approval.
  */
 async function handleSaveProfile(user) {
   if (!user || !guardDb()) {
     showMessage("Unable to save. Try again later.", "error");
     return;
   }
-  const newDisplayName = editDisplayName?.value?.trim() || "";
-  const newBio = editBio?.value?.trim() || "";
 
-  try {
-    // Update Firestore
-    const userRef = doc(db, "users", user.uid);
-    await setDoc(userRef, {
-      displayName: newDisplayName,
-      bio: newBio
-    }, { merge: true });
+  const userRef = doc(db, "users", user.uid);
+  const snap = await getDoc(userRef);
+  const profile = snap.exists() ? snap.data() : {};
+  const editCount = profile.editCount || 0;
 
-    // Update Firebase Auth displayName
-    if (newDisplayName) {
-      await updateProfile(user, { displayName: newDisplayName });
-    }
+  const updatedFields = {};
 
-    // Refresh the welcome text and header avatar
-    if (welcomeText) {
-      welcomeText.textContent = `Welcome, ${newDisplayName || "friend"}!`;
-    }
-    const photoURL = user.photoURL || "";
-    updateHeaderAvatar(photoURL, newDisplayName || user.email?.split("@")[0]);
-
-    showMessage("Profile saved successfully!", "success");
-  } catch (err) {
-    console.error("Save profile error:", err);
-    showMessage("Failed to save profile.", "error");
+  // Collect the editable fields (Display Name is readonly so we keep existing)
+  if (editBio) {
+    const val = editBio.value.trim();
+    if (val) updatedFields.bio = val;
   }
+  if (editCountry) {
+    const val = editCountry.value.trim();
+    if (val) updatedFields.country = val;
+  }
+  if (editCity) {
+    const val = editCity.value.trim();
+    if (val) updatedFields.city = val;
+  }
+  if (editFavTeam) {
+    const val = editFavTeam.value.trim();
+    if (val) updatedFields.club = val;
+  }
+
+  // Always send bio even if empty (to allow clearing)
+  updatedFields.bio = editBio?.value?.trim() || "";
+
+  if (Object.keys(updatedFields).length === 0) {
+    showMessage("No changes to save.", "error");
+    return;
+  }
+
+  if (editCount < 10) {
+    // --- UNDER LIMIT: Update directly ---
+    try {
+      await setDoc(userRef, updatedFields, { merge: true });
+      // Increment editCount
+      await setDoc(userRef, { editCount: increment(1) }, { merge: true });
+
+      // Refresh the profile summary and header
+      const freshSnap = await getDoc(userRef);
+      const freshProfile = freshSnap.exists() ? freshSnap.data() : {};
+      if (welcomeText) {
+        welcomeText.textContent = `Welcome, ${freshProfile.displayName || freshProfile.firstName || "friend"}!`;
+      }
+
+      // Re-render profile summary
+      const uniqueId = freshProfile.uniqueId || "";
+      if (profileSummary) {
+        profileSummary.innerHTML = `
+          <p><strong>Country:</strong> ${freshProfile.country || "Not provided"}</p>
+          <p><strong>City:</strong> ${freshProfile.city || "Not provided"}</p>
+          <p><strong>Favorite Team:</strong> ${freshProfile.club || freshProfile.nationalTeam || "Not provided"}</p>
+          <p><strong>Bio:</strong> ${freshProfile.bio || "Not provided"}</p>
+          <p><strong>Edits used:</strong> ${(freshProfile.editCount || 0)} / 10</p>
+          <p><strong>Unique ID:</strong> <code style="background:#0b2d4d;color:#fff;padding:2px 8px;border-radius:6px;">${uniqueId}</code></p>
+        `;
+      }
+
+      showMessage("Profile updated successfully!", "success");
+    } catch (err) {
+      console.error("Save profile error:", err);
+      showMessage("Failed to save profile.", "error");
+    }
+  } else {
+    // --- OVER LIMIT: Save as pending edit ---
+    try {
+      await addDoc(collection(db, "pendingEdits"), {
+        userId: user.uid,
+        updatedFields: updatedFields,
+        requestedAt: serverTimestamp(),
+        status: "pending"
+      });
+      alert("You have reached your 10-edit limit. Your requested updates have been sent to an Admin for approval.");
+    } catch (err) {
+      console.error("Pending edit save error:", err);
+      showMessage("Failed to submit edit request.", "error");
+    }
+  }
+}
+
+// Wire up the Edit Profile toggle button
+if (editProfileToggleBtn && profileEditSection) {
+  editProfileToggleBtn.addEventListener("click", () => {
+    const isHidden = profileEditSection.style.display === "none" || profileEditSection.style.display === "";
+    profileEditSection.style.display = isHidden ? "block" : "none";
+    editProfileToggleBtn.textContent = isHidden ? "🙈 Hide Edit Form" : "✏️ Edit Profile";
+  });
 }
 
 // Wire up the Save Profile button
@@ -528,6 +600,8 @@ onAuthStateChanged(auth, async (user) => {
       <p><strong>Country:</strong> ${profile.country || "Not provided"}</p>
       <p><strong>City:</strong> ${profile.city || "Not provided"}</p>
       <p><strong>Favorite Team:</strong> ${profile.club || profile.nationalTeam || "Not provided"}</p>
+      <p><strong>Bio:</strong> ${profile.bio || "Not provided"}</p>
+      <p><strong>Edits used:</strong> ${(profile.editCount || 0)} / 10</p>
       <p><strong>Unique ID:</strong> <code style="background:#0b2d4d;color:#fff;padding:2px 8px;border-radius:6px;">${uniqueId}</code></p>
     `;
   }
