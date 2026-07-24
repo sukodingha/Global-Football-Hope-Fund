@@ -998,29 +998,12 @@ window.addEventListener("load", hideAppSplash);
 
 // ===== MOBILE SIDEBAR TOGGLE =====
 const sidebarToggleBtn = document.getElementById("sidebarToggleBtn");
-const fbSidebar = document.getElementById("fbSidebar");
-
-if (sidebarToggleBtn && fbSidebar) {
+const floatingChatSidebar = document.getElementById("floatingChatSidebar");
+if (sidebarToggleBtn && floatingChatSidebar) {
   sidebarToggleBtn.addEventListener("click", () => {
-    const isHidden = fbSidebar.hasAttribute("hidden");
-    if (isHidden) {
-      fbSidebar.removeAttribute("hidden");
-      sidebarToggleBtn.classList.add("active");
-      sidebarToggleBtn.textContent = "✕ Close Sidebar";
-    } else {
-      fbSidebar.setAttribute("hidden", "");
-      sidebarToggleBtn.classList.remove("active");
-      sidebarToggleBtn.textContent = "☰ Sidebar";
-    }
-  });
-
-  // On window resize >= 768px, ensure sidebar is visible and button hidden
-  window.addEventListener("resize", () => {
-    if (window.innerWidth > 768) {
-      fbSidebar.removeAttribute("hidden");
-      sidebarToggleBtn.classList.remove("active");
-      sidebarToggleBtn.textContent = "☰ Sidebar";
-    }
+    const isVisible = floatingChatSidebar.classList.toggle("visible");
+    sidebarToggleBtn.classList.toggle("active", isVisible);
+    sidebarToggleBtn.textContent = isVisible ? "✕ Close Chat" : "☰ Chat";
   });
 }
 
