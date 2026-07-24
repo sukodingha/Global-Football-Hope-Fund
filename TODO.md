@@ -1,28 +1,20 @@
-# Photo Upload Refactor & Profile Edit System — Complete
+# Feature Implementation TODO
 
-## ✅ Completed
+## Feature 1: Teammate Request & Notification System
+- [x] 1a. Edit `js/profile.js` - Send notification on "Add Teammate" click
+- [x] 1b. Edit `js/notifications.js` - Add teammate_request notification rendering with Accept/Reject buttons
+- [x] 1c. Edit `js/notifications.js` - Handle Accept (create teammate links + notify sender)
+- [x] 1d. Edit `js/notifications.js` - Handle Reject (update status + notify sender)
 
-### TASK 1: Dashboard Photo Upload (Cloudinary)
-- [x] `js/dashboard.js`: Added `handleImageUpload()` Cloudinary function (as provided)
-- [x] `js/dashboard.js`: Added `uploadToCloudinary()` helper, replaced `uploadToFirebaseStorage()` in all handlers
-- [x] `js/dashboard.js`: Removed Firebase Storage imports (`getStorage`, `ref`, `uploadBytes`, `getDownloadURL`)
+## Feature 2: Fixed Bottom-Right Chat Box on Dashboard
+- [x] 2a. Edit `pages/dashboard.html` - Add floating chat popup HTML (or ensure it exists)
+- [x] 2b. Edit `css/style.css` - Ensure `.floating-chat-popup` has fixed bottom-right positioning
+- [x] 2c. Edit `js/dashboard.js` - Wire up floating chat popup functionality
 
-### TASK 2: Public User Profile View & Wall
-- [x] `pages/profile.html`: Full profile page template
-- [x] `js/profile.js`: Reads `?uid=` param, fetches Firestore, renders profile
-- [x] `js/community.js`: Post card header linked to profile, comment authors linked
-
-### TASK 3: Edit Profile System with 10-Edit Limit
-- [x] `pages/dashboard.html`: Added "✏️ Edit Profile" toggle button, `#profileEditSection` with readonly Display Name, editable Bio, Country, City, Favorite Team fields
-- [x] `js/dashboard.js`: 
-  - Added `addDoc`, `increment`, `serverTimestamp` imports
-  - `loadEditableProfile()` now loads Bio, Country, City, Favorite Team
-  - `handleSaveProfile()`:
-    - If `editCount < 10`: Updates Firestore directly, increments `editCount`, shows success message
-    - If `editCount >= 10`: Saves to `pendingEdits` collection with `{ userId, updatedFields, requestedAt, status: 'pending' }`, shows alert
-  - Edit Profile toggle shows/hides the edit form
-  - Profile Summary now shows Bio and Edits used (X / 10)
-
-### TASK 4: Git Staging
-- [x] `git add .` executed
+## Feature 3: Active Real-Time Notifications
+- [x] 3a. Edit `js/community.js` - Call createNotification on post likes
+- [x] 3b. Edit `js/community.js` - Call createNotification on post comments
+- [x] 3c. Edit `js/community.js` - Call createNotification on comment replies
+- [x] 3d. Edit `js/notifications.js` - Add DM notification support for new chat messages
+- [x] 3e. Edit `js/notifications.js` - Add "message" type to icon mapping
 

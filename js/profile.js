@@ -7,8 +7,9 @@
 import { auth, db } from "./firebase.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  doc, getDoc, collection, query, where, orderBy, getDocs, setDoc, arrayUnion, arrayRemove, serverTimestamp
+  doc, getDoc, collection, query, where, orderBy, getDocs, setDoc, addDoc, arrayUnion, arrayRemove, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { createNotification } from "./notifications.js";
 
 // ===== DOM REFS =====
 const profileAvatar = document.getElementById("profileAvatar");
@@ -220,43 +221,40 @@ let loggedInUserId = null;
 
 /**
  * Add a user as a teammate (mutual) and create a chat thread
+ * Step 1: Send a teammate_request notification to the target user
  */
 async function handleAddTeammate(targetUid) {
   if (!loggedInUserId || !targetUid || loggedInUserId === targetUid) return;
   try {
-    // 1. Add to each other's teammates subcollection
-    const myTeammateRef = doc(db, "users", loggedInUserId, "teammates", targetUid);
-    await setDoc(myTeammateRef, {
-      teammateId: targetUid,
-      addedAt: serverTimestamp()
+    // Get sender's display name
+    const senderSnap = await getDoc(doc(db, "users", loggedInUserId));
+    const senderData = senderSnap.exists() ? senderSnap.data() : {};
+    const senderName = senderData.displayName || senderData.firstName || "A user";
+
+    // 1. Send a teammate_request notification to the target user
+    const notificationsRef = collection(db, "notifications", targetUid, "items");
+    await addDoc(notificationsRef, {
+      type: "teammate_request",
+      senderId: loggedInUserId,
+      recipientId: targetUid,
+      senderName: senderName,
+      status: "pending",
+      message: `${senderName} wants to add you as a teammate!`,
+      read: false,
+      createdAt: serverTimestamp()
     });
 
-    const theirTeammateRef = doc(db, "users", targetUid, "teammates", loggedInUserId);
-    await setDoc(theirTeammateRef, {
-      teammateId: loggedInUserId,
-      addedAt: serverTimestamp()
-    });
-
-    // 2. Create / ensure a chat thread document exists
-    const chatKey = [loggedInUserId, targetUid].sort().join("_");
-    const chatRef = doc(db, "chats", chatKey);
-    await setDoc(chatRef, {
-      participants: [loggedInUserId, targetUid],
-      createdAt: serverTimestamp(),
-      lastActivity: serverTimestamp()
-    }, { merge: true });
-
-    // 3. Update UI
+    // 2. Update UI
     const addBtn = document.getElementById("addTeammateBtn");
     if (addBtn) {
-      addBtn.textContent = "✅ Teammate Added";
+      addBtn.textContent = "✅ Request Sent";
       addBtn.disabled = true;
       addBtn.style.background = "#94a3b8";
     }
-    alert("✅ Teammate added! You can now chat with them from the Community page.");
+    alert("✅ Teammate request sent! They will receive a notification.");
   } catch (err) {
-    console.error("Error adding teammate:", err);
-    alert("Failed to add teammate. Please try again.");
+    console.error("Error sending teammate request:", err);
+    alert("Failed to send teammate request. Please try again.");
   }
 }
 

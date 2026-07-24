@@ -10,7 +10,7 @@ import { auth, db } from "./firebase.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   doc, collection, query, where, orderBy, onSnapshot,
-  serverTimestamp, updateDoc, getDocs, limit
+  serverTimestamp, updateDoc, getDocs, addDoc, setDoc, limit
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // ===== STATE =====
@@ -170,6 +170,85 @@ function updateBadge(count) {
 }
 
 /**
+ * Handle accepting a teammate request
+ */
+async function handleAcceptTeammate(notifId, senderId, senderName) {
+  if (!currentUser || !senderId) return;
+  try {
+    // 1. Create mutual teammate links
+    const myTeammateRef = doc(db, "users", currentUser.uid, "teammates", senderId);
+    await setDoc(myTeammateRef, {
+      teammateId: senderId,
+      addedAt: serverTimestamp()
+    });
+
+    const theirTeammateRef = doc(db, "users", senderId, "teammates", currentUser.uid);
+    await setDoc(theirTeammateRef, {
+      teammateId: currentUser.uid,
+      addedAt: serverTimestamp()
+    });
+
+    // 2. Create/ensure chat thread
+    const chatKey = [currentUser.uid, senderId].sort().join("_");
+    const chatRef = doc(db, "chats", chatKey);
+    await setDoc(chatRef, {
+      participants: [currentUser.uid, senderId],
+      createdAt: serverTimestamp(),
+      lastActivity: serverTimestamp()
+    }, { merge: true });
+
+    // 3. Update request notification status to 'accepted'
+    await updateDoc(doc(db, "notifications", currentUser.uid, "items", notifId), {
+      status: "accepted",
+      read: true
+    });
+
+    // 4. Send acceptance notification to the requester
+    const senderNotifRef = collection(db, "notifications", senderId, "items");
+    await addDoc(senderNotifRef, {
+      type: "teammate_accepted",
+      senderId: currentUser.uid,
+      message: `${currentUser.displayName || "Your teammate"} accepted your teammate request!`,
+      read: false,
+      createdAt: serverTimestamp()
+    });
+
+    alert("✅ Teammate added! You can now chat with each other.");
+  } catch (err) {
+    console.error("Error accepting teammate request:", err);
+    alert("Failed to accept teammate request.");
+  }
+}
+
+/**
+ * Handle rejecting a teammate request
+ */
+async function handleRejectTeammate(notifId, senderId, senderName) {
+  if (!currentUser || !senderId) return;
+  try {
+    // 1. Update request notification status to 'rejected'
+    await updateDoc(doc(db, "notifications", currentUser.uid, "items", notifId), {
+      status: "rejected",
+      read: true
+    });
+
+    // 2. Send rejection notification to the requester
+    const senderNotifRef = collection(db, "notifications", senderId, "items");
+    await addDoc(senderNotifRef, {
+      type: "teammate_declined",
+      senderId: currentUser.uid,
+      message: `${currentUser.displayName || "A user"} declined your teammate request.`,
+      read: false,
+      createdAt: serverTimestamp()
+    });
+
+    alert("Teammate request declined.");
+  } catch (err) {
+    console.error("Error rejecting teammate request:", err);
+  }
+}
+
+/**
  * Render the notification list in the dropdown
  */
 function renderNotifications(notifications) {
@@ -187,7 +266,26 @@ function renderNotifications(notifications) {
       : notif.type === "comment" ? "💬"
       : notif.type === "mention" ? "@"
       : notif.type === "tag" ? "🏷️"
+      : notif.type === "teammate_request" ? "👥"
+      : notif.type === "teammate_accepted" ? "✅"
+      : notif.type === "teammate_declined" ? "❌"
+      : notif.type === "message" ? "💬"
       : "🔔";
+
+    // For teammate_request with pending status, show Accept/Reject buttons
+    let actionButtons = "";
+    if (notif.type === "teammate_request" && notif.status === "pending") {
+      actionButtons = `
+        <div style="display:flex;gap:6px;margin-top:8px;">
+          <button class="mini-btn teammate-accept-btn" data-notifid="${notif.id}" data-senderid="${notif.senderId}" data-sendername="${notif.senderName || ''}" style="flex:1;padding:6px 12px;background:#00c853;color:white;border:none;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer;">✅ Accept</button>
+          <button class="mini-btn teammate-reject-btn" data-notifid="${notif.id}" data-senderid="${notif.senderId}" data-sendername="${notif.senderName || ''}" style="flex:1;padding:6px 12px;background:#ef4444;color:white;border:none;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer;">❌ Reject</button>
+        </div>
+      `;
+    } else if (notif.type === "teammate_request" && notif.status === "accepted") {
+      actionButtons = `<div style="margin-top:6px;font-size:11px;color:#00c853;font-weight:700;">✅ Accepted</div>`;
+    } else if (notif.type === "teammate_request" && notif.status === "rejected") {
+      actionButtons = `<div style="margin-top:6px;font-size:11px;color:#ef4444;font-weight:700;">❌ Declined</div>`;
+    }
 
     return `
       <div class="notification-item ${notif.read ? "read" : "unread"}" data-id="${notif.id}">
@@ -195,16 +293,41 @@ function renderNotifications(notifications) {
         <div class="notification-content">
           <div class="notification-text">${notif.message || "New notification"}</div>
           <div class="notification-time">${timeAgo}</div>
+          ${actionButtons}
         </div>
-        ${!notif.read ? '<div class="notification-unread-dot"></div>' : ''}
+        ${!notif.read && notif.type !== "teammate_request" ? '<div class="notification-unread-dot"></div>' : ''}
       </div>
     `;
   }).join("");
+
+  // Attach teammate Accept button handlers
+  list.querySelectorAll(".teammate-accept-btn").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const notifId = btn.dataset.notifid;
+      const senderId = btn.dataset.senderid;
+      const senderName = btn.dataset.sendername;
+      await handleAcceptTeammate(notifId, senderId, senderName);
+    });
+  });
+
+  // Attach teammate Reject button handlers
+  list.querySelectorAll(".teammate-reject-btn").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const notifId = btn.dataset.notifid;
+      const senderId = btn.dataset.senderid;
+      const senderName = btn.dataset.sendername;
+      await handleRejectTeammate(notifId, senderId, senderName);
+    });
+  });
 
   // Add click handler to mark individual as read and close dropdown
   const dropdown = document.getElementById("notificationDropdown");
   list.querySelectorAll(".notification-item.unread").forEach((item) => {
     item.addEventListener("click", async (e) => {
+      // Don't mark as read if clicking on action buttons
+      if (e.target.closest(".teammate-accept-btn") || e.target.closest(".teammate-reject-btn")) return;
       e.stopPropagation();
       const notifId = item.dataset.id;
       if (currentUser && notifId) {

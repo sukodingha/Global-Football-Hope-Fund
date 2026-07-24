@@ -10,6 +10,7 @@ import {
   collection, addDoc, query, where, orderBy, onSnapshot, limit,
   serverTimestamp, doc, updateDoc, arrayUnion, getDoc, getDocs, deleteDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { createNotification } from "./notifications.js";
 
 // ===== CONFIG =====
 const CLOUDINARY_CLOUD_NAME = "d8obkydb";
@@ -471,6 +472,10 @@ function renderPostCard(post) {
         await updateDoc(ref, { likes: likes.filter((id) => id !== currentUser.uid) });
       } else {
         await updateDoc(ref, { likes: arrayUnion(currentUser.uid) });
+        // Send notification to post author if the liker is not the author
+        if (post.authorId && post.authorId !== currentUser.uid) {
+          createNotification(post.authorId, 'like', `${currentUserName} liked your post`);
+        }
       }
     } catch (err) { console.error(err); }
   });
@@ -503,6 +508,10 @@ function renderPostCard(post) {
         })
       });
       input.value = "";
+      // Send notification to post author if the commenter is not the author
+      if (post.authorId && post.authorId !== currentUser.uid) {
+        createNotification(post.authorId, 'comment', `${currentUserName} commented on your post: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
+      }
     } catch (err) { console.error(err); }
   });
 

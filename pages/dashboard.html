@@ -194,6 +194,21 @@
     <p>© 2026 Global Football Hope Fund</p>
 </footer>
 
+  <!-- ===== FLOATING CHAT POPUP (Facebook-style, bottom-right) ===== -->
+  <div id="floatingChatPopup" class="floating-chat-popup" style="display:none;">
+    <div class="floating-chat-header" id="floatingChatHeader">
+      <span id="floatingChatTitle">💬 Chat</span>
+      <button id="floatingChatClose" class="floating-chat-close" type="button">&times;</button>
+    </div>
+    <div class="floating-chat-messages" id="floatingChatMessages">
+      <p class="helper-text" style="padding:16px;text-align:center;font-size:14px;color:#64748b;">Select a teammate to chat</p>
+    </div>
+    <form class="floating-chat-form" id="floatingChatForm">
+      <input type="text" id="floatingChatInput" placeholder="Type a message..." required>
+      <button type="submit" class="floating-chat-send-btn">Send</button>
+    </form>
+  </div>
+
   <script src="../js/pwa.js"></script>
   <script type="module" src="../js/auth.js"></script>
   <script type="module" src="../js/notifications.js"></script>
