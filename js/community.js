@@ -609,7 +609,7 @@ function renderPostCard(post) {
     }
   });
 
-  // Comment submit
+  // Comment submit — store commentId so reply/emoji handlers can match it
   commentForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     if (!currentUser) { document.getElementById("authModal")?.classList.add("auth-modal--open"); return; }
@@ -618,15 +618,21 @@ function renderPostCard(post) {
     if (!text) return;
     try {
       const ref = doc(db, "posts", post.id);
-      await updateDoc(ref, {
-        comments: arrayUnion({
-          authorId: currentUser.uid,
-          authorName: currentUserName,
-          authorAvatar: currentUserAvatar,
-          text,
-          createdAt: new Date().toISOString()
-        })
-      });
+      // Fetch current comments, append with generated ID, save back
+      const snap = await getDoc(ref);
+      const currentComments = snap.data()?.comments || [];
+      const newComment = {
+        commentId: generateCommentId(),
+        authorId: currentUser.uid,
+        authorName: currentUserName,
+        authorAvatar: currentUserAvatar,
+        text,
+        reactions: {},
+        replies: [],
+        createdAt: new Date().toISOString()
+      };
+      currentComments.push(newComment);
+      await updateDoc(ref, { comments: currentComments });
       input.value = "";
       // Send notification to post author if the commenter is not the author
       if (post.authorId && post.authorId !== currentUser.uid) {
@@ -636,7 +642,33 @@ function renderPostCard(post) {
   });
 
   // ===== EVENT DELEGATION for reply toggle, emoji picker, reactions, and reply submit =====
-  // Reply toggle button
+  // These use data-post-id and data-comment-id attributes set on the elements
+
+  // Helper: toggle emoji reaction on a comment (used by both emoji picker + reactions bar)
+  async function toggleCommentReaction(commentId, emoji) {
+    if (!currentUser || !post.id || !commentId) return;
+    try {
+      const ref = doc(db, "posts", post.id);
+      const snap = await getDoc(ref);
+      const comments = snap.data()?.comments || [];
+      const idx = comments.findIndex(c => c.commentId === commentId);
+      if (idx === -1) return;
+      const comment = { ...comments[idx] };
+      const reactions = comment.reactions || {};
+      const reactedUsers = reactions[emoji] || [];
+      if (reactedUsers.includes(currentUser.uid)) {
+        reactions[emoji] = reactedUsers.filter(uid => uid !== currentUser.uid);
+        if (reactions[emoji].length === 0) delete reactions[emoji];
+      } else {
+        reactions[emoji] = [...reactedUsers, currentUser.uid];
+      }
+      comment.reactions = reactions;
+      comments[idx] = comment;
+      await updateDoc(ref, { comments });
+    } catch (err) { console.error(err); }
+  }
+
+  // Reply toggle button (inline onclick via data attributes)
   card.querySelectorAll('.cmt-reply-toggle-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -657,7 +689,7 @@ function renderPostCard(post) {
     });
   });
 
-  // Emoji button click (add reaction)
+  // Emoji button click inside picker (❤️ 👍 😂 😮 🔥)
   card.querySelectorAll('.cmt-emoji-btn').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -666,33 +698,11 @@ function renderPostCard(post) {
       const commentItem = btn.closest('.fb-comment-item');
       const commentId = commentItem?.dataset.commentId;
       if (!commentId || !post.id) return;
-
-      try {
-        const ref = doc(db, "posts", post.id);
-        const snap = await getDoc(ref);
-        const comments = snap.data()?.comments || [];
-        const idx = comments.findIndex(c => c.commentId === commentId);
-        if (idx === -1) return;
-
-        const comment = { ...comments[idx] };
-        const reactions = comment.reactions || {};
-        const reactedUsers = reactions[emoji] || [];
-        if (reactedUsers.includes(currentUser.uid)) {
-          // Remove reaction
-          reactions[emoji] = reactedUsers.filter(uid => uid !== currentUser.uid);
-          if (reactions[emoji].length === 0) delete reactions[emoji];
-        } else {
-          // Add reaction
-          reactions[emoji] = [...reactedUsers, currentUser.uid];
-        }
-        comment.reactions = reactions;
-        comments[idx] = comment;
-        await updateDoc(ref, { comments });
-      } catch (err) { console.error(err); }
+      await toggleCommentReaction(commentId, emoji);
     });
   });
 
-  // Existing reaction button click (toggle in existing reactions bar)
+  // Existing reaction button click in the reactions bar
   card.querySelectorAll('.cmt-reaction-btn').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -701,27 +711,7 @@ function renderPostCard(post) {
       const commentItem = btn.closest('.fb-comment-item');
       const commentId = commentItem?.dataset.commentId;
       if (!commentId || !post.id) return;
-
-      try {
-        const ref = doc(db, "posts", post.id);
-        const snap = await getDoc(ref);
-        const comments = snap.data()?.comments || [];
-        const idx = comments.findIndex(c => c.commentId === commentId);
-        if (idx === -1) return;
-
-        const comment = { ...comments[idx] };
-        const reactions = comment.reactions || {};
-        const reactedUsers = reactions[emoji] || [];
-        if (reactedUsers.includes(currentUser.uid)) {
-          reactions[emoji] = reactedUsers.filter(uid => uid !== currentUser.uid);
-          if (reactions[emoji].length === 0) delete reactions[emoji];
-        } else {
-          reactions[emoji] = [...reactedUsers, currentUser.uid];
-        }
-        comment.reactions = reactions;
-        comments[idx] = comment;
-        await updateDoc(ref, { comments });
-      } catch (err) { console.error(err); }
+      await toggleCommentReaction(commentId, emoji);
     });
   });
 
