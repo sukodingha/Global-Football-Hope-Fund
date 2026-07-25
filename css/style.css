@@ -3426,8 +3426,14 @@ footer {
     display: flex;
     align-items: center;
     justify-content: center;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
 }
-.fb-modal[hidden] { display: none; }
+.fb-modal:not([hidden]) {
+    opacity: 1;
+    visibility: visible;
+}
 
 .fb-modal-overlay {
     position: absolute;
