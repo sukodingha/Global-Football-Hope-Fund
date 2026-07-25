@@ -1,17 +1,16 @@
 /**
  * GFHF Progressive Web App (PWA) Module
+ * - Handles the beforeinstallprompt event
+ * - Controls the install modal UI
  * - Registers the service worker
- * - Captures the beforeinstallprompt event
- * - Controls the install banner UI
  */
 
 let deferredPrompt = null;
 const CACHE_KEY = 'gfhf-pwa-installed';
 
 // ===== DOM Refs =====
-const installBanner = document.getElementById('appInstallBanner');
-const installBtn = document.getElementById('installBannerBtn');
-const dismissBtn = document.getElementById('dismissBannerBtn');
+const installModal = document.getElementById('pwa-install-modal');
+const installBtn = document.getElementById('pwa-install-btn');
 
 // ===== Check if app is already installed =====
 function isAppInstalled() {
@@ -20,18 +19,18 @@ function isAppInstalled() {
          localStorage.getItem(CACHE_KEY) === 'true';
 }
 
-// ===== Hide install banner =====
-function hideInstallBanner() {
-  if (installBanner) {
-    installBanner.hidden = true;
-  }
+// ===== Show install modal =====
+function showInstallModal() {
+  if (!installModal) return;
+  if (isAppInstalled()) return;
+  installModal.hidden = false;
 }
 
-// ===== Show install banner =====
-function showInstallBanner() {
-  if (!installBanner) return;
-  if (isAppInstalled()) return;
-  installBanner.hidden = false;
+// ===== Hide install modal =====
+function hideInstallModal() {
+  if (installModal) {
+    installModal.hidden = true;
+  }
 }
 
 // ===== Register Service Worker =====
@@ -53,7 +52,6 @@ function registerSW() {
         const newWorker = registration.installing;
         newWorker.addEventListener('statechange', () => {
           if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-            // New content available, optionally notify user
             console.log('New GFHF version available. Refreshing...');
             newWorker.postMessage({ type: 'SKIP_WAITING' });
             window.location.reload();
@@ -74,97 +72,40 @@ function registerSW() {
   }
 }
 
-// ===== Create and inject "Install App" nav button =====
-function injectInstallNavButton() {
-  // Remove existing if any
-  const existing = document.getElementById('installNavBtn');
-  if (existing) existing.remove();
-
-  const navBtn = document.createElement('button');
-  navBtn.id = 'installNavBtn';
-  navBtn.className = 'install-nav-btn hidden';
-  navBtn.type = 'button';
-  navBtn.innerHTML = '📲 Install App';
-
-  // Insert in header brand area before userStatus or after logo
-  const headerBrand = document.querySelector('.header-brand');
-  if (headerBrand) {
-    const userStatus = document.getElementById('userStatus');
-    if (userStatus) {
-      headerBrand.insertBefore(navBtn, userStatus);
-    } else {
-      headerBrand.appendChild(navBtn);
-    }
-  }
-
-  navBtn.addEventListener('click', async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const choiceResult = await deferredPrompt.userChoice;
-    if (choiceResult.outcome === 'accepted') {
-      localStorage.setItem(CACHE_KEY, 'true');
-      navBtn.classList.add('hidden');
-      hideInstallBanner();
-    }
-    deferredPrompt = null;
-  });
-
-  return navBtn;
-}
-
 // ===== Capture Install Prompt =====
 window.addEventListener('beforeinstallprompt', (event) => {
   // Prevent Chrome 67+ from automatically showing the prompt
   event.preventDefault();
   deferredPrompt = event;
 
-  // Show the install nav button
-  const navBtn = document.getElementById('installNavBtn');
-  if (navBtn && !isAppInstalled()) {
-    navBtn.classList.remove('hidden');
-  }
-
-  // Show the install banner
-  showInstallBanner();
+  // Show the custom install modal
+  showInstallModal();
 });
-
-// appinstalled is handled in the consolidated listener below
 
 // ===== Handle Install Button Click =====
 if (installBtn) {
   installBtn.addEventListener('click', async () => {
     if (!deferredPrompt) {
-      // If no deferred prompt, hide banner and mark as dismissed
-      localStorage.setItem(CACHE_KEY, 'true');
-      hideInstallBanner();
+      hideInstallModal();
       return;
     }
 
     // Show the install prompt
-    deferredPrompt.prompt();
+    await deferredPrompt.prompt();
 
     // Wait for the user to respond to the prompt
-    const choiceResult = await deferredPrompt.userChoice;
+    const { outcome } = await deferredPrompt.userChoice;
 
-    if (choiceResult.outcome === 'accepted') {
+    if (outcome === 'accepted') {
       console.log('User accepted the install prompt');
       localStorage.setItem(CACHE_KEY, 'true');
-      hideInstallBanner();
     } else {
       console.log('User dismissed the install prompt');
-      // Don't hide banner permanently, they might want to try again
     }
 
-    // Clear the deferred prompt
+    // Clear the deferred prompt and hide modal
     deferredPrompt = null;
-  });
-}
-
-// ===== Handle Dismiss Button Click =====
-if (dismissBtn) {
-  dismissBtn.addEventListener('click', () => {
-    localStorage.setItem(CACHE_KEY, 'true');
-    hideInstallBanner();
+    hideInstallModal();
   });
 }
 
@@ -172,13 +113,13 @@ if (dismissBtn) {
 window.addEventListener('appinstalled', (event) => {
   console.log('GFHF was installed successfully');
   localStorage.setItem(CACHE_KEY, 'true');
-  hideInstallBanner();
+  hideInstallModal();
   deferredPrompt = null;
 });
 
-// ===== Hide banner if already installed on load =====
+// ===== Hide modal if already installed on load =====
 if (isAppInstalled()) {
-  hideInstallBanner();
+  hideInstallModal();
 }
 
 // ===== Initialize on DOM ready =====

@@ -1,12 +1,14 @@
-# Community Post Features - TODO
+# Chat Image Upload Fixes - ✅ ALL DONE
 
-## ✅ Step 1: Update community.html - Add Font Awesome CDN
-## ✅ Step 2: Update community.js - Add `increment` import
-## ✅ Step 3: Update community.js - Add `impressions: 0` to new post creation
-## ✅ Step 4: Update community.js - Add `formatImpressionCount()` utility
-## ✅ Step 5: Update community.js - Add `trackPostImpression()` with dedup
-## ✅ Step 6: Update community.js - Update `renderPostCard` stats bar with impressions
-## ✅ Step 7: Update community.js - Share modal and share button wiring
-## ✅ Step 8: Update community.js - Track impressions in `loadFeed`
-## ✅ Step 9: Update style.css - Share modal and impression styles
+## ✅ Step 1: Fix `listenToChat` in community.js
+- Handle both field naming conventions (`authorId`/`userId`, `authorName`/`username`, `createdAt`/`timestamp`)
+- Ensure images render properly in community chat messages
+
+## ✅ Step 2: Fix floating chat (teammate) listener in community.js
+- Add image rendering with `.chat-shared-image` class and `onclick="window.open(...)"`
+- Check if `msg.imageUrl` is present and non-empty before appending
+- Also fixed `authorId`/`userId` dual field support in floating chat own-message detection
+
+## ✅ Step 3: `.chat-shared-image` in style.css already had correct values
+- `max-width: 200px; max-height: 200px; margin-top: 6px;` were already present
 

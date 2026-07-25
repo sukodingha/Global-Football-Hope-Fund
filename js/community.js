@@ -411,6 +411,7 @@ function renderPostCard(post) {
   const card = document.createElement("div");
   card.className = "fb-post-card";
   card.dataset.postId = post.id;
+  card.dataset.authorId = post.authorId || "";
   const isLiked = currentUser && post.likes?.includes(currentUser.uid);
   const likeCount = post.likes?.length || 0;
   const commentCount = post.comments?.length || 0;
@@ -480,14 +481,15 @@ function renderPostCard(post) {
     card.appendChild(imgWrap);
   }
 
-  // Stats bar with impressions
+  // Stats bar with impressions + HP earned tooltip
   const impressionCount = post.impressions || 0;
+  const earnedHP = impressionCount * 0.0001;
   const statsBar = document.createElement("div");
   statsBar.className = "fb-post-stats";
   statsBar.innerHTML = `
     <span>👍 ${likeCount}</span>
     <span>💬 ${commentCount} comments</span>
-    <span>👁 ${formatImpressionCount(impressionCount)} views</span>
+    <span title="👁️ ${formatImpressionCount(impressionCount)} views — <span class="hp-symbol">H</span>P Earned: ${earnedHP.toFixed(4)}">👁 ${formatImpressionCount(impressionCount)} (<span class="hp-symbol">H</span>${earnedHP.toFixed(4)})</span>
   `;
   card.appendChild(statsBar);
 
@@ -804,12 +806,24 @@ function formatImpressionCount(count) {
 // ===== TRACK POST IMPRESSION (deduplicated per session) =====
 const trackedImpressions = new Set();
 
-async function trackPostImpression(postId) {
+async function trackPostImpression(postId, authorId) {
   if (!postId || trackedImpressions.has(postId)) return;
   trackedImpressions.add(postId);
   try {
+    // Increment the impression counter on the post
     const ref = doc(db, "posts", postId);
     await updateDoc(ref, { impressions: increment(1) });
+
+    // Credit HP to the post creator: 0.1 HP per 1,000 impressions = 0.0001 per impression
+    if (authorId && authorId !== (currentUser?.uid || "local_user")) {
+      const earnedHP = 0.0001;
+      await updateDoc(doc(db, "users", authorId), {
+        hopePoints: increment(earnedHP)
+      });
+      // Invalidate cache so the creator's HP badge refreshes
+      invalidateHPCache(authorId);
+      delete hpBadgeCache[authorId];
+    }
   } catch (err) {
     // Silently fail — impressions are non-critical
     console.debug("Impression track failed for", postId, err);
@@ -947,14 +961,15 @@ async function loadFeed() {
       const authorId = el.dataset.authorId;
       resolveHPBadge(authorId, el);
     });
-    // Set up IntersectionObserver to track post impressions
+    // Set up IntersectionObserver to track post impressions + HP rewards
     const impressionObserver = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
         if (entry.isIntersecting) {
           const card = entry.target;
           const postId = card.dataset.postId;
+          const authorId = card.dataset.authorId;
           if (postId) {
-            trackPostImpression(postId);
+            trackPostImpression(postId, authorId);
           }
           impressionObserver.unobserve(card);
         }

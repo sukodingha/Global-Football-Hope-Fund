@@ -67,11 +67,13 @@
     </nav>
   </header>
 
-  <div id="appInstallBanner" class="app-install-banner" hidden>
-    <div><strong>Install GFHF</strong><p>Get the admin panel on your device.</p></div>
-    <div class="app-install-actions">
-      <button id="installBannerBtn" class="mini-btn" type="button">Install</button>
-      <button id="dismissBannerBtn" class="mini-btn secondary" type="button">Later</button>
+  <!-- ===== PWA INSTALL MODAL ===== -->
+  <div id="pwa-install-modal" class="fb-modal" hidden>
+    <div class="fb-modal-overlay"></div>
+    <div class="fb-modal-card" style="max-width:400px;text-align:center;padding:32px 24px;">
+      <h3 style="margin:0 0 8px;color:#0b2d4d;">📲 Install GFHF</h3>
+      <p style="font-size:14px;color:#475569;margin:0 0 20px;line-height:1.5;">Install the app for faster admin access and real-time updates.</p>
+      <button id="pwa-install-btn" class="btn" type="button" style="margin:0;padding:14px 32px;font-size:16px;width:100%;">Install App</button>
     </div>
   </div>
 

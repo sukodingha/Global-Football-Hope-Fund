@@ -2825,7 +2825,33 @@ footer {
     margin-top: 8px;
 }
 
-/* ===== INSTALL APP NAV BUTTON ===== */
+/* ===== PWA INSTALL MODAL ===== */
+#pwa-install-modal .fb-modal-card {
+  max-width: 400px;
+  text-align: center;
+  padding: 32px 24px;
+}
+
+#pwa-install-modal .fb-modal-card h3 {
+  margin: 0 0 8px;
+  color: #0b2d4d;
+}
+
+#pwa-install-modal .fb-modal-card p {
+  font-size: 14px;
+  color: #475569;
+  margin: 0 0 20px;
+  line-height: 1.5;
+}
+
+#pwa-install-modal .btn {
+  margin: 0;
+  padding: 14px 32px;
+  font-size: 16px;
+  width: 100%;
+}
+
+/* ===== INSTALL APP NAV BUTTON (deprecated - kept for backward compat) ===== */
 .install-nav-btn {
     background: linear-gradient(90deg, #00c853, #00b34a);
     color: white;
