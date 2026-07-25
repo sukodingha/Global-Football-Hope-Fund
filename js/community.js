@@ -23,7 +23,7 @@ import {
 
 // ===== CONFIG =====
 const CLOUDINARY_CLOUD_NAME = "d8obkydb";
-const CLOUDINARY_UPLOAD_PRESET = "football_preset";
+const CLOUDINARY_UPLOAD_PRESET = "chat_uploads";
 const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/upload`;
 
 // ===== STATE =====
@@ -1023,6 +1023,7 @@ async function uploadAndSendChatImage(file, collectionPath, extraData = {}) {
     const res = await fetch(CLOUDINARY_UPLOAD_URL, { method: 'POST', body: formData });
     if (res.ok) {
       const data = await res.json();
+      console.log("Cloudinary response:", data);
       imageUrl = data.secure_url;
     }
   } catch (err) {
@@ -1032,15 +1033,14 @@ async function uploadAndSendChatImage(file, collectionPath, extraData = {}) {
 
   if (!imageUrl) return;
 
-  // Save message to Firestore
+  // Save message to Firestore — ONLY if imageUrl exists (prevents empty docs)
   try {
     const msgData = {
-      authorId: currentUser.uid,
-      authorName: currentUserName,
-      authorAvatar: currentUserAvatar,
+      userId: currentUser.uid,
+      username: currentUserName,
       text: "",
       imageUrl: imageUrl,
-      createdAt: serverTimestamp(),
+      timestamp: serverTimestamp(),
       ...extraData
     };
 
@@ -1058,14 +1058,6 @@ async function uploadAndSendChatImage(file, collectionPath, extraData = {}) {
       await addDoc(ref, msgData);
     } else {
       await addDoc(collection(db, collectionPath), msgData);
-    }
-
-    // Award small HP bonus for sharing an image
-    try {
-      const { awardActionBonus } = await import("./rewards.js");
-      awardActionBonus(currentUser.uid, 0.02, "USD", "donate", "chat-image-share");
-    } catch (hpErr) {
-      // Non-blocking
     }
 
   } catch (err) {
@@ -1133,12 +1125,21 @@ function listenToChat() {
     communityChatList.innerHTML = "";
     snap.docs.forEach(async (d) => {
       const m = d.data();
+      // Skip message if both text and imageUrl are empty/falsy (prevents empty bubbles)
+      if (!m.text && !m.imageUrl) return;
       const item = document.createElement("div"); item.className = "chat-message";
+      // Support both field naming conventions (userId/authorId, username/authorName, timestamp/createdAt)
+      const authorId = m.userId || m.authorId || "";
+      const authorName = m.username || m.authorName || "Guest";
+      const authorAvatar = m.authorAvatar || "👤";
+      const timestamp = m.timestamp || m.createdAt;
+      const timeDisplay = timestamp?.toMillis ? timeAgo(timestamp.toMillis()) : (timestamp ? timeAgo(timestamp) : "");
       let imageHtml = '';
-      if (m.imageUrl) {
+      if (m.imageUrl && typeof m.imageUrl === 'string' && m.imageUrl.trim() !== '') {
         imageHtml = `<img class="chat-shared-image" src="${m.imageUrl}" onclick="window.open('${m.imageUrl}', '_blank')" alt="Shared image">`;
       }
-      item.innerHTML = `<div class="chat-author">${m.authorAvatar || "👤"} ${m.authorName || "Guest"}<div class="chat-hp-placeholder" data-author-id="${m.authorId || ""}"></div></div>${imageHtml}<div class="chat-text">${m.text || ""}</div><div class="chat-time">${m.createdAt?.toMillis ? timeAgo(m.createdAt.toMillis()) : ""}</div>`;
+      const textHtml = m.text ? `<div class="chat-text">${m.text}</div>` : '';
+      item.innerHTML = `<div class="chat-author">${authorAvatar} ${authorName}<div class="chat-hp-placeholder" data-author-id="${authorId}"></div></div>${imageHtml}${textHtml}<div class="chat-time">${timeDisplay}</div>`;
       communityChatList.appendChild(item);
     });
     // Resolve HP badges for chat messages
@@ -1244,10 +1245,24 @@ function openFloatingChat(partnerId, partnerName) {
     }
     snapshot.docs.forEach((docSnap) => {
       const msg = docSnap.data();
-      const isOwn = msg.authorId === currentUser?.uid;
+      const isOwn = (msg.authorId || msg.userId) === currentUser?.uid;
       const bubble = document.createElement("div");
-      bubble.style.cssText = `padding:8px 12px;margin:4px 8px;border-radius:${isOwn ? '16px 4px 16px 16px' : '4px 16px 16px 16px'};background:${isOwn ? '#0b2d4d' : '#eef4f8'};color:${isOwn ? 'white' : '#0b2d4d'};max-width:80%;align-self:${isOwn ? 'flex-end' : 'flex-start'};font-size:14px;`;
-      bubble.textContent = msg.text || "";
+      bubble.style.cssText = `padding:8px 12px;margin:4px 8px;border-radius:${isOwn ? '16px 4px 16px 16px' : '4px 16px 16px 16px'};background:${isOwn ? '#0b2d4d' : '#eef4f8'};color:${isOwn ? 'white' : '#0b2d4d'};max-width:80%;align-self:${isOwn ? 'flex-end' : 'flex-start'};font-size:14px;display:flex;flex-direction:column;gap:4px;`;
+      // Add text content if present
+      if (msg.text) {
+        const textEl = document.createElement('span');
+        textEl.textContent = msg.text;
+        bubble.appendChild(textEl);
+      }
+      // Add image content if present and non-empty
+      if (msg.imageUrl && typeof msg.imageUrl === 'string' && msg.imageUrl.trim() !== '') {
+        const img = document.createElement('img');
+        img.className = 'chat-shared-image';
+        img.src = msg.imageUrl;
+        img.onclick = () => window.open(msg.imageUrl, '_blank');
+        img.alt = 'Shared image';
+        bubble.appendChild(img);
+      }
       floatingChatMessages.appendChild(bubble);
     });
     floatingChatMessages.scrollTop = floatingChatMessages.scrollHeight;

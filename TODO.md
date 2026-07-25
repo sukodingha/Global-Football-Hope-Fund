@@ -1,13 +1,15 @@
-# HP Reward System Implementation - Progress Tracker ✅ COMPLETE
+# Chat Image Upload Fixes - TODO
 
-## Status: All Steps Already Implemented
+## ✅ Step 1: Fix `listenToChat` in community.js
+- Handle both field naming conventions (`authorId`/`userId`, `authorName`/`username`, `createdAt`/`timestamp`)
+- Ensure images render properly in community chat messages
 
-| Step | File | Status | Details |
-|------|------|--------|---------|
-| 1 | `community.js` | ✅ Complete | Imports from rewards.js, HP badge cache, resolveHPBadge(), badges in post cards, chat messages, teammates, floating chat |
-| 2 | `dashboard.js` | ✅ Complete | checkDailyLoginBonus() on auth, renderRewardsCard() with HP display, streak, point history listener, redeem button |
-| 3 | `donate.js` | ✅ Complete | awardActionBonus() called after Paystack, PayPal, and wallet payment success |
-| 4 | `auth.js` | ✅ Complete | checkDailyLoginBonus() called in onAuthStateChanged after user signs in |
-| 5 | `style.css` | ✅ Complete | All CSS rules already present: .hp-symbol, .user-hp-badge, .rewards-card, .redeem-hp-btn etc. |
-| 6 | `dashboard.html` | ✅ Complete | Full rewards card HTML with #hpNumber, #hpStreakText, #redeemHpBtn, #pointHistoryList etc. |
+## ✅ Step 2: Fix floating chat (teammate) listener in community.js
+- Add image rendering with `.chat-shared-image` class and `onclick="window.open(...)"`
+- Check if `msg.imageUrl` is present and non-empty before appending
+
+## ✅ Step 3: Update `.chat-shared-image` in style.css
+- Set `max-width: 200px; max-height: 200px;`
+- Set `margin-top: 6px;`
+- Keep existing `min-width`, `min-height`, `border-radius`, `object-fit`, `cursor` properties
 
