@@ -8,6 +8,13 @@ import { onAuthStateChanged, signOut, updateProfile } from "https://www.gstatic.
 import { doc, getDoc, setDoc, addDoc, collection, query, where, orderBy, onSnapshot, getDocs, increment, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { updateHeaderAvatar } from "./auth.js";
 
+// Import rewards system
+import {
+  DAILY_LOGIN_BONUS, HP_PER_DOLLAR, REDEMPTION_RATE, CURRENCY_PER_REDEMPTION,
+  loadRewardData, checkDailyLoginBonus, awardActionBonus,
+  redeemHPForWallet, listenToPointHistory, loadPointHistory, getHPBadgeHTML, getUserHP, invalidateHPCache
+} from "./rewards.js";
+
 // Import shared multi-currency wallet module
 import {
   loadWalletBalance, loadAllBalances, formatCurrency, getMaskedBalance,
@@ -618,6 +625,137 @@ onAuthStateChanged(auth, async (user) => {
     `;
   }
 
+  // ===== REWARDS: Check daily login bonus =====
+  try {
+    const loginBonus = await checkDailyLoginBonus(user.uid);
+    if (loginBonus.awarded) {
+      invalidateHPCache(user.uid);
+      console.log(loginBonus.message);
+    }
+  } catch (err) {
+    console.warn('Daily login bonus check failed:', err);
+  }
+
+  // ===== REWARDS: Load and display reward data =====
+  async function renderRewardsCard() {
+    const rewardData = await loadRewardData(user.uid);
+    const hpNumber = document.getElementById('hpNumber');
+    const hpStreakText = document.getElementById('hpStreakText');
+    const redeemHpBtn = document.getElementById('redeemHpBtn');
+
+    if (hpNumber) hpNumber.textContent = rewardData.rewardPoints;
+    if (hpStreakText) {
+      const streak = rewardData.currentStreak || 0;
+      hpStreakText.textContent = streak > 0 ? `🔥 ${streak}-Day Streak` : '0-day streak';
+    }
+
+    // Update redeem button text
+    if (redeemHpBtn) {
+      const hp = rewardData.rewardPoints || 0;
+      const canRedeem = hp >= REDEMPTION_RATE;
+      redeemHpBtn.disabled = !canRedeem;
+      if (canRedeem) {
+        const maxUnits = Math.floor(hp / REDEMPTION_RATE);
+        const creditAmount = maxUnits * CURRENCY_PER_REDEMPTION;
+        redeemHpBtn.textContent = `💎 Redeem ${REDEMPTION_RATE} HP for ₦${CURRENCY_PER_REDEMPTION}.00 (${maxUnits}x available)`;
+      } else {
+        redeemHpBtn.textContent = `💎 Need ${REDEMPTION_RATE} HP to redeem (you have ${hp} HP)`;
+      }
+    }
+  }
+
+  // Initial render of rewards card
+  renderRewardsCard();
+
+  // ===== REWARDS: Point History Listener =====
+  let unsubscribePointHistory = null;
+  function setupPointHistoryListener() {
+    if (unsubscribePointHistory) unsubscribePointHistory();
+    unsubscribePointHistory = listenToPointHistory(user.uid, (points) => {
+      const historyList = document.getElementById('pointHistoryList');
+      if (!historyList) return;
+
+      if (!points || points.length === 0) {
+        historyList.innerHTML = '<p style="text-align:center;color:#94a3b8;">No point history yet.</p>';
+        return;
+      }
+
+      // Calculate total earned/spent
+      let totalEarned = 0;
+      let totalSpent = 0;
+      points.forEach(p => {
+        if (p.type === 'earned') totalEarned += p.points || 0;
+        else if (p.type === 'spent') totalSpent += p.points || 0;
+      });
+
+      const hpTotalEarned = document.getElementById('hpTotalEarned');
+      const hpTotalSpent = document.getElementById('hpTotalSpent');
+      if (hpTotalEarned) hpTotalEarned.textContent = totalEarned;
+      if (hpTotalSpent) hpTotalSpent.textContent = totalSpent;
+
+      historyList.innerHTML = points.slice(0, 10).map(p => {
+        const date = p.timestamp?.toMillis ? new Date(p.timestamp.toMillis()).toLocaleDateString() : 'Just now';
+        const sign = p.type === 'earned' ? '+' : '-';
+        const color = p.type === 'earned' ? '#22c55e' : '#ef4444';
+        return `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f1f5f9;font-size:12px;">
+          <span style="color:#64748b;">${p.reason || 'Point transaction'}</span>
+          <span style="font-weight:700;color:${color};">${sign}${p.points || 0} HP</span>
+        </div>`;
+      }).join('');
+
+      // Refresh rewards card data
+      renderRewardsCard();
+    });
+  }
+  setupPointHistoryListener();
+
+  // ===== REWARDS: Redeem HP Button =====
+  const redeemHpBtn = document.getElementById('redeemHpBtn');
+  if (redeemHpBtn) {
+    redeemHpBtn.addEventListener('click', async () => {
+      const rewardData = await loadRewardData(user.uid);
+      const hp = rewardData.rewardPoints || 0;
+      if (hp < REDEMPTION_RATE) {
+        const msg = document.getElementById('rewardsMessage');
+        if (msg) {
+          msg.textContent = `❌ You need at least ${REDEMPTION_RATE} HP to redeem. You have ${hp} HP.`;
+          msg.className = 'message error';
+        }
+        return;
+      }
+
+      // Redeem the maximum possible units
+      const units = Math.floor(hp / REDEMPTION_RATE);
+      const hpToRedeem = units * REDEMPTION_RATE;
+
+      redeemHpBtn.disabled = true;
+      redeemHpBtn.textContent = '⏳ Redeeming...';
+
+      const result = await redeemHPForWallet(user.uid, hpToRedeem, 'NGN');
+      const msg = document.getElementById('rewardsMessage');
+
+      if (result.success) {
+        if (msg) {
+          msg.textContent = `✅ Redeemed ${hpToRedeem} HP for ₦${result.walletCredited.toFixed(2)}!`;
+          msg.className = 'message success';
+        }
+        invalidateHPCache(user.uid);
+        // Refresh data
+        renderRewardsCard();
+        setupPointHistoryListener();
+        // Refresh wallet balance
+        renderWalletBalance();
+      } else {
+        if (msg) {
+          msg.textContent = `❌ ${result.error || 'Redemption failed.'}`;
+          msg.className = 'message error';
+        }
+        redeemHpBtn.disabled = false;
+        renderRewardsCard();
+      }
+    });
+  }
+
   // ===== Load existing profile photo into #currentProfilePic =====
   const existingPhotoURL = profile.photoURL || user.photoURL || "";
   if (existingPhotoURL) {
@@ -946,14 +1084,6 @@ if (!origOnAuth) {
     }
   });
 }
-
-// Render on page load
-document.addEventListener('DOMContentLoaded', () => {
-  if (auth.currentUser) {
-    renderWalletBalance();
-    setupTransactionListener(auth.currentUser.uid);
-  }
-});
 
 // ===== LIVE BTC WALLET CARD =====
 const btcBalanceDisplay = document.getElementById('btcWalletBalanceDisplay');

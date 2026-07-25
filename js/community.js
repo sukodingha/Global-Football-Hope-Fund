@@ -13,6 +13,9 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { createNotification } from "./notifications.js";
 
+// Import rewards system for HP badges
+import { getHPBadgeHTML, getUserHP, invalidateHPCache, loadRewardData } from "./rewards.js";
+
 // Import shared wallet module
 import {
   loadWalletBalance, formatCurrency, getFundWalletModalHTML, initFundWalletModal
@@ -455,6 +458,7 @@ function renderPostCard(post) {
           <strong>${post.authorName || "Anonymous"}</strong>
         </a>
         <div class="fb-post-time">${timeAgo(post.createdAt)} · ${post.interest || "General"}</div>
+        <div class="post-hp-badge-placeholder" data-author-id="${post.authorId || ""}"></div>
       </div>
       <div class="fb-post-options">•••</div>
     </div>
@@ -778,6 +782,30 @@ function escapeHtml(text) {
   return d.innerHTML;
 }
 
+// ===== HP BADGE RESOLVER =====
+// Cache HP values per user ID to avoid repeated Firestore reads
+const hpBadgeCache = {};
+
+/**
+ * Fetch and render HP badge into a placeholder element.
+ * @param {string} uid - User ID
+ * @param {HTMLElement} placeholderEl - The placeholder element to inject badge HTML into
+ */
+async function resolveHPBadge(uid, placeholderEl) {
+  if (!uid || !placeholderEl) return;
+  
+  // Check cache
+  if (hpBadgeCache[uid] !== undefined) {
+    placeholderEl.innerHTML = getHPBadgeHTML(hpBadgeCache[uid]);
+    return;
+  }
+  
+  // Fetch from Firestore
+  const hp = await getUserHP(uid);
+  hpBadgeCache[uid] = hp;
+  placeholderEl.innerHTML = getHPBadgeHTML(hp);
+}
+
 // ===== LOAD FEED =====
 async function loadFeed() {
   if (!feed) return;
@@ -798,6 +826,11 @@ async function loadFeed() {
     snapshot.docs.forEach((docSnap) => {
       const post = { id: docSnap.id, ...docSnap.data() };
       feed.appendChild(renderPostCard(post));
+    });
+    // Resolve HP badges for all post cards
+    feed.querySelectorAll('.post-hp-badge-placeholder').forEach(el => {
+      const authorId = el.dataset.authorId;
+      resolveHPBadge(authorId, el);
     });
   }, (err) => {
     console.error(err);
@@ -991,11 +1024,19 @@ function listenToChat() {
   onSnapshot(q, (snap) => {
     if (!communityChatList) return;
     communityChatList.innerHTML = "";
-    snap.docs.forEach(d => {
+    snap.docs.forEach(async (d) => {
       const m = d.data();
       const item = document.createElement("div"); item.className = "chat-message";
-      item.innerHTML = `<div class="chat-author">${m.authorAvatar || "👤"} ${m.authorName || "Guest"}</div><div class="chat-text">${m.text || ""}</div><div class="chat-time">${m.createdAt?.toMillis ? timeAgo(m.createdAt.toMillis()) : ""}</div>`;
+      item.innerHTML = `<div class="chat-author">${m.authorAvatar || "👤"} ${m.authorName || "Guest"}<div class="chat-hp-placeholder" data-author-id="${m.authorId || ""}"></div></div><div class="chat-text">${m.text || ""}</div><div class="chat-time">${m.createdAt?.toMillis ? timeAgo(m.createdAt.toMillis()) : ""}</div>`;
       communityChatList.appendChild(item);
+    });
+    // Resolve HP badges for chat messages
+    communityChatList.querySelectorAll('.chat-hp-placeholder').forEach(async (el) => {
+      const authorId = el.dataset.authorId;
+      if (authorId) {
+        const hp = await getUserHP(authorId);
+        el.innerHTML = getHPBadgeHTML(hp);
+      }
     });
   }, console.error);
 }

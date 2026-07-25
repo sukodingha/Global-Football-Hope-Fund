@@ -12,6 +12,9 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { doc, setDoc, getDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
+// Import daily login bonus from rewards system
+import { checkDailyLoginBonus } from "./rewards.js";
+
 // ===== DOM refs =====
 const registerForm = document.getElementById("registerForm");
 const loginForm = document.getElementById("loginForm");
@@ -500,6 +503,16 @@ onAuthStateChanged(auth, async (user) => {
     updateUserStatus(user, profileData);
   } else {
     updateUserStatus(user);
+  }
+
+  // Trigger daily login bonus check (awards HP if new calendar day)
+  try {
+    const bonusResult = await checkDailyLoginBonus(user.uid);
+    if (bonusResult.awarded) {
+      console.log(`🎉 ${bonusResult.message}`);
+    }
+  } catch (err) {
+    console.warn('Daily login bonus check failed:', err);
   }
 });
 

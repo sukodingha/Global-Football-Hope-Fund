@@ -166,10 +166,43 @@
                 </div>
                 <p style="font-size:13px;color:#64748b;margin:0;">Your Bitcoin balance. Auto-refreshes every 30s.</p>
             </div>
-            <!-- ===== TRANSACTION HISTORY CARD ===== -->
+            <!-- ===== HOPE POINTS REWARDS CARD ===== -->
+            <div class="form-section" id="rewardsSection">
+                <div class="rewards-card">
+                    <div class="rewards-card-header">
+                        <h3>⭐ Hope Points (HP)</h3>
+                        <span class="hp-symbol">HP</span>
+                    </div>
+                    <div class="rewards-hp-display">
+                        <span id="hpNumber" class="rewards-hp-number">0</span>
+                        <span class="rewards-hp-label"><span class="hp-symbol">HP</span>◇◇ Points</span>
+                    </div>
+                    <div class="rewards-streak-display">
+                        <span class="rewards-streak-fire">🔥</span>
+                        <span id="hpStreakText" class="rewards-streak-text">0-day streak</span>
+                    </div>
+                    <div class="rewards-stats-grid">
+                        <div class="rewards-stat-item">
+                            <div id="hpTotalEarned" class="rewards-stat-number">0</div>
+                            <div class="rewards-stat-label">Total Earned</div>
+                        </div>
+                        <div class="rewards-stat-item">
+                            <div id="hpTotalSpent" class="rewards-stat-number">0</div>
+                            <div class="rewards-stat-label">Total Spent</div>
+                        </div>
+                    </div>
+                    <button type="button" id="redeemHpBtn" class="redeem-hp-btn">💎 Redeem 500 HP for ₦1.00</button>
+                    <div id="rewardsMessage" class="message"></div>
+                    <div id="pointHistoryList" style="margin-top:6px;max-height:160px;overflow-y:auto;font-size:13px;color:#64748b;">
+                        <p style="text-align:center;">Loading point history...</p>
+                    </div>
+                </div>
+            </div>
+
+<!-- ===== TRANSACTION HISTORY CARD ===== -->
             <div class="form-section" id="transactionHistorySection">
                 <h3>📋 Transaction History</h3>
-                <div id="transaction-history-list">
+                <div id="transactionHistoryContainer">
                     <p class="helper-text">Loading transactions...</p>
                 </div>
             </div>

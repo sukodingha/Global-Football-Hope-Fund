@@ -16,6 +16,9 @@ import {
   loadWalletBalance, deductFromWallet, formatCurrency, getFundWalletModalHTML, initFundWalletModal
 } from "./wallet.js";
 
+// Import rewards system for HP bonuses
+import { awardActionBonus } from "./rewards.js";
+
 // ===== DOM Refs =====
 const presetBtns = document.querySelectorAll(".donation-preset-btn");
 const customAmount = document.getElementById("customAmount");
@@ -186,6 +189,13 @@ window.payWithPaystack = function () {
         method: "paystack"
       });
 
+      // Award HP bonus for donation
+      if (auth.currentUser) {
+        awardActionBonus(auth.currentUser.uid, data.amount, 'USD', 'donate', response.reference).catch(err => {
+          console.warn('HP donation bonus error:', err);
+        });
+      }
+
       // Reset form
       donorName.value = "";
       donorEmail.value = "";
@@ -252,7 +262,7 @@ function initPayPalButton() {
             "success"
           );
 
-          // Save to Firestore
+// Save to Firestore
           saveDonationRecord({
             name: payerName,
             email: payerEmail,
@@ -261,6 +271,13 @@ function initPayPalButton() {
             paymentRef: details.id,
             method: "paypal"
           });
+
+          // Award HP bonus for donation via PayPal
+          if (auth.currentUser) {
+            awardActionBonus(auth.currentUser.uid, formData.amount, 'USD', 'donate', details.id).catch(err => {
+              console.warn('HP donation bonus error:', err);
+            });
+          }
 
           // Reset form
           donorName.value = "";
@@ -359,7 +376,7 @@ async function processWalletPayment() {
       "success"
     );
 
-    // Save donation record
+// Save donation record
     saveDonationRecord({
       name: data.name,
       email: data.email,
@@ -368,6 +385,13 @@ async function processWalletPayment() {
       paymentRef: result.reference || "wallet-donation",
       method: "wallet"
     });
+
+    // Award HP bonus for donation via wallet
+    if (user) {
+      awardActionBonus(user.uid, data.amount, 'USD', 'donate', 'wallet-donation').catch(err => {
+        console.warn('HP donation bonus error:', err);
+      });
+    }
 
     // Reset form
     donorName.value = "";
