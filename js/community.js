@@ -1002,8 +1002,115 @@ if (dmChatForm) {
   });
 }
 
+// ===== CLOUDINARY CHAT IMAGE UPLOAD =====
+/**
+ * Reusable function: upload an image to Cloudinary, then save a chat message
+ * with the image URL to the specified Firestore collection.
+ * @param {File} file - The image file to upload
+ * @param {string} collectionPath - Firestore collection path (e.g., "communityChat" or "liveChats/chatKey/messages")
+ * @param {object} extraData - Additional data to include in the message doc
+ */
+async function uploadAndSendChatImage(file, collectionPath, extraData = {}) {
+  if (!currentUser || !file) return;
+
+  // Upload to Cloudinary
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
+  let imageUrl = null;
+  try {
+    const res = await fetch(CLOUDINARY_UPLOAD_URL, { method: 'POST', body: formData });
+    if (res.ok) {
+      const data = await res.json();
+      imageUrl = data.secure_url;
+    }
+  } catch (err) {
+    console.error('Chat image upload failed:', err);
+    return;
+  }
+
+  if (!imageUrl) return;
+
+  // Save message to Firestore
+  try {
+    const msgData = {
+      authorId: currentUser.uid,
+      authorName: currentUserName,
+      authorAvatar: currentUserAvatar,
+      text: "",
+      imageUrl: imageUrl,
+      createdAt: serverTimestamp(),
+      ...extraData
+    };
+
+    // If it's a subcollection path (contains /), parse it
+    if (collectionPath.includes('/')) {
+      const parts = collectionPath.split('/');
+      let ref = db;
+      for (let i = 0; i < parts.length; i++) {
+        if (i % 2 === 0) {
+          ref = collection(ref, parts[i]);
+        } else {
+          ref = doc(ref, parts[i]);
+        }
+      }
+      await addDoc(ref, msgData);
+    } else {
+      await addDoc(collection(db, collectionPath), msgData);
+    }
+
+    // Award small HP bonus for sharing an image
+    try {
+      const { awardActionBonus } = await import("./rewards.js");
+      awardActionBonus(currentUser.uid, 0.02, "USD", "donate", "chat-image-share");
+    } catch (hpErr) {
+      // Non-blocking
+    }
+
+  } catch (err) {
+    console.error('Chat image save failed:', err);
+  }
+}
+
 // ===== COMMUNITY CHAT =====
 if (communityChatForm) {
+  // Add hidden file input for image upload
+  const communityFileInput = document.createElement('input');
+  communityFileInput.type = 'file';
+  communityFileInput.accept = 'image/*';
+  communityFileInput.style.display = 'none';
+  communityFileInput.id = 'communityChatFileInput';
+  communityChatForm.appendChild(communityFileInput);
+
+  // Add camera icon button next to the Send button
+  const communityCameraBtn = document.createElement('button');
+  communityCameraBtn.type = 'button';
+  communityCameraBtn.className = 'chat-camera-btn';
+  communityCameraBtn.textContent = '📷';
+  communityCameraBtn.title = 'Upload image';
+  communityCameraBtn.style.cssText = 'padding:8px 10px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:50%;font-size:18px;cursor:pointer;transition:background 0.2s;line-height:1;';
+  // Insert before the send button
+  const communitySendBtn = communityChatForm.querySelector('.btn');
+  if (communitySendBtn) {
+    communityChatForm.insertBefore(communityCameraBtn, communitySendBtn);
+  } else {
+    communityChatForm.appendChild(communityCameraBtn);
+  }
+
+  communityCameraBtn.addEventListener('click', () => communityFileInput.click());
+
+  communityFileInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    communityCameraBtn.disabled = true;
+    communityCameraBtn.textContent = '⏳';
+    await uploadAndSendChatImage(file, 'communityChat');
+    communityCameraBtn.disabled = false;
+    communityCameraBtn.textContent = '📷';
+    communityFileInput.value = '';
+  });
+
   communityChatForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     if (!currentUser) return;
@@ -1027,7 +1134,11 @@ function listenToChat() {
     snap.docs.forEach(async (d) => {
       const m = d.data();
       const item = document.createElement("div"); item.className = "chat-message";
-      item.innerHTML = `<div class="chat-author">${m.authorAvatar || "👤"} ${m.authorName || "Guest"}<div class="chat-hp-placeholder" data-author-id="${m.authorId || ""}"></div></div><div class="chat-text">${m.text || ""}</div><div class="chat-time">${m.createdAt?.toMillis ? timeAgo(m.createdAt.toMillis()) : ""}</div>`;
+      let imageHtml = '';
+      if (m.imageUrl) {
+        imageHtml = `<img class="chat-shared-image" src="${m.imageUrl}" onclick="window.open('${m.imageUrl}', '_blank')" alt="Shared image">`;
+      }
+      item.innerHTML = `<div class="chat-author">${m.authorAvatar || "👤"} ${m.authorName || "Guest"}<div class="chat-hp-placeholder" data-author-id="${m.authorId || ""}"></div></div>${imageHtml}<div class="chat-text">${m.text || ""}</div><div class="chat-time">${m.createdAt?.toMillis ? timeAgo(m.createdAt.toMillis()) : ""}</div>`;
       communityChatList.appendChild(item);
     });
     // Resolve HP badges for chat messages
@@ -1163,6 +1274,42 @@ if (floatingChatClose) {
 
 // Floating chat form submit
 if (floatingChatForm) {
+  // Add camera button for image upload in floating chat
+  const floatingFileInput = document.createElement('input');
+  floatingFileInput.type = 'file';
+  floatingFileInput.accept = 'image/*';
+  floatingFileInput.style.display = 'none';
+  floatingFileInput.id = 'floatingChatFileInput';
+  floatingChatForm.appendChild(floatingFileInput);
+
+  const floatingCameraBtn = document.createElement('button');
+  floatingCameraBtn.type = 'button';
+  floatingCameraBtn.className = 'chat-camera-btn';
+  floatingCameraBtn.textContent = '📷';
+  floatingCameraBtn.title = 'Upload image';
+  floatingCameraBtn.style.cssText = 'padding:6px 8px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:50%;font-size:16px;cursor:pointer;width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;line-height:1;';
+  const floatingSendBtn = floatingChatForm.querySelector('.floating-chat-send-btn');
+  if (floatingSendBtn) {
+    floatingChatForm.insertBefore(floatingCameraBtn, floatingSendBtn);
+  } else {
+    floatingChatForm.appendChild(floatingCameraBtn);
+  }
+
+  floatingCameraBtn.addEventListener('click', () => floatingFileInput.click());
+
+  floatingFileInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (!activeFloatingChatPartnerId || !currentUser) return;
+    const chatKey = [currentUser.uid, activeFloatingChatPartnerId].sort().join("_");
+    floatingCameraBtn.disabled = true;
+    floatingCameraBtn.textContent = '⏳';
+    await uploadAndSendChatImage(file, `liveChats/${chatKey}/messages`);
+    floatingCameraBtn.disabled = false;
+    floatingCameraBtn.textContent = '📷';
+    floatingFileInput.value = '';
+  });
+
   floatingChatForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     if (!activeFloatingChatPartnerId || !floatingChatInput || !currentUser) return;

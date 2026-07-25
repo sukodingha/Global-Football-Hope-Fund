@@ -625,7 +625,7 @@ onAuthStateChanged(auth, async (user) => {
     `;
   }
 
-  // ===== REWARDS: Check daily login bonus =====
+// ===== REWARDS: Check daily login bonus =====
   try {
     const loginBonus = await checkDailyLoginBonus(user.uid);
     if (loginBonus.awarded) {
@@ -636,125 +636,8 @@ onAuthStateChanged(auth, async (user) => {
     console.warn('Daily login bonus check failed:', err);
   }
 
-  // ===== REWARDS: Load and display reward data =====
-  async function renderRewardsCard() {
-    const rewardData = await loadRewardData(user.uid);
-    const hpNumber = document.getElementById('hpNumber');
-    const hpStreakText = document.getElementById('hpStreakText');
-    const redeemHpBtn = document.getElementById('redeemHpBtn');
-
-    if (hpNumber) hpNumber.textContent = rewardData.rewardPoints;
-    if (hpStreakText) {
-      const streak = rewardData.currentStreak || 0;
-      hpStreakText.textContent = streak > 0 ? `🔥 ${streak}-Day Streak` : '0-day streak';
-    }
-
-// Update redeem button text
-    if (redeemHpBtn) {
-      const hp = rewardData.rewardPoints || 0;
-      const canRedeem = hp >= REDEMPTION_RATE;
-      redeemHpBtn.disabled = !canRedeem;
-      if (canRedeem) {
-        const maxUnits = Math.floor(hp / REDEMPTION_RATE);
-        const creditAmount = maxUnits * CURRENCY_PER_REDEMPTION;
-        redeemHpBtn.textContent = `💎 Redeem ${REDEMPTION_RATE} HP for $${creditAmount.toFixed(2)} (${maxUnits}x available)`;
-      } else {
-        redeemHpBtn.textContent = `💎 Need ${REDEMPTION_RATE} HP to redeem (you have ${hp} HP)`;
-      }
-    }
-  }
-
-  // Initial render of rewards card
-  renderRewardsCard();
-
-  // ===== REWARDS: Point History Listener =====
-  let unsubscribePointHistory = null;
-  function setupPointHistoryListener() {
-    if (unsubscribePointHistory) unsubscribePointHistory();
-    unsubscribePointHistory = listenToPointHistory(user.uid, (points) => {
-      const historyList = document.getElementById('pointHistoryList');
-      if (!historyList) return;
-
-      if (!points || points.length === 0) {
-        historyList.innerHTML = '<p style="text-align:center;color:#94a3b8;">No point history yet.</p>';
-        return;
-      }
-
-      // Calculate total earned/spent
-      let totalEarned = 0;
-      let totalSpent = 0;
-      points.forEach(p => {
-        if (p.type === 'earned') totalEarned += p.points || 0;
-        else if (p.type === 'spent') totalSpent += p.points || 0;
-      });
-
-      const hpTotalEarned = document.getElementById('hpTotalEarned');
-      const hpTotalSpent = document.getElementById('hpTotalSpent');
-      if (hpTotalEarned) hpTotalEarned.textContent = totalEarned;
-      if (hpTotalSpent) hpTotalSpent.textContent = totalSpent;
-
-      historyList.innerHTML = points.slice(0, 10).map(p => {
-        const date = p.timestamp?.toMillis ? new Date(p.timestamp.toMillis()).toLocaleDateString() : 'Just now';
-        const sign = p.type === 'earned' ? '+' : '-';
-        const color = p.type === 'earned' ? '#22c55e' : '#ef4444';
-        return `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f1f5f9;font-size:12px;">
-          <span style="color:#64748b;">${p.reason || 'Point transaction'}</span>
-          <span style="font-weight:700;color:${color};">${sign}${p.points || 0} HP</span>
-        </div>`;
-      }).join('');
-
-      // Refresh rewards card data
-      renderRewardsCard();
-    });
-  }
-  setupPointHistoryListener();
-
-  // ===== REWARDS: Redeem HP Button =====
-  const redeemHpBtn = document.getElementById('redeemHpBtn');
-  if (redeemHpBtn) {
-    redeemHpBtn.addEventListener('click', async () => {
-      const rewardData = await loadRewardData(user.uid);
-      const hp = rewardData.rewardPoints || 0;
-      if (hp < REDEMPTION_RATE) {
-        const msg = document.getElementById('rewardsMessage');
-        if (msg) {
-          msg.textContent = `❌ You need at least ${REDEMPTION_RATE} HP to redeem. You have ${hp} HP.`;
-          msg.className = 'message error';
-        }
-        return;
-      }
-
-      // Redeem the maximum possible units
-      const units = Math.floor(hp / REDEMPTION_RATE);
-      const hpToRedeem = units * REDEMPTION_RATE;
-
-      redeemHpBtn.disabled = true;
-      redeemHpBtn.textContent = '⏳ Redeeming...';
-
-      const result = await redeemHPForWallet(user.uid, hpToRedeem, 'NGN');
-      const msg = document.getElementById('rewardsMessage');
-
-      if (result.success) {
-        if (msg) {
-          msg.textContent = `✅ Redeemed ${hpToRedeem} HP for ₦${result.walletCredited.toFixed(2)}!`;
-          msg.className = 'message success';
-        }
-        invalidateHPCache(user.uid);
-        // Refresh data
-        renderRewardsCard();
-        setupPointHistoryListener();
-        // Refresh wallet balance
-        renderWalletBalance();
-      } else {
-        if (msg) {
-          msg.textContent = `❌ ${result.error || 'Redemption failed.'}`;
-          msg.className = 'message error';
-        }
-        redeemHpBtn.disabled = false;
-        renderRewardsCard();
-      }
-    });
-  }
+  // ===== REWARDS: Render the rewards card with full data =====
+  renderRewardsCard(user.uid);
 
   // ===== Load existing profile photo into #currentProfilePic =====
   const existingPhotoURL = profile.photoURL || user.photoURL || "";
@@ -1020,6 +903,149 @@ function setupTransactionListener(userId) {
     }
   }
 })();
+
+// ===== HP / REWARDS SYSTEM: Wire up the Rewards Card =====
+let unsubscribePointHistory = null;
+
+/**
+ * Render the rewards card with current HP, streak, and point history
+ */
+async function renderRewardsCard(userId) {
+  const hpNumberEl = document.getElementById('hpNumber');
+  const hpStreakText = document.getElementById('hpStreakText');
+  const hpTotalEarned = document.getElementById('hpTotalEarned');
+  const hpTotalSpent = document.getElementById('hpTotalSpent');
+  const redeemBtn = document.getElementById('redeemHpBtn');
+  const rewardsMsg = document.getElementById('rewardsMessage');
+  const pointHistoryList = document.getElementById('pointHistoryList');
+
+  if (!hpNumberEl || !userId) return;
+
+  try {
+    const rewardData = await loadRewardData(userId);
+    const hp = rewardData.rewardPoints || 0;
+    const streak = rewardData.currentStreak || 0;
+
+    // Update HP display
+    hpNumberEl.textContent = hp;
+    hpStreakText.textContent = `🔥 ${streak}-Day Streak`;
+
+    // Update redeem button text
+    if (redeemBtn) {
+      const canRedeem = hp >= REDEMPTION_RATE;
+      redeemBtn.disabled = !canRedeem;
+      if (canRedeem) {
+        const maxRedemptions = Math.floor(hp / REDEMPTION_RATE);
+        const totalCredit = maxRedemptions * CURRENCY_PER_REDEMPTION;
+        redeemBtn.textContent = `💎 Redeem ${REDEMPTION_RATE} HP for ₦${CURRENCY_PER_REDEMPTION.toFixed(2)} (${maxRedemptions}x available)`;
+      } else {
+        redeemBtn.textContent = `💎 Need ${REDEMPTION_RATE} HP to redeem (${hp} / ${REDEMPTION_RATE})`;
+      }
+    }
+  } catch (err) {
+    console.warn('Could not load reward data:', err);
+  }
+
+  // Load point history
+  if (pointHistoryList) {
+    if (unsubscribePointHistory) {
+      unsubscribePointHistory();
+      unsubscribePointHistory = null;
+    }
+
+    pointHistoryList.innerHTML = '<p style="text-align:center;color:#94a3b8;">Loading point history...</p>';
+
+    // Listen to point history in real-time
+    unsubscribePointHistory = listenToPointHistory(userId, (points) => {
+      if (!pointHistoryList) return;
+
+      let totalEarned = 0;
+      let totalSpent = 0;
+
+      if (!points || points.length === 0) {
+        pointHistoryList.innerHTML = '<p style="text-align:center;color:#94a3b8;">No HP activity yet. Start earning by logging in daily or funding your wallet!</p>';
+      } else {
+        pointHistoryList.innerHTML = points.map(p => {
+          const isEarned = p.type === 'earned';
+          const pts = p.points || 0;
+          if (isEarned) totalEarned += pts;
+          else totalSpent += pts;
+
+          const symbol = isEarned ? '✨' : '💸';
+          const sign = isEarned ? '+' : '-';
+          const color = isEarned ? '#22c55e' : '#ef4444';
+          const dateStr = p.timestamp?.toMillis
+            ? new Date(p.timestamp.toMillis()).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+            : '';
+
+          return `<div style="display:flex;justify-content:space-between;padding:6px 8px;border-bottom:1px solid #f1f5f9;font-size:13px;">
+            <span>${symbol} ${p.reason || 'HP Activity'}</span>
+            <span style="color:${color};font-weight:700;">${sign}${pts} HP</span>
+            ${dateStr ? `<span style="color:#94a3b8;font-size:11px;">${dateStr}</span>` : ''}
+          </div>`;
+        }).join('');
+      }
+
+      // Update totals
+      if (hpTotalEarned) hpTotalEarned.textContent = totalEarned;
+      if (hpTotalSpent) hpTotalSpent.textContent = totalSpent;
+    });
+  }
+
+  // Wire up Redeem button
+  if (redeemBtn && !redeemBtn._listenerAttached) {
+    redeemBtn._listenerAttached = true;
+    redeemBtn.addEventListener('click', async () => {
+      if (!rewardsMsg) return;
+
+      // Get current HP
+      const rewardData = await loadRewardData(userId);
+      const hp = rewardData.rewardPoints || 0;
+
+      if (hp < REDEMPTION_RATE) {
+        rewardsMsg.className = 'message error';
+        rewardsMsg.textContent = `❌ Insufficient HP. You need at least ${REDEMPTION_RATE} HP.`;
+        rewardsMsg.style.display = 'block';
+        setTimeout(() => { rewardsMsg.style.display = 'none'; }, 4000);
+        return;
+      }
+
+      const maxRedemptions = Math.floor(hp / REDEMPTION_RATE);
+      const hpToRedeem = maxRedemptions * REDEMPTION_RATE;
+
+      rewardsMsg.className = 'message success';
+      rewardsMsg.textContent = `⏳ Redeeming ${hpToRedeem} HP for ${CURRENCY_PER_REDEMPTION * maxRedemptions} NGN...`;
+      rewardsMsg.style.display = 'block';
+
+      try {
+        const result = await redeemHPForWallet(userId, hpToRedeem, 'NGN');
+
+        if (result.success) {
+          rewardsMsg.className = 'message success';
+          rewardsMsg.textContent = `✅ ${result.message}`;
+          rewardsMsg.style.display = 'block';
+
+          // Refresh the rewards card and wallet balance
+          await renderRewardsCard(userId);
+          await renderWalletBalance();
+
+          setTimeout(() => { rewardsMsg.style.display = 'none'; }, 5000);
+        } else {
+          rewardsMsg.className = 'message error';
+          rewardsMsg.textContent = `❌ ${result.error || 'Redemption failed.'}`;
+          rewardsMsg.style.display = 'block';
+          setTimeout(() => { rewardsMsg.style.display = 'none'; }, 4000);
+        }
+      } catch (err) {
+        console.error('Redemption error:', err);
+        rewardsMsg.className = 'message error';
+        rewardsMsg.textContent = '❌ Redemption failed. Please try again.';
+        rewardsMsg.style.display = 'block';
+        setTimeout(() => { rewardsMsg.style.display = 'none'; }, 4000);
+      }
+    });
+  }
+}
 
 // ===== FUND WALLET MODAL (Multi-Currency via shared module) =====
 // Initialize the shared multi-currency fund wallet modal
