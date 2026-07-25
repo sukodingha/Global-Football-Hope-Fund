@@ -9,7 +9,7 @@ import { auth, db } from "./firebase.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   collection, addDoc, query, where, orderBy, onSnapshot, limit,
-  serverTimestamp, doc, updateDoc, arrayUnion, getDoc, getDocs, deleteDoc
+  serverTimestamp, doc, updateDoc, arrayUnion, getDoc, getDocs, deleteDoc, increment
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { createNotification } from "./notifications.js";
 
@@ -305,6 +305,7 @@ if (postModalSubmit) {
         imageUrl: imageUrl || null,
         likes: [],
         comments: [],
+        impressions: 0,
         createdAt: serverTimestamp()
       });
 
@@ -409,6 +410,7 @@ function timeAgo(timestamp) {
 function renderPostCard(post) {
   const card = document.createElement("div");
   card.className = "fb-post-card";
+  card.dataset.postId = post.id;
   const isLiked = currentUser && post.likes?.includes(currentUser.uid);
   const likeCount = post.likes?.length || 0;
   const commentCount = post.comments?.length || 0;
@@ -478,12 +480,14 @@ function renderPostCard(post) {
     card.appendChild(imgWrap);
   }
 
-  // Stats bar
+  // Stats bar with impressions
+  const impressionCount = post.impressions || 0;
   const statsBar = document.createElement("div");
   statsBar.className = "fb-post-stats";
   statsBar.innerHTML = `
     <span>👍 ${likeCount}</span>
     <span>💬 ${commentCount} comments</span>
+    <span>👁 ${formatImpressionCount(impressionCount)} views</span>
   `;
   card.appendChild(statsBar);
 
@@ -619,7 +623,14 @@ function renderPostCard(post) {
     }
   });
 
-  // Comment submit — store commentId so reply/emoji handlers can match it
+  // Share handler — opens the rich share modal with WhatsApp, X, Facebook, Telegram links
+  const shareBtn = actions.querySelector('[data-action="share"]');
+  shareBtn.addEventListener("click", () => {
+    if (!currentUser) { document.getElementById("authModal")?.classList.add("auth-modal--open"); return; }
+    openShareModal(post);
+  });
+
+  // Comment submit
   commentForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     if (!currentUser) { document.getElementById("authModal")?.classList.add("auth-modal--open"); return; }
@@ -776,6 +787,110 @@ function renderPostCard(post) {
   return card;
 }
 
+// ===== IMPRESSION COUNT FORMATTING =====
+function formatImpressionCount(count) {
+  if (!count && count !== 0) return "0";
+  const num = typeof count === 'number' ? count : parseInt(count, 10) || 0;
+  if (num === 0) return "0";
+  if (num < 1000) return num.toString();
+  if (num < 1000000) {
+    const val = (num / 1000).toFixed(1);
+    return val.endsWith('.0') ? val.slice(0, -2) + 'k' : val + 'k';
+  }
+  const val = (num / 1000000).toFixed(1);
+  return val.endsWith('.0') ? val.slice(0, -2) + 'M' : val + 'M';
+}
+
+// ===== TRACK POST IMPRESSION (deduplicated per session) =====
+const trackedImpressions = new Set();
+
+async function trackPostImpression(postId) {
+  if (!postId || trackedImpressions.has(postId)) return;
+  trackedImpressions.add(postId);
+  try {
+    const ref = doc(db, "posts", postId);
+    await updateDoc(ref, { impressions: increment(1) });
+  } catch (err) {
+    // Silently fail — impressions are non-critical
+    console.debug("Impression track failed for", postId, err);
+  }
+}
+
+// ===== SHARE MODAL =====
+function openShareModal(post) {
+  // Remove existing share modal if any
+  const oldModal = document.getElementById('sharePostModal');
+  if (oldModal) oldModal.remove();
+
+  const pageUrl = window.location.href.split('?')[0].split('#')[0];
+  const postUrl = `${pageUrl}?post=${encodeURIComponent(post.id)}`;
+  const text = encodeURIComponent(post.rawText || post.text || "Check out this post on GFHF!");
+  const shareTitle = encodeURIComponent("Global Football Hope Fund");
+
+  const modal = document.createElement('div');
+  modal.id = 'sharePostModal';
+  modal.className = 'fb-modal';
+  modal.style.display = 'flex';
+  modal.innerHTML = `
+    <div class="fb-modal-overlay" id="shareModalOverlay"></div>
+    <div class="fb-modal-card share-modal-card">
+      <div class="fb-modal-header">
+        <h3><i class="fas fa-share-alt" style="margin-right:8px;"></i> Share Post</h3>
+        <button class="fb-modal-close" id="shareModalClose">&times;</button>
+      </div>
+      <div class="share-modal-body">
+        <p style="color:#64748b;font-size:14px;margin-bottom:16px;">Share this post with your friends and followers!</p>
+        <div class="share-buttons-grid">
+          <a href="https://wa.me/?text=${encodeURIComponent(postUrl + ' - ' + (post.rawText || post.text || ''))}" target="_blank" rel="noopener noreferrer" class="share-btn share-btn-whatsapp">
+            <i class="fab fa-whatsapp"></i>
+            <span>WhatsApp</span>
+          </a>
+          <a href="https://twitter.com/intent/tweet?text=${text}&url=${encodeURIComponent(postUrl)}" target="_blank" rel="noopener noreferrer" class="share-btn share-btn-x">
+            <i class="fab fa-x-twitter"></i>
+            <span>X / Twitter</span>
+          </a>
+          <a href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(postUrl)}" target="_blank" rel="noopener noreferrer" class="share-btn share-btn-facebook">
+            <i class="fab fa-facebook"></i>
+            <span>Facebook</span>
+          </a>
+          <a href="https://t.me/share/url?url=${encodeURIComponent(postUrl)}&text=${text}" target="_blank" rel="noopener noreferrer" class="share-btn share-btn-telegram">
+            <i class="fab fa-telegram"></i>
+            <span>Telegram</span>
+          </a>
+        </div>
+        <div class="share-link-copy">
+          <input type="text" id="shareLinkInput" value="${postUrl}" readonly>
+          <button id="copyLinkBtn" class="btn"><i class="fas fa-copy"></i> Copy</button>
+        </div>
+        <div id="copyToast" class="copy-toast" style="display:none;">✅ Link copied!</div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  // Close handlers
+  document.getElementById('shareModalClose').addEventListener('click', () => modal.remove());
+  document.getElementById('shareModalOverlay').addEventListener('click', () => modal.remove());
+
+  // Copy link with toast
+  document.getElementById('copyLinkBtn').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(postUrl);
+      const toast = document.getElementById('copyToast');
+      toast.style.display = 'block';
+      setTimeout(() => { toast.style.display = 'none'; }, 2500);
+    } catch {
+      // Fallback
+      const input = document.getElementById('shareLinkInput');
+      input.select();
+      document.execCommand('copy');
+      const toast = document.getElementById('copyToast');
+      toast.style.display = 'block';
+      setTimeout(() => { toast.style.display = 'none'; }, 2500);
+    }
+  });
+}
+
 function escapeHtml(text) {
   const d = document.createElement("div");
   d.textContent = text;
@@ -831,6 +946,22 @@ async function loadFeed() {
     feed.querySelectorAll('.post-hp-badge-placeholder').forEach(el => {
       const authorId = el.dataset.authorId;
       resolveHPBadge(authorId, el);
+    });
+    // Set up IntersectionObserver to track post impressions
+    const impressionObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const card = entry.target;
+          const postId = card.dataset.postId;
+          if (postId) {
+            trackPostImpression(postId);
+          }
+          impressionObserver.unobserve(card);
+        }
+      });
+    }, { rootMargin: '0px 0px 100px 0px' });
+    feed.querySelectorAll('.fb-post-card').forEach(card => {
+      impressionObserver.observe(card);
     });
   }, (err) => {
     console.error(err);
