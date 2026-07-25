@@ -16,15 +16,121 @@ import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/f
 export const PAYSTACK_PUBLIC_KEY = "YOUR_PAYSTACK_PUBLIC_KEY";
 export const STRIPE_PUBLISHABLE_KEY = "YOUR_STRIPE_PUBLISHABLE_KEY";
 
-// ===== SUPPORTED CURRENCIES =====
+// ===== SUPPORTED CURRENCIES (fiat + BTC) =====
 export const CURRENCIES = {
   USD: { symbol: "$", label: "US Dollar", flag: "🇺🇸", locale: "en-US", gateways: ["stripe"], decimals: 2, minAmount: 1 },
   NGN: { symbol: "₦", label: "Nigerian Naira", flag: "🇳🇬", locale: "en-NG", gateways: ["paystack"], decimals: 2, minAmount: 100 },
   EUR: { symbol: "€", label: "Euro", flag: "🇪🇺", locale: "de-DE", gateways: ["stripe"], decimals: 2, minAmount: 1 },
-  GBP: { symbol: "£", label: "British Pound", flag: "🇬🇧", locale: "en-GB", gateways: ["stripe"], decimals: 2, minAmount: 1 }
+  GBP: { symbol: "£", label: "British Pound", flag: "🇬🇧", locale: "en-GB", gateways: ["stripe"], decimals: 2, minAmount: 1 },
+  BTC: { symbol: "₿", label: "Bitcoin", flag: "₿", locale: "en-US", gateways: ["crypto"], decimals: 8, minAmount: 0.0001 }
 };
 
 export const CURRENCY_KEYS = Object.keys(CURRENCIES);
+
+// ===== LIVE BTC PRICE TICKER =====
+let btcPriceData = { usd: 0, ngn: 0, eur: 0, gbp: 0, lastUpdated: null, change24h: 0 };
+let btcTickerInterval = null;
+let btcTickerCallbacks = [];
+
+/**
+ * Fetch live BTC price from CoinGecko API (free, no key required).
+ * Updates btcPriceData and notifies all registered callbacks.
+ */
+export async function fetchLiveBTCPrice() {
+  try {
+    const response = await fetch(
+      'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd,ngn,eur,gbp&include_24hr_change=true',
+      { headers: { 'Accept': 'application/json' } }
+    );
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    const bitcoin = data.bitcoin || {};
+    btcPriceData = {
+      usd: bitcoin.usd || 0,
+      ngn: bitcoin.ngn || 0,
+      eur: bitcoin.eur || 0,
+      gbp: bitcoin.gbp || 0,
+      lastUpdated: new Date(),
+      change24h: bitcoin.usd_24h_change || 0
+    };
+    // Notify all callbacks
+    btcTickerCallbacks.forEach(cb => { try { cb(btcPriceData); } catch {} });
+    return btcPriceData;
+  } catch (err) {
+    console.warn('Could not fetch BTC price:', err);
+    return btcPriceData;
+  }
+}
+
+/**
+ * Start the BTC price ticker that refreshes every 30 seconds.
+ * @param {Function} callback - Called with (btcPriceData) on each update
+ * @returns {Function} stop function
+ */
+export function startBTCTicker(callback) {
+  if (callback && !btcTickerCallbacks.includes(callback)) {
+    btcTickerCallbacks.push(callback);
+  }
+  // Fetch immediately
+  fetchLiveBTCPrice();
+  // Start interval if not already running
+  if (!btcTickerInterval) {
+    btcTickerInterval = setInterval(fetchLiveBTCPrice, 30000);
+  }
+  // Return stop function
+  return () => {
+    const idx = btcTickerCallbacks.indexOf(callback);
+    if (idx > -1) btcTickerCallbacks.splice(idx, 1);
+    if (btcTickerCallbacks.length === 0 && btcTickerInterval) {
+      clearInterval(btcTickerInterval);
+      btcTickerInterval = null;
+    }
+  };
+}
+
+/** Get the latest BTC price data */
+export function getBTCPrices() {
+  return { ...btcPriceData };
+}
+
+/** Format a BTC balance (e.g. 0.05 BTC) */
+export function formatBTC(amount) {
+  const num = typeof amount === 'number' ? amount : parseFloat(amount) || 0;
+  return `${num.toFixed(8)} BTC`;
+}
+
+/** Get masked BTC balance for privacy toggle */
+export function getMaskedBTC() {
+  return '₿•••••• BTC';
+}
+
+/**
+ * Convert BTC balance to fiat value using live price.
+ * @param {number} btcAmount - BTC balance
+ * @param {string} currency - 'USD' | 'NGN' | 'EUR' | 'GBP'
+ * @returns {string} Formatted fiat value, e.g. "~$3,200.00"
+ */
+export function getBTCFiatValue(btcAmount, currency = 'USD') {
+  const num = typeof btcAmount === 'number' ? btcAmount : parseFloat(btcAmount) || 0;
+  const key = currency.toLowerCase();
+  const price = btcPriceData[key] || 0;
+  const fiatValue = num * price;
+  if (fiatValue === 0) return formatCurrency(0, currency);
+  return `~${formatCurrency(fiatValue, currency)}`;
+}
+
+/**
+ * Get a live price ticker badge string, e.g. "₿1 BTC = $64,000 USD 🟢"
+ */
+export function getBTCTickerBadge(currency = 'USD') {
+  const key = currency.toLowerCase();
+  const price = btcPriceData[key] || 0;
+  const change = btcPriceData.change24h || 0;
+  const arrow = change >= 0 ? '🟢' : '🔴';
+  const changeStr = change !== 0 ? ` (${change >= 0 ? '+' : ''}${change.toFixed(2)}%)` : '';
+  if (price === 0) return '₿ Loading BTC price...';
+  return `₿ 1 BTC = ${formatCurrency(price, currency)} ${arrow}${changeStr}`;
+}
 
 /** Map currency code to Firestore field name */
 export function currencyField(currency) {

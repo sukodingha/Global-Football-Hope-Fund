@@ -16,7 +16,8 @@ import {
   getFundWalletModalHTML, initFundWalletModal,
   creditWallet, deductFromWallet,
   getPreferredCurrency, setPreferredCurrency, savePreferredCurrencyToFirestore,
-  CURRENCIES, CURRENCY_KEYS
+  CURRENCIES, CURRENCY_KEYS,
+  formatBTC, getMaskedBTC, getBTCFiatValue, getBTCTickerBadge, startBTCTicker
 } from "./wallet.js";
 
 // ===== DOM refs =====
@@ -951,6 +952,120 @@ document.addEventListener('DOMContentLoaded', () => {
   if (auth.currentUser) {
     renderWalletBalance();
     setupTransactionListener(auth.currentUser.uid);
+  }
+});
+
+// ===== LIVE BTC WALLET CARD =====
+const btcBalanceDisplay = document.getElementById('btcWalletBalanceDisplay');
+const btcFiatConversion = document.getElementById('btcFiatConversion');
+const btcTickerBadge = document.getElementById('btcTickerBadge');
+const btcToggleBtn = document.getElementById('btc-toggle-balance-btn');
+
+// Load BTC balance from Firestore
+async function loadBTCBalance(userId) {
+  if (!userId || !guardDb()) return 0;
+  try {
+    const snap = await getDoc(doc(db, 'users', userId));
+    const data = snap.exists() ? snap.data() : {};
+    return data.walletBalanceBTC || 0;
+  } catch (err) {
+    console.warn('Could not load BTC balance:', err);
+    return 0;
+  }
+}
+
+// Render BTC wallet display
+async function renderBTCWallet() {
+  if (!btcBalanceDisplay) return;
+  if (!auth.currentUser) {
+    btcBalanceDisplay.textContent = '0.00000000 BTC';
+    return;
+  }
+
+  const userId = auth.currentUser.uid;
+  const btcAmount = await loadBTCBalance(userId);
+  const visible = getBalanceVisible();
+  const prefCurrency = getPreferredCurrency();
+
+  // BTC balance
+  if (visible) {
+    btcBalanceDisplay.textContent = formatBTC(btcAmount);
+  } else {
+    btcBalanceDisplay.textContent = getMaskedBTC();
+  }
+
+  // Fiat conversion (only if visible)
+  if (btcFiatConversion) {
+    if (visible && btcAmount > 0) {
+      const usdValue = getBTCFiatValue(btcAmount, 'USD');
+      const localValue = getBTCFiatValue(btcAmount, prefCurrency);
+      btcFiatConversion.innerHTML = `${usdValue} USD &middot; ${localValue} ${prefCurrency}`;
+    } else if (visible && btcAmount === 0) {
+      btcFiatConversion.textContent = 'No BTC balance';
+    } else {
+      btcFiatConversion.textContent = '₿•••••• BTC';
+    }
+  }
+
+  // Ticker badge (always visible even when hidden)
+  if (btcTickerBadge) {
+    if (visible) {
+      btcTickerBadge.textContent = getBTCTickerBadge(prefCurrency);
+    } else {
+      btcTickerBadge.textContent = '₿ ••••••';
+    }
+  }
+}
+
+// BTC toggle button
+if (btcToggleBtn) {
+  let btcVisible = getBalanceVisible();
+  btcToggleBtn.textContent = btcVisible ? '👁️' : '👁️‍🗨️';
+  btcToggleBtn.addEventListener('click', () => {
+    btcVisible = toggleBalanceVisibility();
+    btcToggleBtn.textContent = btcVisible ? '👁️' : '👁️‍🗨️';
+    renderBTCWallet();
+  });
+}
+
+// Start BTC ticker and update on price changes
+let btcTickerStop = null;
+
+function initBTCWallet() {
+  if (!btcBalanceDisplay) return;
+
+  // Initial render
+  renderBTCWallet();
+
+  // Start ticker — updates badge and fiat conversion on each price refresh
+  btcTickerStop = startBTCTicker((priceData) => {
+    renderBTCWallet();
+  });
+}
+
+// Integrate BTC wallet with auth state
+if (!window._btcWalletPatched) {
+  window._btcWalletPatched = true;
+
+  onAuthStateChanged(auth, (user) => {
+    if (user) {
+      setTimeout(initBTCWallet, 500); // slight delay for DOM readiness
+    } else {
+      if (btcTickerStop) {
+        btcTickerStop();
+        btcTickerStop = null;
+      }
+      if (btcBalanceDisplay) btcBalanceDisplay.textContent = '0.00000000 BTC';
+      if (btcFiatConversion) btcFiatConversion.textContent = 'Loading fiat conversion...';
+      if (btcTickerBadge) btcTickerBadge.textContent = '₿ Loading BTC price...';
+    }
+  });
+}
+
+// Also init on DOMContentLoaded if user already signed in
+document.addEventListener('DOMContentLoaded', () => {
+  if (auth.currentUser) {
+    initBTCWallet();
   }
 });
 

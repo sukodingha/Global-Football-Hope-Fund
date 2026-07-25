@@ -137,7 +137,7 @@
                 <h3>Prediction Activity</h3>
                 <div id="predictionSummary"></div>
             </div>
-            <!-- ===== WALLET CARD ===== -->
+            <!-- ===== FIAT WALLET CARD ===== -->
             <div class="form-section" id="walletSection">
                 <h3>
                     💰 Wallet Balance
@@ -147,7 +147,24 @@
                     ₦0.00
                 </div>
                 <p style="font-size:13px;color:#64748b;margin:0;">Your current wallet balance from donations and top-ups.</p>
-                <button type="button" id="fundWalletBtn" class="btn" style="margin:10px 0 0;padding:10px 20px;font-size:14px;">💰 Fund Wallet</button>
+                <button type="button" id="fundWalletBtn" class="btn fund-wallet-trigger-btn" style="margin:10px 0 0;padding:10px 20px;font-size:14px;">💰 Fund Wallet</button>
+            </div>
+            <!-- ===== BTC WALLET CARD ===== -->
+            <div class="form-section" id="btcWalletSection">
+                <h3>
+                    ₿ BTC Wallet
+                    <span id="btc-toggle-balance-btn" style="cursor:pointer;font-size:18px;margin-left:8px;" title="Toggle balance visibility">👁️</span>
+                </h3>
+                <div id="btcWalletBalanceDisplay" style="font-size:28px;font-weight:900;color:#f7931a;padding:8px 0;">
+                    0.00000000 BTC
+                </div>
+                <div id="btcFiatConversion" style="font-size:14px;color:#64748b;margin:0 0 6px;">
+                    Loading fiat conversion...
+                </div>
+                <div id="btcTickerBadge" style="display:inline-flex;align-items:center;gap:6px;padding:4px 12px;background:rgba(247,147,26,0.12);border-radius:999px;font-size:12px;font-weight:700;color:#f7931a;margin-bottom:8px;">
+                    ₿ Loading BTC price...
+                </div>
+                <p style="font-size:13px;color:#64748b;margin:0;">Your Bitcoin balance. Auto-refreshes every 30s.</p>
             </div>
             <!-- ===== TRANSACTION HISTORY CARD ===== -->
             <div class="form-section" id="transactionHistorySection">

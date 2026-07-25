@@ -2,6 +2,7 @@
  * GFHF Facebook-Style Community Module
  * Stories bar, Create Post modal, Post cards with photo grids,
  * Like/Reaction system, Expandable comments, User profile modals
+ * Wallet integration: fund wallet button, wallet balance display
  */
 
 import { auth, db } from "./firebase.js";
