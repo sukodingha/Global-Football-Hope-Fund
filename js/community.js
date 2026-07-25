@@ -481,15 +481,14 @@ function renderPostCard(post) {
     card.appendChild(imgWrap);
   }
 
-  // Stats bar with impressions + HP earned tooltip
+  // Stats bar — clean: likes, comments, views (NO HP indicators)
   const impressionCount = post.impressions || 0;
-  const earnedHP = impressionCount * 0.0001;
   const statsBar = document.createElement("div");
   statsBar.className = "fb-post-stats";
   statsBar.innerHTML = `
     <span>👍 ${likeCount}</span>
     <span>💬 ${commentCount} comments</span>
-    <span title="👁️ ${formatImpressionCount(impressionCount)} views — <span class="hp-symbol">H</span>P Earned: ${earnedHP.toFixed(4)}">👁 ${formatImpressionCount(impressionCount)} (<span class="hp-symbol">H</span>${earnedHP.toFixed(4)})</span>
+    <span>👁️ ${formatImpressionCount(impressionCount)} views</span>
   `;
   card.appendChild(statsBar);
 
