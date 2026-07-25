@@ -78,16 +78,38 @@
     <a href="pages/news.html" class="btn btn-secondary">Open Sports Hub</a>
 </section>
 
-<!-- LIVE SCORES TICKER -->
+<!-- LIVE SCORES TICKER + HP REWARDS TEASER (2-Column) -->
 <section class="section live-scores-section">
-    <div class="section-heading">
-        <h2>⚡ Live Scores</h2>
-        <p>Real-time football scores from top leagues around the world.</p>
-    </div>
+    <div class="live-scores-grid">
+        <!-- Left Column: Live Scores -->
+        <div class="live-scores-left">
+            <div class="section-heading">
+                <h2>⚡ Live Scores</h2>
+                <p>Real-time football scores from top leagues around the world.</p>
+            </div>
 
-    <div class="ticker-container">
-        <div class="ticker-track" id="tickerTrack">
-            <!-- Match cards injected by JS -->
+            <div class="ticker-container">
+                <div class="ticker-track" id="tickerTrack">
+                    <!-- Match cards injected by JS -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: HP Rewards Teaser -->
+        <div class="hp-rewards-teaser">
+            <div class="hp-teaser-header">🎁 Earn HP While You Watch!</div>
+            <div class="hp-value-pill">
+                <span class="hp-symbol">HP</span>◇◇ 5.0 = ₦500 / $5.00
+            </div>
+            <p class="hp-teaser-description">
+                Get paid for staying active! Every login, community chat, and donation earns you Hope Points automatically.
+            </p>
+            <ul class="hp-bullets">
+                <li>🔥 Daily Login Streaks: Up to <span class="hp-symbol">HP</span>◇◇ 2.5</li>
+                <li>💬 Community Posts &amp; Comments: Earn per interaction</li>
+                <li>💳 Wallet Top-ups &amp; Donations: Bonus points on every ₦100</li>
+            </ul>
+            <a href="pages/register.html" class="hp-cta-btn">Start Earning Today 🚀</a>
         </div>
     </div>
 </section>

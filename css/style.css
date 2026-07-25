@@ -2199,6 +2199,137 @@ footer {
     }
 }
 
+/* ===== LIVE SCORES 2-COLUMN GRID + HP REWARDS TEASER ===== */
+.live-scores-grid {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 24px;
+    max-width: 1200px;
+    margin: 0 auto;
+    align-items: start;
+    text-align: left;
+}
+
+.live-scores-left {
+    min-width: 0;
+}
+
+.live-scores-left .section-heading {
+    margin-bottom: 20px;
+}
+
+.live-scores-left .section-heading h2 {
+    color: #fff;
+}
+
+.live-scores-left .section-heading p {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+/* HP Rewards Teaser Card (Right Column) */
+.hp-rewards-teaser {
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 14px;
+    backdrop-filter: blur(8px);
+    padding: 22px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    color: #fff;
+    text-align: left;
+}
+
+.hp-teaser-header {
+    font-size: 18px;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: -0.01em;
+}
+
+.hp-value-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 14px;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 999px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #fde68a;
+    align-self: flex-start;
+}
+
+.hp-value-pill .hp-symbol {
+    color: #fde68a;
+    font-size: 0.85rem;
+}
+
+.hp-teaser-description {
+    font-size: 14px;
+    line-height: 1.6;
+    color: rgba(255, 255, 255, 0.85);
+    margin: 0;
+}
+
+.hp-bullets {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.hp-bullets li {
+    font-size: 13px;
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.9);
+    padding-left: 4px;
+}
+
+.hp-bullets li .hp-symbol {
+    color: #fde68a;
+    font-size: 0.78rem;
+}
+
+.hp-cta-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    padding: 12px 18px;
+    background: linear-gradient(90deg, #00c853 0%, #00b34a 100%);
+    color: white;
+    text-decoration: none;
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: 15px;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    box-shadow: 0 6px 14px rgba(0, 200, 83, 0.25);
+    margin-top: 4px;
+    box-sizing: border-box;
+}
+
+.hp-cta-btn:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+    color: white;
+}
+
+/* Mobile: Stack vertically */
+@media (max-width: 768px) {
+    .live-scores-grid {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+
+    .hp-rewards-teaser {
+        padding: 18px 16px;
+    }
+}
+
 /* ===== DONATION CONTAINER ===== */
 .donation-container {
     max-width: 600px;
