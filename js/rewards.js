@@ -1,8 +1,11 @@
 /**
- * GFHF Hope Points (HP) Reward System
+ * GFHF Hope Points (HP) Reward System (SCALED V2)
  * Manages daily login bonuses, action-based HP earning, and HP-to-wallet redemption.
  * Firestore fields on users/{uid}: rewardPoints, currentStreak, lastLoginDate
- * Firestore collection: point_history/{docId}
+ * Firestore subcollection: users/{uid}/point_history/{docId}
+ *
+ * SCALED CONVERSION: 5.0 HP = ₦500 / $5.00 Wallet Credit
+ * 1 HP = ₦100 / $1.00 value
  */
 
 import { auth, db } from "./firebase.js";
@@ -12,11 +15,17 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
-// ===== CONSTANTS =====
-export const DAILY_LOGIN_BONUS = 10;
-export const HP_PER_DOLLAR = 100; // 100 HP per $1 equivalent
-export const REDEMPTION_RATE = 500; // 500 HP = 1 unit of currency
-export const CURRENCY_PER_REDEMPTION = 1; // $1 (or ₦500) per 500 HP
+// ===== CONSTANTS (Scaled V2) =====
+export const DAILY_LOGIN_BONUS = 0.1;       // +0.1 HP for daily login
+export const POST_CREATION_BONUS = 0.05;    // +0.05 HP for creating a post
+export const COMMENT_MESSAGE_BONUS = 0.02;  // +0.02 HP for comment/message
+export const WALLET_TOPUP_RATE = 0.01;      // +0.01 HP per ₦100 or $1
+export const DONATION_RATE = 0.02;          // +0.02 HP per ₦100 or $1
+export const ACCOUNT_CREATION_BONUS = 0.5;  // +0.5 HP on account creation
+export const HP_PER_DOLLAR = 1;             // 1 HP = $1 for conversion context
+export const REDEMPTION_RATE = 5.0;         // 5.0 HP = 1 unit
+export const CURRENCY_PER_REDEMPTION = 1;   // ₦500 or $5.00 per 5 HP
+export const HP_TO_WALLET_MULTIPLIER = 100; // Each HP redeemed = 100 currency units (₦100/$1)
 
 // ===== DB GUARD =====
 function guardDb() {

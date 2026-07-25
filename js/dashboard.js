@@ -649,7 +649,7 @@ onAuthStateChanged(auth, async (user) => {
       hpStreakText.textContent = streak > 0 ? `🔥 ${streak}-Day Streak` : '0-day streak';
     }
 
-    // Update redeem button text
+// Update redeem button text
     if (redeemHpBtn) {
       const hp = rewardData.rewardPoints || 0;
       const canRedeem = hp >= REDEMPTION_RATE;
@@ -657,7 +657,7 @@ onAuthStateChanged(auth, async (user) => {
       if (canRedeem) {
         const maxUnits = Math.floor(hp / REDEMPTION_RATE);
         const creditAmount = maxUnits * CURRENCY_PER_REDEMPTION;
-        redeemHpBtn.textContent = `💎 Redeem ${REDEMPTION_RATE} HP for ₦${CURRENCY_PER_REDEMPTION}.00 (${maxUnits}x available)`;
+        redeemHpBtn.textContent = `💎 Redeem ${REDEMPTION_RATE} HP for $${creditAmount.toFixed(2)} (${maxUnits}x available)`;
       } else {
         redeemHpBtn.textContent = `💎 Need ${REDEMPTION_RATE} HP to redeem (you have ${hp} HP)`;
       }

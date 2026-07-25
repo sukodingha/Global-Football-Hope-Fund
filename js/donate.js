@@ -11,13 +11,13 @@ import {
   doc, getDoc, setDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
+// Import rewards system for action HP bonuses
+import { awardActionBonus } from "./rewards.js";
+
 // Import shared wallet module
 import {
   loadWalletBalance, deductFromWallet, formatCurrency, getFundWalletModalHTML, initFundWalletModal
 } from "./wallet.js";
-
-// Import rewards system for HP bonuses
-import { awardActionBonus } from "./rewards.js";
 
 // ===== DOM Refs =====
 const presetBtns = document.querySelectorAll(".donation-preset-btn");
