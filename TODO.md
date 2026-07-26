@@ -12,7 +12,7 @@
 - [x] 5. `createMessageBubble()` — Add image rendering with `crossorigin="anonymous"` and HTTPS protection
 
 ### File: `js/dashboard.js`
-- No changes needed — already correctly uses `data.secure_url`
+- [x] `handleImageUpload()` — Improved safe URL extraction (secure_url → url → nested data.secure_url fallbacks)
 
 ## Status: ✅ Completed
 

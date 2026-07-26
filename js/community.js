@@ -1174,55 +1174,62 @@ async function uploadAndSendChatImage(file, collectionPath, extraData = {}) {
   formData.append('file', file);
   formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
 
-  let imageUrl = null;
   try {
     const res = await fetch(CLOUDINARY_UPLOAD_URL, { method: 'POST', body: formData });
-    if (res.ok) {
-      const data = await res.json();
-      console.log("Cloudinary response:", data);
-      // Enforce HTTPS: ensure the URL always starts with "https://"
-      if (data.secure_url) {
-        imageUrl = data.secure_url.startsWith("https://") ? data.secure_url : "https://" + data.secure_url.replace(/^http:\/\//i, "");
-      } else if (data.url) {
-        imageUrl = data.url.startsWith("https://") ? data.url : "https://" + data.url.replace(/^http:\/\//i, "");
+    const data = await res.json();
+
+    // DEBUG LOG: See every key returned
+    console.log("Cloudinary full object:", data);
+
+    // Safe extraction check (handles secure_url, url, or nested data)
+    const imageUrl = data.secure_url || data.url || (data.data && data.data.secure_url);
+
+    if (!imageUrl) {
+      console.error("No valid URL returned from Cloudinary!", data);
+      alert("Upload failed: Could not retrieve image URL from Cloudinary.");
+      return;
+    }
+
+    console.log("Extracted Image URL successfully:", imageUrl);
+
+    // Save message to Firestore — ONLY if imageUrl exists (prevents empty docs)
+    try {
+      const msgData = {
+        userId: currentUser.uid,
+        senderId: currentUser.uid,
+        username: currentUser.displayName || "User",
+        senderName: currentUser.displayName || "User",
+        text: "",
+        imageUrl: imageUrl,
+        timestamp: serverTimestamp(),
+        createdAt: serverTimestamp(),
+        ...extraData
+      };
+
+      console.log("Saved image message to Firestore:", imageUrl);
+
+      // If it's a subcollection path (contains /), parse it
+      if (collectionPath.includes('/')) {
+        const parts = collectionPath.split('/');
+        let ref = db;
+        for (let i = 0; i < parts.length; i++) {
+          if (i % 2 === 0) {
+            ref = collection(ref, parts[i]);
+          } else {
+            ref = doc(ref, parts[i]);
+          }
+        }
+        await addDoc(ref, msgData);
+      } else {
+        await addDoc(collection(db, collectionPath), msgData);
       }
+
+    } catch (err) {
+      console.error('Chat image save failed:', err);
     }
   } catch (err) {
     console.error('Chat image upload failed:', err);
     return;
-  }
-
-  if (!imageUrl) return;
-
-  // Save message to Firestore — ONLY if imageUrl exists (prevents empty docs)
-  try {
-    const msgData = {
-      userId: currentUser.uid,
-      username: currentUserName,
-      text: "",
-      imageUrl: imageUrl,
-      timestamp: serverTimestamp(),
-      ...extraData
-    };
-
-    // If it's a subcollection path (contains /), parse it
-    if (collectionPath.includes('/')) {
-      const parts = collectionPath.split('/');
-      let ref = db;
-      for (let i = 0; i < parts.length; i++) {
-        if (i % 2 === 0) {
-          ref = collection(ref, parts[i]);
-        } else {
-          ref = doc(ref, parts[i]);
-        }
-      }
-      await addDoc(ref, msgData);
-    } else {
-      await addDoc(collection(db, collectionPath), msgData);
-    }
-
-  } catch (err) {
-    console.error('Chat image save failed:', err);
   }
 }
 

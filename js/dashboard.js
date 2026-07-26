@@ -243,10 +243,14 @@ async function handleImageUpload(fileInput) {
 
         const data = await response.json();
         
-        if (data.secure_url) {
-            console.log('Upload successful:', data.secure_url);
-            return data.secure_url; // This URL goes straight to Firestore!
+        // Safe extraction: try secure_url first, then url, then nested data
+        const imageUrl = data.secure_url || data.url || (data.data && data.data.secure_url);
+        
+        if (imageUrl) {
+            console.log('Upload successful:', imageUrl);
+            return imageUrl; // This URL goes straight to Firestore!
         } else {
+            console.error("No valid URL returned from Cloudinary!", data);
             throw new Error(data.error?.message || 'Cloudinary upload failed.');
         }
     } catch (error) {
