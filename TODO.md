@@ -1,31 +1,17 @@
-# Chat Image Upload Fixes - Todo
+# Chat Image Upload Fixes - COMPLETED
 
 ## ✅ Step 1: Fix `listenToChat` in community.js
-- Handle both field naming conventions (`authorId`/`userId`, `authorName`/`username`, `createdAt`/`timestamp`)
-- Ensure images render properly in community chat messages
+- Handles both field naming conventions (`authorId`/`userId`, `authorName`/`username`, `createdAt`/`timestamp`)
+- Uses `m.timestamp || m.createdAt` for time display
+- Correctly resolves author name from `m.username || m.authorName`
 
 ## ✅ Step 2: Fix floating chat (teammate) listener in community.js
-- Add image rendering with `.chat-shared-image` class and `onclick="window.open(...)"`
-- Check if `msg.imageUrl` is present and non-empty before appending
+- Added image rendering with `.chat-shared-image` class and `onclick="window.open(...)"`
+- Checks if `msg.imageUrl` is present and non-empty before appending
+- Supports both `msg.authorId` and `msg.userId` for ownership check
 
 ## ✅ Step 3: Update `.chat-shared-image` in style.css
-
----
-
-# Post Actions & HP Cleanup - Completed
-
-## ✅ POST TOOLBAR CLEANUP
-- Stats bar shows only: 👍 likes, 💬 comments, 👁️ views
-- REMOVED HP earned display and HP tooltip from stats bar and action buttons
-
-## ✅ BACKGROUND HP ACCUMULATION
-- `trackPostImpression()` fires when posts enter viewport via IntersectionObserver
-- Increments post `impressions` by 1
-- Credits author's `hopePoints` by 0.0001 HP per impression using `increment()`
-- Invalidates HP badge cache to trigger live refresh
-
-## ✅ HP DISPLAY RESTRICTION
-- HP badge (`post-hp-badge-placeholder`) only renders under author name in post header
-- HP badge (`chat-hp-placeholder`) only renders under username in community chat messages
-- No HP numbers appear in post action bars or stats bar
+- `max-width: 200px; max-height: 200px;`
+- `margin-top: 6px;`
+- Kept existing `min-width: 100px; min-height: 100px; border-radius: 10px; display: block; object-fit: cover; cursor: pointer;`
 
