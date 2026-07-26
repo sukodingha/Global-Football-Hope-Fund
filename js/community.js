@@ -1258,7 +1258,7 @@ if (communityChatForm) {
     if (!file) return;
     communityCameraBtn.disabled = true;
     communityCameraBtn.textContent = '⏳';
-    await uploadAndSendChatImage(file, 'communityChat');
+    await uploadAndSendChatImage(file, 'community_chats');
     communityCameraBtn.disabled = false;
     communityCameraBtn.textContent = '📷';
     communityFileInput.value = '';
@@ -1271,7 +1271,7 @@ if (communityChatForm) {
     const text = input.value.trim();
     if (!text) return;
     try {
-      await addDoc(collection(db, "communityChat"), {
+      await addDoc(collection(db, "community_chats"), {
         authorId: currentUser.uid, authorName: currentUserName, authorAvatar: currentUserAvatar, text, createdAt: serverTimestamp()
       });
       input.value = "";
@@ -1280,7 +1280,7 @@ if (communityChatForm) {
 }
 
 function listenToChat() {
-  const q = query(collection(db, "communityChat"), orderBy("createdAt", "asc"));
+  const q = query(collection(db, "community_chats"), orderBy("createdAt", "asc"));
   onSnapshot(q, (snap) => {
     if (!communityChatList) return;
     communityChatList.innerHTML = "";
