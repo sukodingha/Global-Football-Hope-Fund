@@ -1,7 +1,7 @@
 /**
- * GFHF Prediction League Module (OVERHAULED)
+ * GFHF Prediction League Module (OVERHAULED — LIVE API DATA)
  * - 5-day rolling calendar tab selector
- * - 20 fixtures per date with future kick-off times
+ * - Real fixtures fetched from football API-Sports
  * - userSlip array (7 picks required)
  * - Save to Firestore "user_predictions" collection
  * - Settlement engine: >=6/7 correct → 2 HP
@@ -14,6 +14,10 @@ import {
   doc, getDoc, getDocs, addDoc, collection, query, where, updateDoc, increment, serverTimestamp, limit
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getHPBadgeHTML, getUserHP } from "./rewards.js";
+
+// ===== API CONFIG (Same API key as competition/dashboard) =====
+const API_KEY = "6e2987eec8066be0a986f648fe4a9cf7";
+const API_HOST = "v3.football.api-sports.io";
 
 // ===== DOM REFS =====
 const calendarEl = document.getElementById("dateCalendar");
@@ -124,153 +128,6 @@ function buildCalendar() {
       btn.style.color = "#fff";
     }
   }
-}
-
-// ===== 2. GENERATE 20 FIXTURES PER DATE (dynamic times + shuffled pairings per day) =====
-const TEAMS_POOL = [
-  { league: "Premier League", home: "Arsenal", away: "Chelsea" },
-  { league: "Premier League", home: "Liverpool", away: "Manchester City" },
-  { league: "Premier League", home: "Manchester United", away: "Tottenham" },
-  { league: "Premier League", home: "Newcastle", away: "Aston Villa" },
-  { league: "Premier League", home: "West Ham", away: "Brighton" },
-  { league: "La Liga", home: "Barcelona", away: "Real Madrid" },
-  { league: "La Liga", home: "Atletico Madrid", away: "Sevilla" },
-  { league: "La Liga", home: "Valencia", away: "Real Sociedad" },
-  { league: "Serie A", home: "Inter Milan", away: "AC Milan" },
-  { league: "Serie A", home: "Juventus", away: "AS Roma" },
-  { league: "Serie A", home: "Napoli", away: "Lazio" },
-  { league: "Bundesliga", home: "Bayern Munich", away: "Borussia Dortmund" },
-  { league: "Bundesliga", home: "RB Leipzig", away: "Bayer Leverkusen" },
-  { league: "Bundesliga", home: "Eintracht Frankfurt", away: "Borussia M'gladbach" },
-  { league: "Ligue 1", home: "PSG", away: "Marseille" },
-  { league: "Ligue 1", home: "Monaco", away: "Lyon" },
-  { league: "Premier League", home: "Crystal Palace", away: "Everton" },
-  { league: "La Liga", home: "Athletic Bilbao", away: "Villarreal" },
-  { league: "Serie A", home: "Fiorentina", away: "Atalanta" },
-  { league: "Premier League", home: "Wolves", away: "Fulham" },
-];
-
-/**
- * Deterministic shuffle based on a seed string (dateStr).
- * Produces a rotated copy of the teams array so each date shows different pairings.
- */
-function getShuffledTeamsForDate(dateStr) {
-  // Compute a numeric seed from the date string
-  let seed = 0;
-  for (let i = 0; i < dateStr.length; i++) {
-    seed = (seed * 31 + dateStr.charCodeAt(i)) | 0;
-  }
-  const rotateBy = ((seed % 20) + 20) % 20; // 0-19 rotation offset
-
-  // Rotate the pool by this offset
-  const pool = [...TEAMS_POOL];
-  const rotated = [];
-  for (let i = 0; i < pool.length; i++) {
-    rotated.push(pool[(i + rotateBy) % pool.length]);
-  }
-  return rotated;
-}
-
-/**
- * Generate 20 fixtures for a given date with dynamic kick-off times.
- * For TODAY: starts from currentHour + 1, spreads across remaining hours up to 23:00.
- * For FUTURE dates: uses standard time slots (12:00, 14:30, 17:00, 19:30, 21:00).
- * Filters out any match whose kick-off has already passed.
- */
-function generateFixturesForDate(dateStr) {
-  const now = Date.now();
-  const isTodayDate = isToday(dateStr);
-  const shuffled = getShuffledTeamsForDate(dateStr);
-
-  // Build dynamic kick-off slots based on whether it's today or future
-  const slots = [];
-
-  if (isTodayDate) {
-    // TODAY: start from currentHour + 1, spread across remaining hours up to 23:00
-    const currentHour = new Date().getHours();
-    let startHour = currentHour + 1; // strictly after current time
-    if (startHour < 10) startHour = 10; // earliest reasonable slot
-
-    const possibleMinutes = [0, 15, 30, 45];
-    let slotIndex = 0;
-    for (let h = startHour; h <= 22; h++) {
-      const m = possibleMinutes[slotIndex % possibleMinutes.length];
-      slots.push({ hour: h, minute: m });
-      slotIndex++;
-      if (slotIndex >= 20) break; // max 20 slots
-    }
-  } else {
-    // FUTURE DATE: standard time slots across the day
-    const futureSlots = [
-      { hour: 12, minute: 0 },
-      { hour: 12, minute: 30 },
-      { hour: 14, minute: 0 },
-      { hour: 14, minute: 30 },
-      { hour: 16, minute: 0 },
-      { hour: 16, minute: 30 },
-      { hour: 17, minute: 0 },
-      { hour: 17, minute: 30 },
-      { hour: 18, minute: 0 },
-      { hour: 18, minute: 30 },
-      { hour: 19, minute: 0 },
-      { hour: 19, minute: 30 },
-      { hour: 20, minute: 0 },
-      { hour: 20, minute: 30 },
-      { hour: 21, minute: 0 },
-      { hour: 21, minute: 30 },
-      { hour: 22, minute: 0 },
-      { hour: 22, minute: 30 },
-      { hour: 23, minute: 0 },
-      { hour: 23, minute: 30 },
-    ];
-    slots.push(...futureSlots);
-  }
-
-  const results = [];
-  const baseDate = new Date(dateStr + "T00:00:00");
-
-  for (let i = 0; i < shuffled.length && i < slots.length; i++) {
-    const t = shuffled[i];
-    const slot = slots[i];
-    const kickoff = new Date(baseDate);
-    kickoff.setHours(slot.hour, slot.minute, 0, 0);
-
-    // Filter out matches whose kick-off time has already passed
-    if (kickoff.getTime() <= now) continue;
-
-    results.push({
-      id: `fix_${dateStr.replace(/-/g,"")}_${i + 1}`,
-      league: t.league,
-      homeTeam: t.home,
-      awayTeam: t.away,
-      date: kickoff.toISOString(),
-      status: "upcoming"
-    });
-  }
-
-  // If too many were filtered (e.g. late hour today), pad with future-dated fallback slots
-  if (results.length < 7) {
-    // Push remaining shuffled teams into late-night slots (all in the future)
-    const padDate = new Date(now + 3600000 * (results.length + 1));
-    for (let i = results.length; i < shuffled.length; i++) {
-      const t = shuffled[i];
-      const kickoff = new Date(padDate);
-      kickoff.setHours(19 + (i % 4), (i % 2) * 30, 0, 0);
-      if (kickoff.getTime() <= now) {
-        kickoff.setTime(kickoff.getTime() + 7200000); // +2h
-      }
-      results.push({
-        id: `fix_${dateStr.replace(/-/g,"")}_${i + 1}`,
-        league: t.league,
-        homeTeam: t.home,
-        awayTeam: t.away,
-        date: kickoff.toISOString(),
-        status: "upcoming"
-      });
-    }
-  }
-
-  return results;
 }
 
 // ===== 3. RENDER FIXTURES WITH SELECTION UI =====
@@ -513,12 +370,33 @@ async function submitSlip() {
   }
 }
 
-// ===== 7. SETTLEMENT ENGINE =====
-function getMockResult(matchId) {
-  const hash = matchId.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
-  const homeScore = hash % 5;       // 0-4
-  const awayScore = (hash * 3) % 4; // 0-3
-  return { homeScore, awayScore };
+// ===== 7. SETTLEMENT ENGINE (Real API-based) =====
+/**
+ * Fetch real fixture result from API for a given match ID.
+ * Returns { homeScore, awayScore } or null if not finished.
+ */
+async function fetchRealFixtureResult(matchId) {
+  try {
+    const response = await fetch(`https://${API_HOST}/fixtures?id=${matchId}`, {
+      method: "GET",
+      headers: {
+        "x-rapidapi-host": API_HOST,
+        "x-rapidapi-key": API_KEY
+      }
+    });
+    const data = await response.json();
+    if (!data.response || data.response.length === 0) return null;
+    const fixture = data.response[0];
+    // Only settle if match is finished
+    if (fixture.fixture.status.short !== "FT") return null;
+    return {
+      homeScore: fixture.goals.home ?? 0,
+      awayScore: fixture.goals.away ?? 0
+    };
+  } catch (err) {
+    console.warn(`Failed to fetch result for match ${matchId}:`, err);
+    return null;
+  }
 }
 
 function getScoreWinner(home, away) {
@@ -534,9 +412,16 @@ async function settleSlip(slipDoc) {
   if (data.status !== "pending") return;
 
   let correctCount = 0;
+  let settledCount = 0;
 
-  data.slip.forEach(sel => {
-    const result = getMockResult(sel.matchId);
+  for (const sel of data.slip) {
+    const result = await fetchRealFixtureResult(sel.matchId);
+    if (!result) {
+      // Match not finished yet — skip this selection
+      continue;
+    }
+    settledCount++;
+
     const correctWinner = getScoreWinner(result.homeScore, result.awayScore);
     const total = result.homeScore + result.awayScore;
     const correctGoals = total > 2.5 ? "over2.5" : "under2.5";
@@ -544,9 +429,12 @@ async function settleSlip(slipDoc) {
     const winnerOk = sel.winner === correctWinner;
     const goalsOk = sel.goals === correctGoals;
     if (winnerOk && goalsOk) correctCount++;
-  });
+  }
 
-  const scoreStr = `${correctCount}/7`;
+  // Only settle if at least some matches have finished
+  if (settledCount === 0) return;
+
+  const scoreStr = `${correctCount}/${settledCount}`;
 
   try {
     if (correctCount >= 6) {
@@ -570,7 +458,7 @@ async function settleSlip(slipDoc) {
       });
     }
 
-    return { slipId, correctCount, rewarded: correctCount >= 6 };
+    return { slipId, correctCount, rewarded: correctCount >= 6, settledCount };
   } catch (err) {
     console.error("Settlement error:", err);
   }
@@ -660,14 +548,71 @@ async function loadSlipHistory() {
   }
 }
 
-// ===== 9. FETCH FIXTURES PER DATE =====
-function loadFixturesForDate(dateStr) {
+// ===== 2. FETCH REAL FIXTURES FROM API =====
+/**
+ * Fetch real football fixtures from API-Sports for a given date.
+ * Maps API response to the fixture shape expected by renderFixtures().
+ * @param {string} dateStr - "YYYY-MM-DD"
+ * @returns {Promise<Array>} Array of fixture objects
+ */
+async function fetchFixturesFromAPI(dateStr) {
+  try {
+    const response = await fetch(`https://${API_HOST}/fixtures?date=${dateStr}`, {
+      method: "GET",
+      headers: {
+        "x-rapidapi-host": API_HOST,
+        "x-rapidapi-key": API_KEY
+      }
+    });
+    const data = await response.json();
+    if (!data.response || data.response.length === 0) return [];
+
+    return data.response.map(fixture => ({
+      id: fixture.fixture.id.toString(),
+      league: fixture.league.name,
+      homeTeam: fixture.teams.home.name,
+      awayTeam: fixture.teams.away.name,
+      date: fixture.fixture.date,
+      status: fixture.fixture.status.short === "FT" ? "finished"
+             : fixture.fixture.status.short === "LIVE" || fixture.fixture.status.elapsed ? "live"
+             : "upcoming"
+    }));
+  } catch (err) {
+    console.error("API fetch error:", err);
+    return [];
+  }
+}
+
+// ===== 9. FETCH FIXTURES PER DATE (async, uses real API) =====
+async function loadFixturesForDate(dateStr) {
   if (!fixturesContainer) return;
   fixturesContainer.innerHTML = '<div class="card" style="grid-column:1/-1;text-align:center;background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.7);"><p style="padding:40px 0;">⏳ Loading fixtures...</p></div>';
 
-  // Generate 20 fixtures for the selected date
-  const fixtures = generateFixturesForDate(dateStr);
-  renderFixtures(fixtures);
+  try {
+    // Fetch real fixtures from the API
+    let fixtures = await fetchFixturesFromAPI(dateStr);
+
+    // For TODAY: filter to only show matches with kickoff time > current time
+    if (isToday(dateStr)) {
+      const now = new Date();
+      fixtures = fixtures.filter(match => {
+        const kickoffTime = new Date(match.date);
+        return kickoffTime > now;
+      });
+
+      // If no remaining matches for later today, show explicit message
+      if (fixtures.length === 0) {
+        fixturesContainer.innerHTML = '<div class="card" style="grid-column:1/-1;text-align:center;background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.7);"><p style="padding:40px 0;">⏰ No more upcoming matches scheduled for today. Please select tomorrow\'s tab!</p></div>';
+        return;
+      }
+    }
+
+    // For future dates, show all upcoming fixtures unfiltered
+    renderFixtures(fixtures);
+  } catch (err) {
+    console.error("loadFixturesForDate error:", err);
+    fixturesContainer.innerHTML = '<div class="card" style="grid-column:1/-1;text-align:center;background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.7);"><p style="padding:40px 0;">⚠️ Failed to load fixtures. Please try again.</p></div>';
+  }
 }
 
 // ===== 10. LEADERBOARD =====
@@ -700,19 +645,27 @@ async function loadLeaderboard() {
 
     const sorted = Object.values(userRewards).sort((a, b) => b.hpEarned - a.hpEarned);
 
-    // Mock fallback if empty
-    let displayUsers = sorted;
-    if (displayUsers.length === 0) {
-      displayUsers = [
-        { userId: "mock_1", userName: "Alex M.", totalSlips: 5, hpEarned: 8 },
-        { userId: "mock_2", userName: "Sarah K.", totalSlips: 4, hpEarned: 6 },
-        { userId: "mock_3", userName: "Marco R.", totalSlips: 3, hpEarned: 4 },
-        { userId: "mock_4", userName: "Yuki T.", totalSlips: 3, hpEarned: 4 },
-        { userId: "mock_5", userName: "Emma W.", totalSlips: 2, hpEarned: 2 },
-      ];
-    }
-
     const currentUserId = currentUser?.uid;
+
+    if (sorted.length === 0) {
+      leaderboardContainer.innerHTML = `
+        <div class="leaderboard-table">
+          <div class="leaderboard-header">
+            <span>#</span>
+            <span>Player</span>
+            <span>HP 🏆</span>
+            <span>Slips</span>
+          </div>
+          <div class="leaderboard-row" style="grid-column:1/-1;text-align:center;color:rgba(255,255,255,0.5);padding:30px 0;">
+            <span>No winners yet. Be the first to get 6/7 correct! 🏆</span>
+          </div>
+        </div>
+        <div class="leaderboard-legend">
+          <p>🏆 Get <strong>6/7</strong> correct predictions to earn <strong>2 HP</strong> per slip!</p>
+        </div>
+      `;
+      return;
+    }
 
     leaderboardContainer.innerHTML = `
       <div class="leaderboard-table">
@@ -722,7 +675,7 @@ async function loadLeaderboard() {
           <span>HP 🏆</span>
           <span>Slips</span>
         </div>
-        ${displayUsers.map((u, i) => {
+        ${sorted.map((u, i) => {
           const isYou = u.userId === currentUserId;
           const rank = i + 1;
           const rankDisplay = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : `#${rank}`;
