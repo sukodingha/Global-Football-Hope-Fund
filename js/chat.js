@@ -56,6 +56,22 @@ function createMessageBubble(message, isOwn) {
   timeEl.textContent = formatTimestamp(message.createdAt);
 
   bubble.appendChild(nameEl);
+  // Add image content if present and non-empty — with CORS fix and HTTPS enforcement
+  if (message.imageUrl && typeof message.imageUrl === 'string' && message.imageUrl.trim() !== '') {
+    const imgWrap = document.createElement("div");
+    imgWrap.style.cssText = "margin-top:6px;";
+    const img = document.createElement("img");
+    // Ensure HTTPS for the image src
+    const imgUrl = message.imageUrl.startsWith("https://") ? message.imageUrl : "https://" + message.imageUrl.replace(/^http:\/\//i, "");
+    img.src = imgUrl;
+    img.crossOrigin = "anonymous";
+    img.className = "chat-shared-image";
+    img.style.cssText = "max-width:200px; max-height:200px; border-radius:8px; display:block; cursor:pointer;";
+    img.onclick = () => window.open(imgUrl, '_blank');
+    img.alt = 'Shared image';
+    imgWrap.appendChild(img);
+    bubble.appendChild(imgWrap);
+  }
   bubble.appendChild(textEl);
   bubble.appendChild(timeEl);
   wrapper.appendChild(bubble);

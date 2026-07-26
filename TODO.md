@@ -1,17 +1,18 @@
-# Chat Image Upload Fixes - COMPLETED
+# Task: Fix net::ERR_BLOCKED_BY_RESPONSE for chat image uploads
 
-## ✅ Step 1: Fix `listenToChat` in community.js
-- Handles both field naming conventions (`authorId`/`userId`, `authorName`/`username`, `createdAt`/`timestamp`)
-- Uses `m.timestamp || m.createdAt` for time display
-- Correctly resolves author name from `m.username || m.authorName`
+## Plan Steps
 
-## ✅ Step 2: Fix floating chat (teammate) listener in community.js
-- Added image rendering with `.chat-shared-image` class and `onclick="window.open(...)"`
-- Checks if `msg.imageUrl` is present and non-empty before appending
-- Supports both `msg.authorId` and `msg.userId` for ownership check
+### File: `js/community.js`
+- [x] 1. `uploadAndSendChatImage()` — Add HTTPS enforcement fallback on `data.secure_url`
+- [x] 2. `uploadImage()` — Add HTTPS enforcement fallback on `data.secure_url`
+- [x] 3. `renderPostCard()` — Add `crossorigin="anonymous"` to post image `<img>`
+- [x] 4. Floating chat images — Add HTTPS enforcement when creating image elements
 
-## ✅ Step 3: Update `.chat-shared-image` in style.css
-- `max-width: 200px; max-height: 200px;`
-- `margin-top: 6px;`
-- Kept existing `min-width: 100px; min-height: 100px; border-radius: 10px; display: block; object-fit: cover; cursor: pointer;`
+### File: `js/chat.js`
+- [x] 5. `createMessageBubble()` — Add image rendering with `crossorigin="anonymous"` and HTTPS protection
+
+### File: `js/dashboard.js`
+- No changes needed — already correctly uses `data.secure_url`
+
+## Status: ✅ Completed
 

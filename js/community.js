@@ -257,7 +257,15 @@ async function uploadImage(file) {
     const res = await fetch(CLOUDINARY_UPLOAD_URL, { method: "POST", body: fd });
     if (res.ok) {
       const data = await res.json();
-      return data.secure_url;
+      // Enforce HTTPS: ensure the URL always starts with "https://"
+      if (data.secure_url) {
+        return data.secure_url.startsWith("https://") ? data.secure_url : "https://" + data.secure_url.replace(/^http:\/\//i, "");
+      }
+      // Fallback to url if secure_url missing
+      if (data.url) {
+        const url = data.url.startsWith("https://") ? data.url : "https://" + data.url.replace(/^http:\/\//i, "");
+        return url;
+      }
     }
   } catch {}
   // Fallback: return base64 data URL
@@ -475,8 +483,11 @@ function renderPostCard(post) {
     imgWrap.className = "fb-post-image-grid fb-post-image-single";
     const img = document.createElement("img");
     img.src = post.imageUrl;
+    img.crossOrigin = "anonymous";
     img.alt = "Post image";
     img.loading = "lazy";
+    img.style.cssText = "cursor:pointer;";
+    img.onclick = () => window.open(post.imageUrl, '_blank');
     imgWrap.appendChild(img);
     card.appendChild(imgWrap);
   }
@@ -1169,7 +1180,12 @@ async function uploadAndSendChatImage(file, collectionPath, extraData = {}) {
     if (res.ok) {
       const data = await res.json();
       console.log("Cloudinary response:", data);
-      imageUrl = data.secure_url;
+      // Enforce HTTPS: ensure the URL always starts with "https://"
+      if (data.secure_url) {
+        imageUrl = data.secure_url.startsWith("https://") ? data.secure_url : "https://" + data.secure_url.replace(/^http:\/\//i, "");
+      } else if (data.url) {
+        imageUrl = data.url.startsWith("https://") ? data.url : "https://" + data.url.replace(/^http:\/\//i, "");
+      }
     }
   } catch (err) {
     console.error('Chat image upload failed:', err);
@@ -1281,7 +1297,7 @@ function listenToChat() {
       const timeDisplay = timestamp?.toMillis ? timeAgo(timestamp.toMillis()) : (timestamp ? timeAgo(timestamp) : "");
       let imageHtml = '';
       if (m.imageUrl && typeof m.imageUrl === 'string' && m.imageUrl.trim() !== '') {
-        imageHtml = `<img class="chat-shared-image" src="${m.imageUrl}" onclick="window.open('${m.imageUrl}', '_blank')" alt="Shared image">`;
+        imageHtml = `<img src="${m.imageUrl}" crossorigin="anonymous" class="chat-shared-image" style="max-width:200px; max-height:200px; border-radius:8px; display:block; margin-top:5px; cursor:pointer;" onclick="window.open('${m.imageUrl}', '_blank')" />`;
       }
       const textHtml = m.text ? `<div class="chat-text">${m.text}</div>` : '';
       item.innerHTML = `<div class="chat-author">${authorAvatar} ${authorName}<div class="chat-hp-placeholder" data-author-id="${authorId}"></div></div>${imageHtml}${textHtml}<div class="chat-time">${timeDisplay}</div>`;
@@ -1404,6 +1420,7 @@ function openFloatingChat(partnerId, partnerName) {
         const img = document.createElement('img');
         img.className = 'chat-shared-image';
         img.src = msg.imageUrl;
+        img.crossOrigin = 'anonymous';
         img.onclick = () => window.open(msg.imageUrl, '_blank');
         img.alt = 'Shared image';
         bubble.appendChild(img);
