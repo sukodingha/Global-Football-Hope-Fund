@@ -126,7 +126,7 @@ function buildCalendar() {
   }
 }
 
-// ===== 2. GENERATE 20 FIXTURES PER DATE =====
+// ===== 2. GENERATE 20 FIXTURES PER DATE (dynamic times + shuffled pairings per day) =====
 const TEAMS_POOL = [
   { league: "Premier League", home: "Arsenal", away: "Chelsea" },
   { league: "Premier League", home: "Liverpool", away: "Manchester City" },
@@ -150,33 +150,127 @@ const TEAMS_POOL = [
   { league: "Premier League", home: "Wolves", away: "Fulham" },
 ];
 
-const KICKOFF_HOURS = [14, 16, 18, 20]; // 14:00, 16:00, 18:00, 20:00
-const KICKOFF_MINUTES = [0, 30]; // :00 or :30
+/**
+ * Deterministic shuffle based on a seed string (dateStr).
+ * Produces a rotated copy of the teams array so each date shows different pairings.
+ */
+function getShuffledTeamsForDate(dateStr) {
+  // Compute a numeric seed from the date string
+  let seed = 0;
+  for (let i = 0; i < dateStr.length; i++) {
+    seed = (seed * 31 + dateStr.charCodeAt(i)) | 0;
+  }
+  const rotateBy = ((seed % 20) + 20) % 20; // 0-19 rotation offset
 
+  // Rotate the pool by this offset
+  const pool = [...TEAMS_POOL];
+  const rotated = [];
+  for (let i = 0; i < pool.length; i++) {
+    rotated.push(pool[(i + rotateBy) % pool.length]);
+  }
+  return rotated;
+}
+
+/**
+ * Generate 20 fixtures for a given date with dynamic kick-off times.
+ * For TODAY: starts from currentHour + 1, spreads across remaining hours up to 23:00.
+ * For FUTURE dates: uses standard time slots (12:00, 14:30, 17:00, 19:30, 21:00).
+ * Filters out any match whose kick-off has already passed.
+ */
 function generateFixturesForDate(dateStr) {
-  const baseDate = new Date(dateStr + "T12:00:00");
   const now = Date.now();
+  const isTodayDate = isToday(dateStr);
+  const shuffled = getShuffledTeamsForDate(dateStr);
 
-  return TEAMS_POOL.map((t, i) => {
-    const hour = KICKOFF_HOURS[i % KICKOFF_HOURS.length];
-    const min = KICKOFF_MINUTES[i % KICKOFF_MINUTES.length];
-    const kickoff = new Date(baseDate);
-    kickoff.setHours(hour, min, 0, 0);
+  // Build dynamic kick-off slots based on whether it's today or future
+  const slots = [];
 
-    // Ensure kickoff is in the future; if not, push into future hours
-    if (kickoff.getTime() <= now) {
-      kickoff.setHours(kickoff.getHours() + 6);
+  if (isTodayDate) {
+    // TODAY: start from currentHour + 1, spread across remaining hours up to 23:00
+    const currentHour = new Date().getHours();
+    let startHour = currentHour + 1; // strictly after current time
+    if (startHour < 10) startHour = 10; // earliest reasonable slot
+
+    const possibleMinutes = [0, 15, 30, 45];
+    let slotIndex = 0;
+    for (let h = startHour; h <= 22; h++) {
+      const m = possibleMinutes[slotIndex % possibleMinutes.length];
+      slots.push({ hour: h, minute: m });
+      slotIndex++;
+      if (slotIndex >= 20) break; // max 20 slots
     }
+  } else {
+    // FUTURE DATE: standard time slots across the day
+    const futureSlots = [
+      { hour: 12, minute: 0 },
+      { hour: 12, minute: 30 },
+      { hour: 14, minute: 0 },
+      { hour: 14, minute: 30 },
+      { hour: 16, minute: 0 },
+      { hour: 16, minute: 30 },
+      { hour: 17, minute: 0 },
+      { hour: 17, minute: 30 },
+      { hour: 18, minute: 0 },
+      { hour: 18, minute: 30 },
+      { hour: 19, minute: 0 },
+      { hour: 19, minute: 30 },
+      { hour: 20, minute: 0 },
+      { hour: 20, minute: 30 },
+      { hour: 21, minute: 0 },
+      { hour: 21, minute: 30 },
+      { hour: 22, minute: 0 },
+      { hour: 22, minute: 30 },
+      { hour: 23, minute: 0 },
+      { hour: 23, minute: 30 },
+    ];
+    slots.push(...futureSlots);
+  }
 
-    return {
+  const results = [];
+  const baseDate = new Date(dateStr + "T00:00:00");
+
+  for (let i = 0; i < shuffled.length && i < slots.length; i++) {
+    const t = shuffled[i];
+    const slot = slots[i];
+    const kickoff = new Date(baseDate);
+    kickoff.setHours(slot.hour, slot.minute, 0, 0);
+
+    // Filter out matches whose kick-off time has already passed
+    if (kickoff.getTime() <= now) continue;
+
+    results.push({
       id: `fix_${dateStr.replace(/-/g,"")}_${i + 1}`,
       league: t.league,
       homeTeam: t.home,
       awayTeam: t.away,
       date: kickoff.toISOString(),
       status: "upcoming"
-    };
-  });
+    });
+  }
+
+  // If too many were filtered (e.g. late hour today), pad with future-dated fallback slots
+  if (results.length < 7) {
+    // Push remaining shuffled teams into late-night slots (all in the future)
+    const padDate = new Date(now + 3600000 * (results.length + 1));
+    for (let i = results.length; i < shuffled.length; i++) {
+      const t = shuffled[i];
+      const kickoff = new Date(padDate);
+      kickoff.setHours(19 + (i % 4), (i % 2) * 30, 0, 0);
+      if (kickoff.getTime() <= now) {
+        kickoff.setTime(kickoff.getTime() + 7200000); // +2h
+      }
+      results.push({
+        id: `fix_${dateStr.replace(/-/g,"")}_${i + 1}`,
+        league: t.league,
+        homeTeam: t.home,
+        awayTeam: t.away,
+        date: kickoff.toISOString(),
+        status: "upcoming"
+      });
+    }
+  }
+
+  return results;
 }
 
 // ===== 3. RENDER FIXTURES WITH SELECTION UI =====
