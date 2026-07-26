@@ -1,96 +1,62 @@
 /**
- * GFHF Match Prediction League Module
- * - Displays upcoming fixtures from live scores API
- * - Users predict home/away scores and save to Firestore under predictions/{uid}_{matchId}
- * - Community Leaderboard with Unique IDs (#GFHF-XXXX)
- * - Points: +3 for exact score, +1 for correct outcome
+ * GFHF Match Prediction League Module (REBUILT)
+ * - Fetches 10 upcoming fixtures (API + dynamic fallback)
+ * - Users select Winner (1/X/2) + Total Goals per match
+ * - Minimum 7 selections required to submit a slip
+ * - Settlement engine rewards 2 HP for >=6 correct predictions
  */
 
 import { auth, db } from "./firebase.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  doc, setDoc, getDoc, getDocs, collection, query, where,
-  serverTimestamp
+  doc, getDoc, getDocs, addDoc, collection, query, where, orderBy, updateDoc, increment, serverTimestamp, limit
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getHPBadgeHTML, getUserHP } from "./rewards.js";
 
 // ===== DOM REFS =====
 const fixturesContainer = document.getElementById("predictionFixtures");
 const leaderboardContainer = document.getElementById("predictionLeaderboard");
 const userStatus = document.getElementById("predictionUserStatus");
 const globalMsg = document.getElementById("predictionGlobalMsg");
+const slipBanner = document.getElementById("slipBanner");
+const slipCount = document.getElementById("slipCount");
+const slipProgress = document.getElementById("slipProgress");
+const slipSubmitBtn = document.getElementById("slipSubmitBtn");
+const slipHistoryContainer = document.getElementById("slipHistory");
 
 // ===== STATE =====
 let currentUser = null;
 let currentUserUniqueId = null;
 let currentUserName = "Guest";
+let fixtures = [];
+let userSelections = {}; // { [fixtureId]: { winner: "1"|"X"|"2"|null, totalGoals: "over1.5"|"over2.5"|"under2.5"|"exact"|null, exactGoals: number|null } }
+let isSubmitting = false;
 
-// ===== MOCK UPCOMING FIXTURES =====
-const MOCK_FIXTURES = [
-  {
-    id: "fixture_1",
-    league: "Premier League",
-    homeTeam: "Arsenal",
-    awayTeam: "Chelsea",
-    date: new Date(Date.now() + 86400000 * 2).toISOString(),
+// ===== 10 FALLBACK FIXTURES (dynamic dates) =====
+function generateFallbackFixtures() {
+  const now = Date.now();
+  const DAY = 86400000;
+  const teams = [
+    { league: "Premier League", home: "Arsenal", away: "Chelsea" },
+    { league: "La Liga", home: "Barcelona", away: "Real Madrid" },
+    { league: "Serie A", home: "Inter Milan", away: "AC Milan" },
+    { league: "Bundesliga", home: "Bayern Munich", away: "Borussia Dortmund" },
+    { league: "Ligue 1", home: "PSG", away: "Marseille" },
+    { league: "Premier League", home: "Liverpool", away: "Manchester City" },
+    { league: "Premier League", home: "Manchester United", away: "Tottenham" },
+    { league: "La Liga", home: "Atletico Madrid", away: "Sevilla" },
+    { league: "Serie A", home: "Juventus", away: "AS Roma" },
+    { league: "Premier League", home: "Newcastle", away: "Aston Villa" },
+  ];
+  return teams.map((t, i) => ({
+    id: `fixture_${i + 1}`,
+    league: t.league,
+    homeTeam: t.home,
+    awayTeam: t.away,
+    date: new Date(now + (i + 1) * DAY).toISOString(),
     status: "upcoming"
-  },
-  {
-    id: "fixture_2",
-    league: "La Liga",
-    homeTeam: "Barcelona",
-    awayTeam: "Real Madrid",
-    date: new Date(Date.now() + 86400000 * 3).toISOString(),
-    status: "upcoming"
-  },
-  {
-    id: "fixture_3",
-    league: "Serie A",
-    homeTeam: "Inter Milan",
-    awayTeam: "AC Milan",
-    date: new Date(Date.now() + 86400000 * 4).toISOString(),
-    status: "upcoming"
-  },
-  {
-    id: "fixture_4",
-    league: "Bundesliga",
-    homeTeam: "Bayern Munich",
-    awayTeam: "Borussia Dortmund",
-    date: new Date(Date.now() + 86400000).toISOString(),
-    status: "upcoming"
-  },
-  {
-    id: "fixture_5",
-    league: "Ligue 1",
-    homeTeam: "PSG",
-    awayTeam: "Marseille",
-    date: new Date(Date.now() + 86400000 * 5).toISOString(),
-    status: "upcoming"
-  },
-  {
-    id: "fixture_6",
-    league: "Premier League",
-    homeTeam: "Liverpool",
-    awayTeam: "Manchester City",
-    date: new Date(Date.now() + 86400000 * 6).toISOString(),
-    status: "upcoming"
-  },
-  {
-    id: "fixture_7",
-    league: "Premier League",
-    homeTeam: "Manchester United",
-    awayTeam: "Tottenham",
-    date: new Date(Date.now() + 86400000 * 7).toISOString(),
-    status: "upcoming"
-  },
-  {
-    id: "fixture_8",
-    league: "La Liga",
-    homeTeam: "Atletico Madrid",
-    awayTeam: "Sevilla",
-    date: new Date(Date.now() + 86400000 * 4).toISOString(),
-    status: "upcoming"
-  }
-];
+  }));
+}
 
 // ===== HELPERS =====
 function formatDate(dateStr) {
@@ -104,290 +70,455 @@ function formatDate(dateStr) {
   } catch { return dateStr; }
 }
 
-function getFixtureId(matchId) {
-  return `${currentUser?.uid || "anon"}_${matchId}`;
-}
-
 function showGlobalMsg(text, type = "success") {
   if (!globalMsg) return;
   globalMsg.textContent = text;
   globalMsg.className = `message ${type}`;
-  setTimeout(() => { globalMsg.className = "message"; }, 4000);
+  globalMsg.style.display = "block";
+  setTimeout(() => { globalMsg.style.display = "none"; }, 4000);
+}
+
+function escapeHtml(text) {
+  const d = document.createElement("div");
+  d.textContent = text;
+  return d.innerHTML;
+}
+
+// ===== SELECTION COUNT =====
+function getSelectedCount() {
+  return Object.keys(userSelections).filter(fid => {
+    const s = userSelections[fid];
+    return s && s.winner !== null && s.totalGoals !== null;
+  }).length;
+}
+
+function canSubmitSlip() {
+  return getSelectedCount() >= 7;
+}
+
+// ===== SLIP BANNER UPDATE =====
+function updateSlipBanner() {
+  if (!slipBanner || !slipCount || !slipProgress || !slipSubmitBtn) return;
+  const count = getSelectedCount();
+  slipCount.textContent = `${count}/10`;
+  const pct = Math.min(100, Math.round((count / 10) * 100));
+  slipProgress.style.width = `${pct}%`;
+  slipProgress.textContent = `${pct}%`;
+  const ready = canSubmitSlip();
+  slipSubmitBtn.disabled = !ready || isSubmitting;
+  slipSubmitBtn.textContent = isSubmitting ? "⏳ Submitting..." : ready
+    ? `📋 Submit ${count} Predictions`
+    : `📋 Select ${7 - count} more matches`;
+  if (ready) {
+    slipSubmitBtn.style.background = "linear-gradient(90deg, #00c853, #00b34a)";
+  } else {
+    slipSubmitBtn.style.background = "linear-gradient(90deg, #64748b, #475569)";
+  }
 }
 
 // ===== RENDER FIXTURES =====
-function renderFixtures(fixtures) {
+function renderFixtures(fixturesList) {
   if (!fixturesContainer) return;
 
-  if (!fixtures || fixtures.length === 0) {
+  if (!fixturesList || fixturesList.length === 0) {
     fixturesContainer.innerHTML = '<div class="card" style="grid-column:1/-1;text-align:center;background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.7);"><p style="padding:40px 0;">No upcoming fixtures available.</p></div>';
     return;
   }
 
-  fixturesContainer.innerHTML = fixtures.map((match) => {
-    const matchId = match.id;
-    const fixtureDate = formatDate(match.date);
-    const isPast = new Date(match.date) < new Date();
+  let html = '';
+  fixturesList.forEach((match) => {
+    const fid = match.id;
+    const sel = userSelections[fid] || { winner: null, totalGoals: null, exactGoals: null };
+    const selectionClass = (sel.winner !== null || sel.totalGoals !== null) ? ' odds-card-selected' : '';
 
-    return `
-      <div class="card odds-card" data-fixture-id="${matchId}">
+    html += `
+      <div class="odds-card${selectionClass}" data-fixture-id="${fid}">
         <div class="odds-header">
-          <span class="league-pill">⚽ ${match.league}</span>
-          <span class="odds-time">📅 ${fixtureDate}</span>
+          <span class="league-pill">⚽ ${escapeHtml(match.league)}</span>
+          <span class="odds-time">📅 ${formatDate(match.date)}</span>
         </div>
         <div class="odds-teams">
-          <div class="odds-team">${match.homeTeam}</div>
+          <div class="odds-team">${escapeHtml(match.homeTeam)}</div>
           <div class="odds-vs">vs</div>
-          <div class="odds-team">${match.awayTeam}</div>
+          <div class="odds-team">${escapeHtml(match.awayTeam)}</div>
         </div>
-        <div class="odds-prediction-form">
-          <div class="predict-label">🎯 Predict Score${isPast ? ' (Closed)' : ''}</div>
-          <div class="predict-inputs">
-            <div class="predict-team">
-              <span class="predict-team-name">${match.homeTeam}</span>
-              <input type="number" class="predict-score-input home-score" data-fixture="${matchId}" min="0" max="20" placeholder="0" ${isPast ? "disabled" : ""}>
-            </div>
-            <span class="predict-dash">-</span>
-            <div class="predict-team">
-              <span class="predict-team-name">${match.awayTeam}</span>
-              <input type="number" class="predict-score-input away-score" data-fixture="${matchId}" min="0" max="20" placeholder="0" ${isPast ? "disabled" : ""}>
-            </div>
+
+        <!-- Winner / Result Selection -->
+        <div class="prediction-section">
+          <div class="prediction-section-label">🎯 Winner / Result</div>
+          <div class="winner-buttons">
+            <button class="pred-btn winner-btn ${sel.winner === '1' ? 'active' : ''}" data-fixture="${fid}" data-winner="1">
+              <span class="pred-btn-label">1</span>
+              <span class="pred-btn-team">${escapeHtml(match.homeTeam)}</span>
+            </button>
+            <button class="pred-btn winner-btn ${sel.winner === 'X' ? 'active' : ''}" data-fixture="${fid}" data-winner="X">
+              <span class="pred-btn-label">X</span>
+              <span class="pred-btn-team">Draw</span>
+            </button>
+            <button class="pred-btn winner-btn ${sel.winner === '2' ? 'active' : ''}" data-fixture="${fid}" data-winner="2">
+              <span class="pred-btn-label">2</span>
+              <span class="pred-btn-team">${escapeHtml(match.awayTeam)}</span>
+            </button>
           </div>
-          <button class="btn submit-prediction-btn" data-fixture-id="${matchId}" ${isPast ? "disabled" : ""}>
-            ${isPast ? "⏰ Closed" : "Submit Prediction"}
-          </button>
+        </div>
+
+        <!-- Total Goals Selection -->
+        <div class="prediction-section">
+          <div class="prediction-section-label">⚽ Total Goals</div>
+          <div class="goals-buttons">
+            <button class="pred-btn goals-btn ${sel.totalGoals === 'over1.5' ? 'active' : ''}" data-fixture="${fid}" data-goals="over1.5">Over 1.5</button>
+            <button class="pred-btn goals-btn ${sel.totalGoals === 'over2.5' ? 'active' : ''}" data-fixture="${fid}" data-goals="over2.5">Over 2.5</button>
+            <button class="pred-btn goals-btn ${sel.totalGoals === 'under2.5' ? 'active' : ''}" data-fixture="${fid}" data-goals="under2.5">Under 2.5</button>
+            <button class="pred-btn goals-btn ${sel.totalGoals === 'exact' ? 'active' : ''}" data-fixture="${fid}" data-goals="exact">Exact</button>
+          </div>
+          <div class="exact-goals-input" style="display:${sel.totalGoals === 'exact' ? 'flex' : 'none'};margin-top:6px;gap:8px;align-items:center;">
+            <span style="font-size:12px;color:rgba(255,255,255,0.6);">Exact goals:</span>
+            <input type="number" class="exact-goals-num" data-fixture="${fid}" min="0" max="20" value="${sel.exactGoals !== null ? sel.exactGoals : ''}" placeholder="e.g. 3" style="width:60px;padding:6px 8px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.3);color:#fff;text-align:center;font-size:14px;font-weight:700;">
+          </div>
         </div>
       </div>
     `;
-  }).join("");
+  });
 
-  // Attach prediction submit handlers
-  fixturesContainer.querySelectorAll(".submit-prediction-btn").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      if (!currentUser) {
-        showGlobalMsg("Please sign in to make predictions.", "error");
-        return;
+  fixturesContainer.innerHTML = html;
+
+  // ===== ATTACH EVENT HANDLERS =====
+
+  // Winner buttons
+  fixturesContainer.querySelectorAll('.winner-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!currentUser) { document.getElementById("authModal")?.classList.add("auth-modal--open"); return; }
+      const fid = btn.dataset.fixture;
+      const winner = btn.dataset.winner;
+      if (!userSelections[fid]) userSelections[fid] = { winner: null, totalGoals: null, exactGoals: null };
+      // Toggle: if same winner clicked, deselect
+      if (userSelections[fid].winner === winner) {
+        userSelections[fid].winner = null;
+      } else {
+        userSelections[fid].winner = winner;
       }
-
-      const fixtureId = btn.dataset.fixtureId;
-      const card = btn.closest(".odds-card");
-      const homeInput = card.querySelector(".home-score");
-      const awayInput = card.querySelector(".away-score");
-      const homeVal = homeInput.value.trim();
-      const awayVal = awayInput.value.trim();
-
-      if (!homeVal || !awayVal) {
-        showGlobalMsg("Please enter both scores.", "error");
-        return;
+      // Update card highlight
+      const card = btn.closest('.odds-card');
+      const sel = userSelections[fid];
+      if (sel.winner !== null || sel.totalGoals !== null) {
+        card.classList.add('odds-card-selected');
+      } else {
+        card.classList.remove('odds-card-selected');
       }
+      // Update button states
+      card.querySelectorAll('.winner-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.winner === userSelections[fid].winner);
+      });
+      updateSlipBanner();
+    });
+  });
 
-      const homeNum = parseInt(homeVal, 10);
-      const awayNum = parseInt(awayVal, 10);
-      if (isNaN(homeNum) || isNaN(awayNum) || homeNum < 0 || awayNum > 20) {
-        showGlobalMsg("Enter valid scores (0-20).", "error");
-        return;
+  // Goals buttons
+  fixturesContainer.querySelectorAll('.goals-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!currentUser) { document.getElementById("authModal")?.classList.add("auth-modal--open"); return; }
+      const fid = btn.dataset.fixture;
+      const goals = btn.dataset.goals;
+      if (!userSelections[fid]) userSelections[fid] = { winner: null, totalGoals: null, exactGoals: null };
+      // Toggle: if same goals clicked, deselect
+      if (userSelections[fid].totalGoals === goals) {
+        userSelections[fid].totalGoals = null;
+        userSelections[fid].exactGoals = null;
+      } else {
+        userSelections[fid].totalGoals = goals;
+        if (goals !== 'exact') userSelections[fid].exactGoals = null;
       }
+      // Update card highlight
+      const card = btn.closest('.odds-card');
+      const sel = userSelections[fid];
+      if (sel.winner !== null || sel.totalGoals !== null) {
+        card.classList.add('odds-card-selected');
+      } else {
+        card.classList.remove('odds-card-selected');
+      }
+      // Update button states
+      card.querySelectorAll('.goals-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.goals === userSelections[fid].totalGoals);
+      });
+      // Show/hide exact goals input
+      const exactDiv = card.querySelector('.exact-goals-input');
+      if (exactDiv) {
+        exactDiv.style.display = userSelections[fid].totalGoals === 'exact' ? 'flex' : 'none';
+      }
+      updateSlipBanner();
+    });
+  });
 
-      await submitPrediction(fixtureId, homeNum, awayNum, btn);
+  // Exact goals number input
+  fixturesContainer.querySelectorAll('.exact-goals-num').forEach(input => {
+    input.addEventListener('input', () => {
+      const fid = input.dataset.fixture;
+      const val = input.value.trim();
+      if (userSelections[fid]) {
+        userSelections[fid].exactGoals = val !== '' ? parseInt(val, 10) : null;
+      }
     });
   });
 }
 
-// ===== SUBMIT PREDICTION =====
-async function submitPrediction(fixtureId, homeScore, awayScore, btnElement) {
-  if (!currentUser) return;
+// ===== SUBMIT SLIP =====
+async function submitSlip() {
+  if (!currentUser) { showGlobalMsg("Please sign in first.", "error"); return; }
+  if (isSubmitting) return;
+  if (!canSubmitSlip()) { showGlobalMsg("Select at least 7 matches with both winner and total goals.", "error"); return; }
 
-  btnElement.disabled = true;
-  btnElement.textContent = "Saving...";
+  // Validate all selected entries have both winner and total goals
+  const selectedFixtures = Object.keys(userSelections).filter(fid => {
+    const s = userSelections[fid];
+    return s && s.winner !== null && s.totalGoals !== null;
+  });
+
+  if (selectedFixtures.length < 7) {
+    showGlobalMsg("Select at least 7 matches with both winner and total goals.", "error");
+    return;
+  }
+
+  // Build selections array
+  const selections = selectedFixtures.map(fid => {
+    const match = fixtures.find(f => f.id === fid);
+    const s = userSelections[fid];
+    return {
+      fixtureId: fid,
+      homeTeam: match ? match.homeTeam : "Home",
+      awayTeam: match ? match.awayTeam : "Away",
+      league: match ? match.league : "",
+      winner: s.winner,
+      totalGoals: s.totalGoals,
+      exactGoals: s.totalGoals === 'exact' ? s.exactGoals : null
+    };
+  });
+
+  isSubmitting = true;
+  slipSubmitBtn.disabled = true;
+  slipSubmitBtn.textContent = "⏳ Submitting...";
 
   try {
-    const predictionId = getFixtureId(fixtureId);
-    const predictionRef = doc(db, "predictions", predictionId);
-
-    await setDoc(predictionRef, {
+    await addDoc(collection(db, "prediction_slips"), {
       userId: currentUser.uid,
-      userEmail: currentUser.email,
       userName: currentUserName,
       userUniqueId: currentUserUniqueId || "",
-      fixtureId: fixtureId,
-      homeScore: homeScore,
-      awayScore: awayScore,
-      points: 0, // Points awarded when results are verified
-      exactMatch: false,
-      correctOutcome: false,
-      submittedAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    }, { merge: true });
+      selections: selections,
+      totalMatches: selections.length,
+      correctCount: 0,
+      status: "pending",
+      rewarded: false,
+      createdAt: serverTimestamp()
+    });
 
-    // Update UI
-    btnElement.textContent = `✅ ${homeScore}‑${awayScore} Saved`;
-    btnElement.style.background = "linear-gradient(90deg, #059669, #047857)";
+    showGlobalMsg(`✅ Prediction slip submitted! ${selections.length} predictions saved. Good luck!`, "success");
 
-    // Disable inputs
-    const card = btnElement.closest(".odds-card");
-    card.querySelectorAll(".predict-score-input").forEach(inp => inp.disabled = true);
+    // Clear selections
+    userSelections = {};
+    updateSlipBanner();
+    renderFixtures(fixtures);
 
-    showGlobalMsg("✅ Prediction saved! Check the leaderboard.", "success");
-
-    // Refresh leaderboard
-    await loadLeaderboard();
+    // Refresh slip history
+    loadSlipHistory();
   } catch (err) {
-    console.error("Prediction save error:", err);
-    showGlobalMsg("Failed to save prediction. Please try again.", "error");
-    btnElement.disabled = false;
-    btnElement.textContent = "Submit Prediction";
+    console.error("Slip submit error:", err);
+    showGlobalMsg("Failed to submit slip. Try again.", "error");
+  } finally {
+    isSubmitting = false;
+    updateSlipBanner();
   }
 }
 
-// ===== LOAD EXISTING PREDICTIONS =====
-async function loadUserPredictions() {
-  if (!currentUser) return;
-
-  try {
-    const predictionsRef = collection(db, "predictions");
-    const q = query(predictionsRef, where("userId", "==", currentUser.uid));
-    const snapshot = await getDocs(q);
-
-    snapshot.docs.forEach((docSnap) => {
-      const data = docSnap.data();
-      const fixtureId = data.fixtureId;
-
-      // Find the card and populate
-      if (fixtureId) {
-        const card = fixturesContainer?.querySelector(`.odds-card[data-fixture-id="${fixtureId}"]`);
-        if (card) {
-          const homeInput = card.querySelector(".home-score");
-          const awayInput = card.querySelector(".away-score");
-          const btn = card.querySelector(".submit-prediction-btn");
-
-          if (homeInput) homeInput.value = data.homeScore;
-          if (awayInput) awayInput.value = data.awayScore;
-          if (homeInput) homeInput.disabled = true;
-          if (awayInput) awayInput.disabled = true;
-          if (btn) {
-            btn.textContent = `✅ ${data.homeScore}‑${data.awayScore} Saved`;
-            btn.disabled = true;
-            btn.style.background = "linear-gradient(90deg, #059669, #047857)";
-          }
-        }
-      }
-    });
-  } catch (err) {
-    console.warn("Could not load user predictions:", err);
-  }
+// ===== SETTLEMENT ENGINE =====
+/**
+ * Mock results for settlement - in production, fetch from fixture_results/{fixtureId}
+ */
+function getMockResult(fixtureId) {
+  // Use deterministic but varied results based on fixture ID
+  const hash = fixtureId.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+  const homeScore = hash % 5; // 0-4
+  const awayScore = (hash * 3) % 4; // 0-3
+  return { homeScore, awayScore };
 }
 
-// ===== LEADERBOARD =====
-async function loadLeaderboard() {
-  if (!leaderboardContainer) return;
+/**
+ * Determine winner from scores
+ */
+function getScoreWinner(home, away) {
+  if (home > away) return "1";
+  if (home < away) return "2";
+  return "X";
+}
 
-  try {
-    const predictionsRef = collection(db, "predictions");
-    const snapshot = await getDocs(predictionsRef);
+/**
+ * Determine total goals category
+ */
+function getGoalsCategory(home, away) {
+  const total = home + away;
+  if (total > 2.5) return "over2.5";
+  if (total > 1.5) return "over1.5";
+  return "under2.5";
+}
 
-    // Aggregate predictions by user
-    const userStats = {};
+/**
+ * Settle a single prediction slip
+ */
+async function settleSlip(slipDoc) {
+  const slip = slipDoc.data();
+  const slipId = slipDoc.id;
 
-    snapshot.docs.forEach((docSnap) => {
-      const data = docSnap.data();
-      if (!data.userId) return;
+  if (slip.status !== "pending" || slip.rewarded) return;
 
-      if (!userStats[data.userId]) {
-        userStats[data.userId] = {
-          userId: data.userId,
-          userName: data.userName || "Anonymous",
-          userUniqueId: data.userUniqueId || "",
-          totalPredictions: 0,
-          points: 0,
-          exactMatches: 0,
-          correctOutcomes: 0
-        };
-      }
+  let correctCount = 0;
+  const results = [];
 
-      userStats[data.userId].totalPredictions++;
-      userStats[data.userId].points += data.points || 0;
-      if (data.exactMatch) userStats[data.userId].exactMatches++;
-      if (data.correctOutcome) userStats[data.userId].correctOutcomes++;
-    });
+  slip.selections.forEach(sel => {
+    const result = getMockResult(sel.fixtureId);
+    const correctWinner = getScoreWinner(result.homeScore, result.awayScore);
+    const correctGoals = getGoalsCategory(result.homeScore, result.awayScore);
 
-    // Sort by points descending
-    const sortedUsers = Object.values(userStats).sort((a, b) => b.points - a.points);
+    let winnerCorrect = sel.winner === correctWinner;
+    let goalsCorrect = sel.totalGoals === 'exact'
+      ? (result.homeScore + result.awayScore) === sel.exactGoals
+      : sel.totalGoals === correctGoals;
 
-    // Also add mock users to fill the leaderboard visually
-    const mockTopUsers = [
-      { userName: "Alex M.", userUniqueId: "#GFHF-A1B2", totalPredictions: 15, points: 42, exactMatches: 8, correctOutcomes: 6 },
-      { userName: "Sarah K.", userUniqueId: "#GFHF-C3D4", totalPredictions: 14, points: 38, exactMatches: 6, correctOutcomes: 8 },
-      { userName: "Marco R.", userUniqueId: "#GFHF-E5F6", totalPredictions: 13, points: 35, exactMatches: 5, correctOutcomes: 7 },
-      { userName: "Yuki T.", userUniqueId: "#GFHF-G7H8", totalPredictions: 12, points: 31, exactMatches: 4, correctOutcomes: 6 },
-      { userName: "Emma W.", userUniqueId: "#GFHF-I9J0", totalPredictions: 11, points: 28, exactMatches: 3, correctOutcomes: 5 }
-    ];
-
-    // Only show mock users if there are no real predictions yet
-    let displayUsers = sortedUsers;
-    if (displayUsers.length === 0) {
-      displayUsers = mockTopUsers.map(u => ({ ...u, userId: `mock_${Math.random()}` }));
+    if (winnerCorrect && goalsCorrect) {
+      correctCount++;
     }
 
-    // Highlight current user
-    const currentUserId = currentUser?.uid;
+    results.push({
+      fixtureId: sel.fixtureId,
+      homeTeam: sel.homeTeam,
+      awayTeam: sel.awayTeam,
+      actualScore: `${result.homeScore}-${result.awayScore}`,
+      winnerCorrect,
+      goalsCorrect
+    });
+  });
 
-    // Build unique ID for current user in leaderboard
-    let displayUniqueId = currentUserUniqueId || "";
+  const totalMatches = slip.selections.length;
+  const rewarded = correctCount >= 6 && totalMatches >= 7;
 
-    if (leaderboardContainer) {
-      leaderboardContainer.innerHTML = `
-        <div class="leaderboard-table">
-          <div class="leaderboard-header">
-            <span>#</span>
-            <span>Player</span>
-            <span>Pts</span>
-            <span>Exact</span>
-            <span>Total</span>
+  try {
+    // Update slip status
+    await updateDoc(doc(db, "prediction_slips", slipId), {
+      status: "settled",
+      correctCount,
+      results,
+      settledAt: serverTimestamp(),
+      rewarded
+    });
+
+    // Award HP if qualified
+    if (rewarded) {
+      await updateDoc(doc(db, "users", slip.userId), {
+        hopePoints: increment(2)
+      });
+
+      // Record in point_history
+      try {
+        await addDoc(collection(db, "point_history"), {
+          userId: slip.userId,
+          points: 2,
+          type: "earned",
+          reason: `🏆 Prediction Reward: ${correctCount}/${totalMatches} correct!`,
+          slipId,
+          timestamp: serverTimestamp()
+        });
+      } catch (e) { console.warn("Could not log point history:", e); }
+    }
+
+    return { slipId, correctCount, totalMatches, rewarded };
+  } catch (err) {
+    console.error("Settlement error for slip", slipId, err);
+    return null;
+  }
+}
+
+/**
+ * Check and settle all pending slips (called on page load)
+ */
+async function settleAllPendingSlips() {
+  try {
+    const q = query(
+      collection(db, "prediction_slips"),
+      where("status", "==", "pending"),
+      limit(50)
+    );
+    const snap = await getDocs(q);
+    const results = [];
+    for (const docSnap of snap.docs) {
+      const result = await settleSlip(docSnap);
+      if (result) results.push(result);
+    }
+    if (results.length > 0) {
+      const rewarded = results.filter(r => r.rewarded);
+      if (rewarded.length > 0) {
+        showGlobalMsg(`🏆 ${rewarded.length} slip(s) rewarded! Check your HP balance.`, "success");
+      }
+      loadSlipHistory();
+      loadLeaderboard();
+    }
+  } catch (err) {
+    console.warn("Settlement check error:", err);
+  }
+}
+
+// ===== LOAD SLIP HISTORY =====
+async function loadSlipHistory() {
+  if (!slipHistoryContainer || !currentUser) return;
+
+  try {
+    const q = query(
+      collection(db, "prediction_slips"),
+      where("userId", "==", currentUser.uid),
+      orderBy("createdAt", "desc"),
+      limit(20)
+    );
+    const snap = await getDocs(q);
+
+    if (snap.empty) {
+      slipHistoryContainer.innerHTML = '<p class="helper-text" style="text-align:center;color:rgba(255,255,255,0.7);">No prediction slips yet. Select 7+ matches and submit!</p>';
+      return;
+    }
+
+    let html = '';
+    snap.docs.forEach(docSnap => {
+      const slip = docSnap.data();
+      const timestamp = slip.createdAt?.toMillis ? slip.createdAt.toMillis() : Date.now();
+      const dateStr = new Date(timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      const statusIcon = slip.status === 'settled' ? (slip.rewarded ? '✅' : '❌') : '⏳';
+      const rewardText = slip.rewarded ? ' +2 HP 🏆' : '';
+
+      html += `
+        <div class="slip-history-item">
+          <div class="slip-history-header">
+            <span>${statusIcon} <strong>${slip.totalMatches} predictions</strong></span>
+            <span style="font-size:12px;color:rgba(255,255,255,0.5);">${dateStr}</span>
           </div>
-          ${displayUsers.map((user, i) => {
-            const isYou = user.userId === currentUserId;
-            const winRate = user.totalPredictions > 0 ? Math.round((user.exactMatches / user.totalPredictions) * 100) : 0;
-            const rank = i + 1;
-            const rankDisplay = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : `#${rank}`;
-            const displayName = isYou ? `${user.userName} (You)` : user.userName;
-            const uniqueId = isYou && displayUniqueId ? displayUniqueId : (user.userUniqueId || "");
-            return `
-              <div class="leaderboard-row ${isYou ? "leaderboard-you" : ""}">
-                <span class="leaderboard-rank">${rankDisplay}</span>
-                <span class="leaderboard-name">
-                  <strong>${displayName}</strong>
-                  ${uniqueId ? `<span style="display:block;font-size:11px;color:rgba(255,255,255,0.5);">${uniqueId}</span>` : ''}
-                </span>
-                <span class="leaderboard-pts"><strong>${user.points}</strong></span>
-                <span class="leaderboard-exact">${user.exactMatches}</span>
-                <span class="leaderboard-winrate">${winRate}%</span>
-              </div>
-            `;
-          }).join("")}
-        </div>
-        <div class="leaderboard-legend">
-          <p>+3 pts exact score · +1 pt correct outcome · Predict more to climb!</p>
-          ${currentUser ? `<p style="margin-top:8px;font-size:13px;color:rgba(255,255,255,0.5);">Your Unique ID: <strong style="color:#00c853;">${displayUniqueId || 'Set in Dashboard'}</strong></p>` : ''}
+          <div style="font-size:13px;color:rgba(255,255,255,0.7);">
+            Status: ${slip.status === 'settled' ? `Settled (${slip.correctCount || 0}/${slip.totalMatches} correct)${rewardText}` : 'Pending ⏳'}
+          </div>
         </div>
       `;
-    }
+    });
+
+    slipHistoryContainer.innerHTML = html;
   } catch (err) {
-    console.error("Leaderboard load error:", err);
-    if (leaderboardContainer) {
-      leaderboardContainer.innerHTML = '<div class="admin-error">Failed to load leaderboard.</div>';
-    }
+    console.warn("Could not load slip history:", err);
+    slipHistoryContainer.innerHTML = '<p class="helper-text" style="text-align:center;color:rgba(255,255,255,0.7);">Could not load history.</p>';
   }
 }
 
-// ===== FETCH UPCOMING FIXTURES =====
+// ===== FETCH FIXTURES =====
 async function fetchFixtures() {
   if (!fixturesContainer) return;
 
-  let fixtures = [];
+  let fetchedFixtures = [];
 
-  // Try to fetch from API-Football first
+  // Try API-Football
   try {
-    const response = await fetch("https://v3.football.api-sports.io/fixtures?date=" + new Date().toISOString().split("T")[0], {
+    const today = new Date().toISOString().split('T')[0];
+    const response = await fetch(`https://v3.football.api-sports.io/fixtures?date=${today}`, {
       method: "GET",
       headers: {
         "x-rapidapi-host": "v3.football.api-sports.io",
@@ -397,7 +528,7 @@ async function fetchFixtures() {
     if (response.ok) {
       const data = await response.json();
       if (data.response && data.response.length > 0) {
-        fixtures = data.response.slice(0, 8).map(m => ({
+        fetchedFixtures = data.response.slice(0, 10).map(m => ({
           id: `api_${m.fixture.id}`,
           league: m.league?.name || "International",
           homeTeam: m.teams?.home?.name || "Home",
@@ -408,19 +539,124 @@ async function fetchFixtures() {
       }
     }
   } catch (err) {
-    console.warn("API fetch failed, using mock fixtures:", err.message);
+    console.warn("API fetch failed, using fallback fixtures:", err.message);
   }
 
-  // Fallback to mock
-  if (fixtures.length === 0) {
-    fixtures = MOCK_FIXTURES;
+  // Fallback
+  if (fetchedFixtures.length === 0) {
+    fetchedFixtures = generateFallbackFixtures();
   }
 
+  fixtures = fetchedFixtures;
   renderFixtures(fixtures);
+  updateSlipBanner();
+}
 
-  // Load existing predictions for the user
-  if (currentUser) {
-    await loadUserPredictions();
+// ===== LEADERBOARD =====
+async function loadLeaderboard() {
+  if (!leaderboardContainer) return;
+
+  try {
+    // Aggregate from settled, rewarded prediction_slips
+    const q = query(
+      collection(db, "prediction_slips"),
+      where("rewarded", "==", true),
+      limit(100)
+    );
+    const snap = await getDocs(q);
+
+    const userRewards = {};
+    snap.docs.forEach(docSnap => {
+      const slip = docSnap.data();
+      if (!slip.userId) return;
+      if (!userRewards[slip.userId]) {
+        userRewards[slip.userId] = {
+          userId: slip.userId,
+          userName: slip.userName || "Anonymous",
+          userUniqueId: slip.userUniqueId || "",
+          totalSlips: 0,
+          hpEarned: 0,
+          correctTotal: 0,
+          matchTotal: 0
+        };
+      }
+      userRewards[slip.userId].totalSlips++;
+      userRewards[slip.userId].hpEarned += 2; // Each rewarded slip = 2 HP
+      userRewards[slip.userId].correctTotal += slip.correctCount || 0;
+      userRewards[slip.userId].matchTotal += slip.totalMatches || 0;
+    });
+
+    const sortedUsers = Object.values(userRewards).sort((a, b) => b.hpEarned - a.hpEarned);
+
+    // Fallback mock data if no real data
+    let displayUsers = sortedUsers;
+    if (displayUsers.length === 0) {
+      displayUsers = [
+        { userId: "mock_1", userName: "Alex M.", userUniqueId: "#GFHF-A1B2", totalSlips: 5, hpEarned: 8, correctTotal: 28, matchTotal: 40 },
+        { userId: "mock_2", userName: "Sarah K.", userUniqueId: "#GFHF-C3D4", totalSlips: 4, hpEarned: 6, correctTotal: 22, matchTotal: 35 },
+        { userId: "mock_3", userName: "Marco R.", userUniqueId: "#GFHF-E5F6", totalSlips: 3, hpEarned: 4, correctTotal: 18, matchTotal: 30 },
+        { userId: "mock_4", userName: "Yuki T.", userUniqueId: "#GFHF-G7H8", totalSlips: 3, hpEarned: 4, correctTotal: 16, matchTotal: 28 },
+        { userId: "mock_5", userName: "Emma W.", userUniqueId: "#GFHF-I9J0", totalSlips: 2, hpEarned: 2, correctTotal: 10, matchTotal: 20 },
+      ];
+    }
+
+    const currentUserId = currentUser?.uid;
+    let displayUniqueId = currentUserUniqueId || "";
+
+    leaderboardContainer.innerHTML = `
+      <div class="leaderboard-table">
+        <div class="leaderboard-header">
+          <span>#</span>
+          <span>Player</span>
+          <span>HP 🏆</span>
+          <span>Slips</span>
+          <span>Accuracy</span>
+        </div>
+        ${displayUsers.map((user, i) => {
+          const isYou = user.userId === currentUserId;
+          const accuracy = user.matchTotal > 0 ? Math.round((user.correctTotal / user.matchTotal) * 100) : 0;
+          const rank = i + 1;
+          const rankDisplay = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : `#${rank}`;
+          const displayName = isYou ? `${user.userName} (You)` : user.userName;
+          const uid = isYou && displayUniqueId ? displayUniqueId : (user.userUniqueId || "");
+          return `
+            <div class="leaderboard-row ${isYou ? "leaderboard-you" : ""}">
+              <span class="leaderboard-rank">${rankDisplay}</span>
+              <span class="leaderboard-name">
+                <strong>${displayName}</strong>
+                ${uid ? `<span style="display:block;font-size:11px;color:rgba(255,255,255,0.5);">${uid}</span>` : ''}
+              </span>
+              <span class="leaderboard-pts"><strong>${user.hpEarned} HP</strong></span>
+              <span class="leaderboard-exact">${user.totalSlips}</span>
+              <span class="leaderboard-winrate">${accuracy}%</span>
+            </div>
+          `;
+        }).join("")}
+      </div>
+      <div class="leaderboard-legend">
+        <p>🏆 Get at least 6/10 correct predictions to earn <strong>2 HP</strong> per slip!</p>
+        ${currentUser ? `<p style="margin-top:8px;font-size:13px;color:rgba(255,255,255,0.5);">Your ID: <strong style="color:#00c853;">${displayUniqueId || 'Set in Dashboard'}</strong></p>` : ''}
+      </div>
+    `;
+  } catch (err) {
+    console.error("Leaderboard error:", err);
+    leaderboardContainer.innerHTML = '<div class="admin-error">Failed to load leaderboard.</div>';
+  }
+}
+
+// ===== LOAD USER PROFILE =====
+async function loadUserProfile() {
+  if (!currentUser) return;
+  try {
+    const userRef = doc(db, "users", currentUser.uid);
+    const userSnap = await getDoc(userRef);
+    if (userSnap.exists()) {
+      const data = userSnap.data();
+      currentUserUniqueId = data.uniqueId || "";
+      currentUserName = data.displayName || data.firstName || currentUserName;
+    }
+  } catch (err) {
+    console.warn("Could not load user profile:", err);
   }
 }
 
@@ -430,46 +666,51 @@ onAuthStateChanged(auth, async (user) => {
 
   if (user) {
     currentUserName = user.displayName || user.email?.split("@")[0] || "Anonymous";
-
-    // Load user's unique ID from Firestore
-    try {
-      const userRef = doc(db, "users", user.uid);
-      const userSnap = await getDoc(userRef);
-      if (userSnap.exists()) {
-        const data = userSnap.data();
-        currentUserUniqueId = data.uniqueId || "";
-        currentUserName = data.displayName || data.firstName || currentUserName;
-      }
-    } catch (err) {
-      console.warn("Could not load user profile:", err);
-    }
+    await loadUserProfile();
 
     if (userStatus) {
       userStatus.textContent = `Signed in as ${currentUserName} ${currentUserUniqueId ? `· ${currentUserUniqueId}` : ''}`;
+      userStatus.classList.add("active");
     }
+
+    // Load history
+    await loadSlipHistory();
+
+    // Settle any pending slips
+    await settleAllPendingSlips();
   } else {
     currentUserUniqueId = null;
     currentUserName = "Guest";
     if (userStatus) {
       userStatus.textContent = "Sign in to make predictions!";
+      userStatus.classList.remove("active");
+    }
+    if (slipHistoryContainer) {
+      slipHistoryContainer.innerHTML = '<p class="helper-text" style="text-align:center;color:rgba(255,255,255,0.7);">Sign in to see your prediction history.</p>';
     }
   }
 
   // Load fixtures and leaderboard
   await fetchFixtures();
   await loadLeaderboard();
+  updateSlipBanner();
 });
+
+// ===== SLIP SUBMIT BUTTON =====
+if (slipSubmitBtn) {
+  slipSubmitBtn.addEventListener("click", submitSlip);
+}
 
 // ===== INIT =====
 document.addEventListener("DOMContentLoaded", () => {
-  // If auth is already loaded, the onAuthStateChanged will handle it
+  updateSlipBanner();
 });
 
-// Also run on load
 window.addEventListener("load", () => {
   if (fixturesContainer && fixturesContainer.innerHTML.includes("Loading")) {
     fetchFixtures();
     loadLeaderboard();
   }
+  updateSlipBanner();
 });
 

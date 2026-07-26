@@ -1426,9 +1426,11 @@ function openFloatingChat(partnerId, partnerName) {
       if (msg.imageUrl && typeof msg.imageUrl === 'string' && msg.imageUrl.trim() !== '') {
         const img = document.createElement('img');
         img.className = 'chat-shared-image';
-        img.src = msg.imageUrl;
+        // Enforce HTTPS for image src
+        const imgUrl = msg.imageUrl.startsWith("https://") ? msg.imageUrl : "https://" + msg.imageUrl.replace(/^http:\/\//i, "");
+        img.src = imgUrl;
         img.crossOrigin = 'anonymous';
-        img.onclick = () => window.open(msg.imageUrl, '_blank');
+        img.onclick = () => window.open(imgUrl, '_blank');
         img.alt = 'Shared image';
         bubble.appendChild(img);
       }

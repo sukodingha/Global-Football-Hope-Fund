@@ -1,15 +1,11 @@
-# Task: Fix net::ERR_BLOCKED_BY_RESPONSE for chat image uploads
+# Rebuild Predictions Module
 
-## Status: ✅ All Changes Completed
+## Steps
 
-### File: `js/community.js` — All 4 changes applied
-- [x] 1. `uploadImage()` — Added HTTPS enforcement: `data.secure_url` is verified to start with `https://`, with fallback to `data.url` if `secure_url` is missing
-- [x] 2. `uploadAndSendChatImage()` — Same HTTPS enforcement: checks `data.secure_url` first, then `data.url`, both forced to `https://`
-- [x] 3. `renderPostCard()` — Added `crossorigin="anonymous"` to post image `<img>` element, plus click-to-open in new tab
-- [x] 4. Floating chat images in `openFloatingChat()` — Already had `img.crossOrigin = 'anonymous'` ✓
+- [x] Plan approved
+- [ ] 1. Rewrite `js/predictions.js` — full rebuild with selection-based form, slip system, settlement engine
+- [ ] 2. Update `pages/predictions.html` — add selection counter banner + history section
+- [ ] 3. Verify no broken dependencies
 
-### File: `js/chat.js` — 1 change applied
-- [x] 5. `createMessageBubble()` — Added image rendering with `crossorigin="anonymous"`, HTTPS enforcement, and click-to-open functionality
+## Status: In Progress
 
-### File: `js/dashboard.js` — No changes needed
-- Already correctly uses `data.secure_url` in both `handleImageUpload()` and `uploadToCloudinary()`

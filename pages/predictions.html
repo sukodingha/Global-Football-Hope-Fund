@@ -58,11 +58,14 @@
     <a href="donate.html">Donate</a>
   </nav>
 
-  <!-- ===== PREDICTIONS HEADER ===== -->
+<!-- ===== PREDICTIONS HEADER ===== -->
   <section class="section odds-section">
     <div class="section-heading">
       <h2>🎯 Match Prediction League</h2>
-      <p>Predict scores for upcoming fixtures and earn points. Climb the community leaderboard!</p>
+      <p>Predict match outcomes (Winner + Total Goals) &amp; win <strong>2 Hope Points (HP)</strong> for 6+ correct predictions!</p>
+      <div style="font-size:13px;color:rgba(255,255,255,0.7);margin-top:8px;">
+        📋 Select at least <strong>7 matches</strong> to submit a prediction slip &nbsp;|&nbsp; 🎯 Pick Winner (1/X/2) + Total Goals per match &nbsp;|&nbsp; 🏆 Earn <strong>2 HP</strong> for 6+ correct
+      </div>
     </div>
 
     <div id="predictionUserStatus" class="helper-text" style="color:rgba(255,255,255,0.8);margin-bottom:20px;text-align:center;">
@@ -70,6 +73,20 @@
     </div>
 
     <div id="predictionGlobalMsg" class="message" style="margin:0 auto 20px;max-width:600px;"></div>
+
+    <!-- ===== SELECTION SLIP BANNER ===== -->
+    <div id="slipBanner" style="max-width:1200px;margin:0 auto 20px;background:linear-gradient(135deg,rgba(0,200,83,0.12),rgba(0,200,83,0.05));border:1px solid rgba(0,200,83,0.25);border-radius:14px;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:12px;flex:1;min-width:200px;">
+        <span style="font-size:22px;">📋</span>
+        <div style="flex:1;">
+          <div style="font-size:14px;font-weight:700;color:#fff;">Your Selections: <span id="slipCount">0/10</span></div>
+          <div style="width:100%;height:8px;background:rgba(255,255,255,0.12);border-radius:999px;margin-top:6px;overflow:hidden;">
+            <div id="slipProgress" style="height:100%;background:linear-gradient(90deg,#00c853,#34d399);border-radius:999px;transition:width 0.3s ease;width:0%;text-align:center;font-size:9px;font-weight:700;color:#fff;line-height:8px;"></div>
+          </div>
+        </div>
+      </div>
+      <button id="slipSubmitBtn" disabled style="padding:10px 22px;border:none;border-radius:999px;background:linear-gradient(90deg,#64748b,#475569);color:white;font-weight:700;font-size:14px;cursor:pointer;transition:all 0.2s ease;white-space:nowrap;">📋 Select 7+ matches</button>
+    </div>
 
     <!-- ===== UPCOMING MATCHES ===== -->
     <h3 style="color:#fff;margin-bottom:16px;">📅 Upcoming Fixtures</h3>
@@ -86,6 +103,15 @@
     </div>
     <div id="predictionLeaderboard" class="leaderboard-container">
       <!-- Leaderboard injected by JS -->
+    </div>
+
+    <!-- ===== SLIP HISTORY ===== -->
+    <div class="section-heading" style="margin-top:60px;">
+      <h3>📜 Your Prediction History</h3>
+      <p>Track your submitted slips and settlement results.</p>
+    </div>
+    <div id="slipHistory" style="max-width:700px;margin:0 auto;display:grid;gap:8px;">
+      <p class="helper-text" style="text-align:center;color:rgba(255,255,255,0.7);">Loading history...</p>
     </div>
   </section>
 
