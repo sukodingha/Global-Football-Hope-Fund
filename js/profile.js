@@ -226,8 +226,51 @@ let profileUserId = null;
 let loggedInUserId = null;
 
 /**
+ * Check if the target user is already a teammate of the logged-in user
+ * by reading a doc from users/{loggedInUserId}/teammates/{targetUid}
+ * @param {string} targetUid - The profile being viewed
+ * @returns {Promise<boolean>} true if already a teammate
+ */
+async function isAlreadyTeammate(targetUid) {
+  if (!loggedInUserId || !targetUid) return false;
+  try {
+    const teammateDoc = await getDoc(doc(db, "users", loggedInUserId, "teammates", targetUid));
+    return teammateDoc.exists();
+  } catch (err) {
+    console.warn("Could not check teammate status:", err);
+    return false;
+  }
+}
+
+/**
+ * Update the Add Teammate button UI based on connection status
+ * @param {boolean} isTeammate - Whether the target is already a teammate
+ */
+function updateAddTeammateBtnUI(isTeammate) {
+  const addBtn = document.getElementById("addTeammateBtn");
+  if (!addBtn) return;
+
+  if (isTeammate) {
+    addBtn.innerHTML = '👥 TEAMMATES';
+    addBtn.disabled = true;
+    addBtn.classList.add('is-teammate');
+    addBtn.style.background = '#10b981';
+    addBtn.style.cursor = 'default';
+    addBtn.style.opacity = '0.8';
+  } else {
+    addBtn.innerHTML = '👤 Add Teammate';
+    addBtn.disabled = false;
+    addBtn.classList.remove('is-teammate');
+    addBtn.style.background = '';
+    addBtn.style.cursor = 'pointer';
+    addBtn.style.opacity = '1';
+  }
+}
+
+/**
  * Add a user as a teammate (mutual) and create a chat thread
  * Step 1: Send a teammate_request notification to the target user
+ * Step 2: Immediately update the button UI to show "TEAMMATES" without reload
  */
 async function handleAddTeammate(targetUid) {
   if (!loggedInUserId || !targetUid || loggedInUserId === targetUid) return;
@@ -237,27 +280,37 @@ async function handleAddTeammate(targetUid) {
     const senderData = senderSnap.exists() ? senderSnap.data() : {};
     const senderName = senderData.displayName || senderData.firstName || "A user";
 
-    // 1. Send a teammate_request notification to the target user
+    // 1. Save teammate relationship both ways in the teammates subcollection
+    // Add target to current user's teammates
+    await setDoc(doc(db, "users", loggedInUserId, "teammates", targetUid), {
+      addedAt: serverTimestamp(),
+      displayName: senderData.displayName || senderData.firstName || "Unknown"
+    });
+    // Add current user to target's teammates (mutual)
+    const targetSnap = await getDoc(doc(db, "users", targetUid));
+    const targetData = targetSnap.exists() ? targetSnap.data() : {};
+    await setDoc(doc(db, "users", targetUid, "teammates", loggedInUserId), {
+      addedAt: serverTimestamp(),
+      displayName: targetData.displayName || targetData.firstName || "Unknown"
+    });
+
+    // 2. Send a teammate_request notification to the target user
     const notificationsRef = collection(db, "notifications", targetUid, "items");
     await addDoc(notificationsRef, {
       type: "teammate_request",
       senderId: loggedInUserId,
       recipientId: targetUid,
       senderName: senderName,
-      status: "pending",
-      message: `${senderName} wants to add you as a teammate!`,
+      status: "accepted",
+      message: `${senderName} added you as a teammate! 🤝`,
       read: false,
       createdAt: serverTimestamp()
     });
 
-    // 2. Update UI
-    const addBtn = document.getElementById("addTeammateBtn");
-    if (addBtn) {
-      addBtn.textContent = "✅ Request Sent";
-      addBtn.disabled = true;
-      addBtn.style.background = "#94a3b8";
-    }
-    alert("✅ Teammate request sent! They will receive a notification.");
+    // 3. Immediately update UI to show "TEAMMATES" state without page reload
+    updateAddTeammateBtnUI(true);
+
+    alert("✅ You are now teammates! 🤝");
   } catch (err) {
     console.error("Error sending teammate request:", err);
     alert("Failed to send teammate request. Please try again.");
@@ -265,7 +318,7 @@ async function handleAddTeammate(targetUid) {
 }
 
 // ===== PAGE LOAD =====
-onAuthStateChanged(auth, (user) => {
+onAuthStateChanged(auth, async (user) => {
   // Get uid from URL params
   const params = new URLSearchParams(window.location.search);
   const uid = params.get("uid");
@@ -279,6 +332,11 @@ onAuthStateChanged(auth, (user) => {
   if (addTeammateBtn) {
     if (loggedInUserId && profileUserId && loggedInUserId !== profileUserId) {
       addTeammateBtn.style.display = "inline-block";
+
+      // Check existing teammate status and update UI accordingly
+      const alreadyTeammate = await isAlreadyTeammate(profileUserId);
+      updateAddTeammateBtnUI(alreadyTeammate);
+
       addTeammateBtn.addEventListener("click", () => handleAddTeammate(profileUserId));
     } else {
       addTeammateBtn.style.display = "none";
