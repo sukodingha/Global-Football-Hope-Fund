@@ -32,10 +32,11 @@ let fixtures = [];
 let userSelections = {}; // { [fixtureId]: { winner: "1"|"X"|"2"|null, totalGoals: "over1.5"|"over2.5"|"under2.5"|"exact"|null, exactGoals: number|null } }
 let isSubmitting = false;
 
-// ===== 10 FALLBACK FIXTURES (dynamic dates) =====
+// ===== 10 FALLBACK FIXTURES (dynamic dates — strictly future) =====
 function generateFallbackFixtures() {
   const now = Date.now();
-  const DAY = 86400000;
+  // Use hours-ahead offsets so matches are always in the future (4h, 8h, 12h, …)
+  const HOUR_MS = 3600000;
   const teams = [
     { league: "Premier League", home: "Arsenal", away: "Chelsea" },
     { league: "La Liga", home: "Barcelona", away: "Real Madrid" },
@@ -53,7 +54,7 @@ function generateFallbackFixtures() {
     league: t.league,
     homeTeam: t.home,
     awayTeam: t.away,
-    date: new Date(now + (i + 1) * DAY).toISOString(),
+    date: new Date(now + (i + 1) * 4 * HOUR_MS).toISOString(), // 4h, 8h, 12h, 16h, …
     status: "upcoming"
   }));
 }
@@ -467,46 +468,61 @@ async function settleAllPendingSlips() {
 async function loadSlipHistory() {
   if (!slipHistoryContainer || !currentUser) return;
 
+  let snap;
   try {
+    // Try ordered query first (requires composite index)
     const q = query(
       collection(db, "prediction_slips"),
       where("userId", "==", currentUser.uid),
       orderBy("createdAt", "desc"),
       limit(20)
     );
-    const snap = await getDocs(q);
-
-    if (snap.empty) {
-      slipHistoryContainer.innerHTML = '<p class="helper-text" style="text-align:center;color:rgba(255,255,255,0.7);">No prediction slips yet. Select 7+ matches and submit!</p>';
+    snap = await getDocs(q);
+  } catch (err) {
+    // Index missing — fall back to unordered query (no sort)
+    console.warn("Ordered query failed, falling back to unordered:", err);
+    try {
+      const fallbackQ = query(
+        collection(db, "prediction_slips"),
+        where("userId", "==", currentUser.uid),
+        limit(20)
+      );
+      snap = await getDocs(fallbackQ);
+    } catch (fallbackErr) {
+      console.warn("Fallback query also failed:", fallbackErr);
+      slipHistoryContainer.innerHTML = '<p class="helper-text" style="text-align:center;color:rgba(255,255,255,0.7);">Could not load history.</p>';
       return;
     }
-
-    let html = '';
-    snap.docs.forEach(docSnap => {
-      const slip = docSnap.data();
-      const timestamp = slip.createdAt?.toMillis ? slip.createdAt.toMillis() : Date.now();
-      const dateStr = new Date(timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-      const statusIcon = slip.status === 'settled' ? (slip.rewarded ? '✅' : '❌') : '⏳';
-      const rewardText = slip.rewarded ? ' +2 HP 🏆' : '';
-
-      html += `
-        <div class="slip-history-item">
-          <div class="slip-history-header">
-            <span>${statusIcon} <strong>${slip.totalMatches} predictions</strong></span>
-            <span style="font-size:12px;color:rgba(255,255,255,0.5);">${dateStr}</span>
-          </div>
-          <div style="font-size:13px;color:rgba(255,255,255,0.7);">
-            Status: ${slip.status === 'settled' ? `Settled (${slip.correctCount || 0}/${slip.totalMatches} correct)${rewardText}` : 'Pending ⏳'}
-          </div>
-        </div>
-      `;
-    });
-
-    slipHistoryContainer.innerHTML = html;
-  } catch (err) {
-    console.warn("Could not load slip history:", err);
-    slipHistoryContainer.innerHTML = '<p class="helper-text" style="text-align:center;color:rgba(255,255,255,0.7);">Could not load history.</p>';
   }
+
+  // Process snapshot
+  if (snap.empty) {
+    slipHistoryContainer.innerHTML = '<p class="helper-text" style="text-align:center;color:rgba(255,255,255,0.7);">No prediction slips yet. Select 7+ matches and submit!</p>';
+    return;
+  }
+
+  let html = '';
+  snap.docs.forEach(docSnap => {
+    const slip = docSnap.data();
+    const timestamp = slip.createdAt?.toMillis ? slip.createdAt.toMillis() : Date.now();
+    const dateStr = new Date(timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const statusIcon = slip.status === 'settled' ? (slip.rewarded ? '✅' : '❌') : '⏳';
+    const rewardText = slip.rewarded ? ' +2 HP 🏆' : '';
+
+    html += `
+      <div class="slip-history-item">
+        <div class="slip-history-header">
+          <span>${statusIcon} <strong>${slip.totalMatches} predictions</strong></span>
+          <span style="font-size:12px;color:rgba(255,255,255,0.5);">${dateStr}</span>
+        </div>
+        <div style="font-size:13px;color:rgba(255,255,255,0.7);">
+          Status: ${slip.status === 'settled' ? `Settled (${slip.correctCount || 0}/${slip.totalMatches} correct)${rewardText}` : 'Pending ⏳'}
+        </div>
+      </div>
+    `;
+  });
+
+  slipHistoryContainer.innerHTML = html;
 }
 
 // ===== FETCH FIXTURES =====
@@ -544,6 +560,15 @@ async function fetchFixtures() {
 
   // Fallback
   if (fetchedFixtures.length === 0) {
+    fetchedFixtures = generateFallbackFixtures();
+  }
+
+  // Filter out any fixture whose kickoff is in the past (strictly future only)
+  const now = Date.now();
+  fetchedFixtures = fetchedFixtures.filter(m => new Date(m.date).getTime() > now);
+
+  // Ensure at least 7 fixtures remain after filtering; if not, generate fallback
+  if (fetchedFixtures.length < 7) {
     fetchedFixtures = generateFallbackFixtures();
   }
 
