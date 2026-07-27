@@ -20,9 +20,9 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getHPBadgeHTML, getUserHP } from "./rewards.js";
 
-// ===== API CONFIG (Same API key as competition/dashboard) =====
-const API_KEY = "6e2987eec8066be0a986f648fe4a9cf7";
-const API_HOST = "v3.football.api-sports.io";
+// ===== API CONFIG =====
+const API_KEY = "a7ba1c6350msha38155a1caaad1dp19506fjsn7159adf87d0e";
+const API_HOST = "free-api-live-football-data.p.rapidapi.com";
 
 // ===== DOM REFS =====
 const calendarEl = document.getElementById("dateCalendar");

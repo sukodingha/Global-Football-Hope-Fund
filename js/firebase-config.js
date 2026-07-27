@@ -16,16 +16,16 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 
-// Enable offline persistence with long polling to avoid QUIC protocol issues
-try {
-  enableIndexedDbPersistence(db).catch((err) => {
-    if (err.code === 'failed-precondition') {
-      console.warn('Firestore persistence: multiple tabs open, persistence disabled.');
-    } else if (err.code === 'unimplemented') {
-      console.warn('Firestore persistence: not available in this browser.');
-    }
-  });
-} catch (e) {
-  console.warn('Firestore persistence init error:', e);
-}
+// Enable offline persistence — catch failed-precondition cleanly without blocking
+enableIndexedDbPersistence(db).catch((err) => {
+  if (err.code === 'failed-precondition') {
+    // Multiple tabs open: persistence can only be enabled in one tab at a time.
+    console.warn('Firestore persistence: multiple tabs open, persistence disabled.');
+  } else if (err.code === 'unimplemented') {
+    // The current browser does not support all of the features required to enable persistence
+    console.warn('Firestore persistence: not available in this browser.');
+  } else {
+    console.warn('Firestore persistence init error:', err);
+  }
+});
 

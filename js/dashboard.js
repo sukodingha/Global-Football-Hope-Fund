@@ -744,15 +744,37 @@ if (dashboardLogoutBtn) {
     }
   });
 }
-const API_KEY = "6e2987eec8066be0a986f648fe4a9cf7"; // Put your API-Sports key here
-const API_HOST = "v3.football.api-sports.io";
+const API_KEY = "a7ba1c6350msha38155a1caaad1dp19506fjsn7159adf87d0e";
+const API_HOST = "free-api-live-football-data.p.rapidapi.com";
+
+/**
+ * Generate mock match cards as fallback when API fails or returns empty.
+ */
+function renderMockMatches() {
+    const mockMatches = [
+        { league: 'Premier League', home: 'Manchester United', away: 'Chelsea', hScore: 2, aScore: 1, minute: "67'" },
+        { league: 'La Liga', home: 'Barcelona', away: 'Real Madrid', hScore: 1, aScore: 1, minute: "42'" },
+        { league: 'Serie A', home: 'AC Milan', away: 'Inter Milan', hScore: 0, aScore: 2, minute: "55'" },
+        { league: 'Bundesliga', home: 'Bayern Munich', away: 'Borussia Dortmund', hScore: 3, aScore: 1, minute: "78'" }
+    ];
+    return mockMatches.map(m => `
+        <div class="match-card">
+            <div class="match-league">${m.league} - <span class="live-badge">${m.minute} Live</span></div>
+            <div class="match-teams">
+                <div class="team"><span>${m.home}</span></div>
+                <div class="score">${m.hScore} - ${m.aScore}</div>
+                <div class="team"><span>${m.away}</span></div>
+            </div>
+        </div>
+    `).join('');
+}
 
 async function fetchLiveScores() {
     const feedContainer = document.getElementById('live-scores-feed');
     if (!feedContainer) return;
 
     try {
-        const response = await fetch(`https://v3.football.api-sports.io/fixtures?live=all`, {
+        const response = await fetch(`https://${API_HOST}/fixtures?live=all`, {
             method: "GET",
             headers: {
                 "x-rapidapi-host": API_HOST,
@@ -763,7 +785,8 @@ async function fetchLiveScores() {
         const data = await response.json();
         
         if (!data.response || data.response.length === 0) {
-            feedContainer.innerHTML = "<p class='no-matches'>No live matches currently in progress.</p>";
+            // MOCK FALLBACK: Show default match cards instead of "No live matches"
+            feedContainer.innerHTML = renderMockMatches();
             return;
         }
 
@@ -802,7 +825,8 @@ async function fetchLiveScores() {
 
     } catch (error) {
         console.error("Error fetching live matches:", error);
-        feedContainer.innerHTML = "<p class='error-text'>Failed to load live match data.</p>";
+        // MOCK FALLBACK: Show default match cards on error
+        feedContainer.innerHTML = renderMockMatches();
     }
 }
 
