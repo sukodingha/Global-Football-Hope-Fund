@@ -21,7 +21,7 @@ import { getHPBadgeHTML, getUserHP } from "./rewards.js";
 
 // ===== API CONFIG (RapidAPI) =====
 const API_KEY = "a7ba1c6350msha38f55a1caaad1dp19506fjsn7159adf87d0e";
-const API_HOST = "api-football-v1.p.rapidapi.com";
+const API_HOST = "sportapi7.p.rapidapi.com";
 
 // ===== DOM REFS =====
 const calendarEl = document.getElementById("dateCalendar");
@@ -51,6 +51,7 @@ let currentUserUniqueId = "";
 let userSlip = [];
 
 let isSubmitting = false;
+let todaySlipCount = 0;
 let selectedDateStr = ""; // "YYYY-MM-DD"
 
 // ===== MONTH NAMES =====
@@ -669,6 +670,12 @@ async function fetchFixturesFromAPI(dateStr) {
         "x-rapidapi-key": API_KEY
       }
     });
+
+    // HARD FALLBACK: If 403/401 Forbidden/Unauthorized, throw to trigger mock data
+    if (response.status === 403 || response.status === 401) {
+      throw new Error(`API returned ${response.status} Forbidden/Unauthorized`);
+    }
+
     const data = await response.json();
     if (!data.response || data.response.length === 0) return [];
 
@@ -990,8 +997,8 @@ onAuthStateChanged(auth, async (user) => {
       userStatus.textContent = "Sign in to make predictions!";
       userStatus.classList.remove("active");
     }
-    if (dailyLimitContainer) {
-      dailyLimitContainer.textContent = "";
+    if (dailyLimitCounter) {
+      dailyLimitCounter.textContent = "";
     }
     if (slipHistoryContainer) {
       slipHistoryContainer.innerHTML = '<p class="helper-text" style="text-align:center;color:rgba(255,255,255,0.7);">Sign in to see your prediction history.</p>';

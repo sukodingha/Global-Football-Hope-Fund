@@ -5,7 +5,7 @@
  */
 
 const API_KEY = "a7ba1c6350msha38f55a1caaad1dp19506fjsn7159adf87d0e";
-const API_HOST = "api-football-v1.p.rapidapi.com";
+const API_HOST = "sportapi7.p.rapidapi.com";
 
 /**
  * Generate mock live match cards as fallback when API fails or returns empty.
@@ -62,6 +62,11 @@ async function fetchLiveScores() {
                 "x-rapidapi-key": API_KEY
             }
         });
+
+        // HARD FALLBACK: If 403/401 Forbidden/Unauthorized, throw to trigger mock data
+        if (response.status === 403 || response.status === 401) {
+            throw new Error(`API returned ${response.status} Forbidden/Unauthorized`);
+        }
 
         const data = await response.json();
 
