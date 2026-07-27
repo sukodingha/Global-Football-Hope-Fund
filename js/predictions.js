@@ -36,7 +36,7 @@ let currentUser = null;
 let currentUserName = "Guest";
 let currentUserUniqueId = "";
 
-/** @type {{ matchId: string, winner: "1"|"X"|"2", goals: "over2.5"|"under2.5", homeTeam: string, awayTeam: string, league: string, kickoff: string }[]} */
+/** @type {{ matchId: string, pick: string, homeTeam: string, awayTeam: string, league: string, kickoff: string }[]} */
 let userSlip = [];
 
 let isSubmitting = false;
@@ -139,11 +139,12 @@ function renderFixtures(fixturesList) {
     return;
   }
 
-  let html = "";
+let html = "";
   fixturesList.forEach((match) => {
     const matchId = match.id;
     const slipEntry = userSlip.find(s => s.matchId === matchId);
     const selectedClass = slipEntry ? " odds-card-selected" : "";
+    const selectedPick = slipEntry ? slipEntry.pick : null;
 
     html += `
       <div class="odds-card${selectedClass}" data-match-id="${matchId}">
@@ -158,17 +159,17 @@ function renderFixtures(fixturesList) {
         </div>
         <!-- Winner selection -->
         <div class="prediction-section">
-          <div class="prediction-section-label">🎯 Winner</div>
+          <div class="prediction-section-label">🎯 Pick Winner</div>
           <div class="winner-buttons">
-            <button class="pred-btn pick-btn${slipEntry && slipEntry.winner === "1" ? " active" : ""}" data-match="${matchId}" data-pick="winner_1">
+            <button class="pred-btn pick-btn${selectedPick === "winner_1" ? " selected-btn" : ""}" data-match="${matchId}" data-pick="winner_1">
               <span class="pred-btn-label">1</span>
               <span class="pred-btn-team">${escapeHtml(match.homeTeam)}</span>
             </button>
-            <button class="pred-btn pick-btn${slipEntry && slipEntry.winner === "X" ? " active" : ""}" data-match="${matchId}" data-pick="winner_X">
+            <button class="pred-btn pick-btn${selectedPick === "winner_X" ? " selected-btn" : ""}" data-match="${matchId}" data-pick="winner_X">
               <span class="pred-btn-label">X</span>
               <span class="pred-btn-team">Draw</span>
             </button>
-            <button class="pred-btn pick-btn${slipEntry && slipEntry.winner === "2" ? " active" : ""}" data-match="${matchId}" data-pick="winner_2">
+            <button class="pred-btn pick-btn${selectedPick === "winner_2" ? " selected-btn" : ""}" data-match="${matchId}" data-pick="winner_2">
               <span class="pred-btn-label">2</span>
               <span class="pred-btn-team">${escapeHtml(match.awayTeam)}</span>
             </button>
@@ -176,10 +177,10 @@ function renderFixtures(fixturesList) {
         </div>
         <!-- Goals selection -->
         <div class="prediction-section">
-          <div class="prediction-section-label">⚽ Total Goals</div>
+          <div class="prediction-section-label">⚽ Pick Total Goals</div>
           <div class="goals-buttons">
-            <button class="pred-btn pick-btn${slipEntry && slipEntry.goals === "over2.5" ? " active" : ""}" data-match="${matchId}" data-pick="goals_over2.5">Over 2.5</button>
-            <button class="pred-btn pick-btn${slipEntry && slipEntry.goals === "under2.5" ? " active" : ""}" data-match="${matchId}" data-pick="goals_under2.5">Under 2.5</button>
+            <button class="pred-btn pick-btn${selectedPick === "goals_over2.5" ? " selected-btn" : ""}" data-match="${matchId}" data-pick="goals_over2.5">Over 2.5</button>
+            <button class="pred-btn pick-btn${selectedPick === "goals_under2.5" ? " selected-btn" : ""}" data-match="${matchId}" data-pick="goals_under2.5">Under 2.5</button>
           </div>
         </div>
       </div>
@@ -201,7 +202,7 @@ function renderFixtures(fixturesList) {
   });
 }
 
-// ===== 4. PICK HANDLER — toggle/swap logic =====
+// ===== 4. PICK HANDLER — 1 PICK PER MATCH (toggle on/off) =====
 function handlePick(btn) {
   const matchId = btn.dataset.match;
   const pick = btn.dataset.pick; // e.g. "winner_1" or "goals_over2.5"
@@ -210,64 +211,30 @@ function handlePick(btn) {
   const card = btn.closest(".odds-card");
   const teamEls = card.querySelectorAll(".odds-team");
   const leagueEl = card.querySelector(".league-pill");
-  const timeEl = card.querySelector(".odds-time");
   const homeTeam = teamEls[0]?.textContent || "Home";
   const awayTeam = teamEls[1]?.textContent || "Away";
   const league = leagueEl?.textContent?.replace("⚽ ", "") || "";
-  const kickoff = ""; // not critical for submission
-
-  // Determine category and value
-  let category, value;
-  if (pick.startsWith("winner_")) {
-    category = "winner";
-    value = pick.replace("winner_", ""); // "1", "X", or "2"
-  } else if (pick.startsWith("goals_")) {
-    category = "goals";
-    value = pick.replace("goals_", ""); // "over2.5" or "under2.5"
-  } else {
-    return;
-  }
+  const kickoff = "";
 
   // Find existing entry for this match in the slip
   const existingIdx = userSlip.findIndex(s => s.matchId === matchId);
 
-  if (existingIdx === -1) {
-    // No existing entry — create one
-    const entry = {
+  if (existingIdx !== -1 && userSlip[existingIdx].pick === pick) {
+    // Same pick clicked again → DESELECT (remove from slip)
+    userSlip.splice(existingIdx, 1);
+  } else if (existingIdx !== -1) {
+    // Different pick clicked on same match → SWAP the pick value
+    userSlip[existingIdx].pick = pick;
+  } else {
+    // No existing entry — create one with the single pick field
+    userSlip.push({
       matchId,
-      winner: category === "winner" ? value : null,
-      goals: category === "goals" ? value : null,
+      pick,
       homeTeam,
       awayTeam,
       league,
       kickoff
-    };
-    userSlip.push(entry);
-  } else {
-    const entry = userSlip[existingIdx];
-
-    if (category === "winner") {
-      if (entry.winner === value) {
-        // Same winner clicked → deselect entirely
-        entry.winner = null;
-      } else {
-        // Different winner → swap
-        entry.winner = value;
-      }
-    } else if (category === "goals") {
-      if (entry.goals === value) {
-        // Same goals clicked → deselect entirely
-        entry.goals = null;
-      } else {
-        // Different goals → swap
-        entry.goals = value;
-      }
-    }
-
-    // If both winner and goals are null, remove the entry entirely
-    if (entry.winner === null && entry.goals === null) {
-      userSlip.splice(existingIdx, 1);
-    }
+    });
   }
 
   // Update all visual states for this match
@@ -281,16 +248,9 @@ function updateCardVisuals(matchId) {
 
   const entry = userSlip.find(s => s.matchId === matchId);
 
-  // Update winner buttons
-  card.querySelectorAll('[data-pick^="winner_"]').forEach(b => {
-    const val = b.dataset.pick.replace("winner_", "");
-    b.classList.toggle("active", entry ? entry.winner === val : false);
-  });
-
-  // Update goals buttons
-  card.querySelectorAll('[data-pick^="goals_"]').forEach(b => {
-    const val = b.dataset.pick.replace("goals_", "");
-    b.classList.toggle("active", entry ? entry.goals === val : false);
+  // Update ALL pick buttons in this card: only the selected pick gets .selected-btn
+  card.querySelectorAll(".pick-btn").forEach(b => {
+    b.classList.toggle("selected-btn", entry ? entry.pick === b.dataset.pick : false);
   });
 
   // Card highlight
@@ -327,12 +287,12 @@ function updateSlipBanner() {
 async function submitSlip() {
   if (!currentUser) { showGlobalMsg("Please sign in first.", "error"); return; }
   if (isSubmitting) return;
-  if (userSlip.length !== 7) { showGlobalMsg("You must select exactly 7 matches.", "error"); return; }
+if (userSlip.length !== 7) { showGlobalMsg("You must select exactly 7 matches.", "error"); return; }
 
-  // Validate all entries have both winner and goals
-  const invalid = userSlip.some(s => !s.winner || !s.goals);
+  // Validate all entries have a pick selected
+  const invalid = userSlip.some(s => !s.pick);
   if (invalid) {
-    showGlobalMsg("Each match needs both a winner pick AND goals pick.", "error");
+    showGlobalMsg("Each match needs a pick selected.", "error");
     return;
   }
 
@@ -414,7 +374,7 @@ async function settleSlip(slipDoc) {
   let correctCount = 0;
   let settledCount = 0;
 
-  for (const sel of data.slip) {
+for (const sel of data.slip) {
     const result = await fetchRealFixtureResult(sel.matchId);
     if (!result) {
       // Match not finished yet — skip this selection
@@ -422,13 +382,32 @@ async function settleSlip(slipDoc) {
     }
     settledCount++;
 
-    const correctWinner = getScoreWinner(result.homeScore, result.awayScore);
-    const total = result.homeScore + result.awayScore;
-    const correctGoals = total > 2.5 ? "over2.5" : "under2.5";
+    // Parse the pick field: "winner_1" -> { category: "winner", value: "1" }
+    //                       "goals_over2.5" -> { category: "goals", value: "over2.5" }
+    let pickCategory = null, pickValue = null;
+    if (sel.pick) {
+      if (sel.pick.startsWith("winner_")) {
+        pickCategory = "winner";
+        pickValue = sel.pick.replace("winner_", "");
+      } else if (sel.pick.startsWith("goals_")) {
+        pickCategory = "goals";
+        pickValue = sel.pick.replace("goals_", "");
+      }
+    }
+    // Support legacy slips that still have winner/goals fields
+    if (!pickCategory) {
+      pickCategory = "winner";
+      pickValue = sel.winner;
+    }
 
-    const winnerOk = sel.winner === correctWinner;
-    const goalsOk = sel.goals === correctGoals;
-    if (winnerOk && goalsOk) correctCount++;
+    if (pickCategory === "winner") {
+      const correctWinner = getScoreWinner(result.homeScore, result.awayScore);
+      if (pickValue === correctWinner) correctCount++;
+    } else if (pickCategory === "goals") {
+      const total = result.homeScore + result.awayScore;
+      const correctGoals = total > 2.5 ? "over2.5" : "under2.5";
+      if (pickValue === correctGoals) correctCount++;
+    }
   }
 
   // Only settle if at least some matches have finished

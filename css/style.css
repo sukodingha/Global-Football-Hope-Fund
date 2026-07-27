@@ -2082,6 +2082,14 @@ footer {
     box-shadow: none;
 }
 
+/* ===== PREDICTION SELECTED BUTTON — RED ACCENT ===== */
+.pred-btn.selected-btn {
+    background-color: #dc2626 !important;
+    color: #ffffff !important;
+    font-weight: bold;
+    border: 2px solid #ef4444 !important;
+}
+
 /* Leaderboard */
 .leaderboard-container {
     max-width: 700px;
