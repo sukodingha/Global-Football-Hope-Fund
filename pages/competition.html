@@ -1,82 +1,180 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Competition</title>
-    <link rel="stylesheet" href="../css/style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0b2d4d">
+  <title>Competition | Global Football Hope Fund</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="manifest" href="../manifest.json">
+  <link rel="icon" href="../images/icon-192.svg" sizes="192x192">
+  <link rel="apple-touch-icon" href="../images/icon-192.svg">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 </head>
 <body>
-    <header>
-        <!-- Navigation Bar -->
-        <nav>
-            <a href="/index.html">Home</a>
-            <a href="/pages/about.html">About</a>
-            <a href="/pages/competition.html">Competition</a>
-            <a href="/pages/donate.html">Donate</a>
-            <a href="/pages/news.html">News</a>
-            <a href="/pages/community.html">Community</a>
-            <a href="/pages/dashboard.html">Dashboard</a>
-            <a href="/pages/faq.html">FAQ</a>
-            <a href="/pages/contact.html">Contact</a>
-        </nav>
-    </header>
+  <div id="appSplash" class="app-splash">
+    <div class="app-splash-card">
+      <div class="app-splash-icon">⚽</div>
+      <h2>GFHF</h2>
+      <p>Live scores, fixtures, and competition updates.</p>
+    </div>
+  </div>
 
-    <main>
-        <h1>Competition</h1>
+  <header>
+    <div class="header-brand">
+      <div class="logo">⚽ GFHF</div>
+      <span id="userStatus" class="user-status">Login</span>
+      <button id="logoutBtn" class="logout-btn" type="button" hidden>Logout</button>
+    </div>
+    <nav>
+      <a href="../index.html">Home</a>
+      <a href="about.html">About</a>
+      <a href="competition.html" class="active">Competition</a>
+      <a href="donate.html">Donate</a>
+      <a href="news.html">News</a>
+      <a href="community.html">Community</a>
+      <a href="dashboard.html">Dashboard</a>
+      <a href="faq.html">FAQ</a>
+      <a href="contact.html">Contact</a>
+    </nav>
+  </header>
 
-        <!-- Live Match Center Container -->
-        <div class="competition-widget-container">
-            <h2>Live Match Center</h2>
-            
-            <!-- This configures the API connection -->
-            <api-sports-widget 
-                 data-type="config" 
-                 data-key="6e2987eec8066be0a986f648fe4a9cf7"
-                 data-sport="football" 
-                 data-theme="dark" 
-                 data-show-logos="true"
-                 data-timezone="Africa/Lagos">
-            </api-sports-widget>
+  <!-- ===== PWA INSTALL MODAL ===== -->
+  <div id="pwa-install-modal" class="fb-modal" hidden>
+    <div class="fb-modal-overlay"></div>
+    <div class="fb-modal-card" style="max-width:400px;text-align:center;padding:32px 24px;">
+      <h3 style="margin:0 0 8px;color:#0b2d4d;">📲 Install GFHF</h3>
+      <p style="font-size:14px;color:#475569;margin:0 0 20px;line-height:1.5;">Install the app for live scores, predictions, and community chat.</p>
+      <button id="pwa-install-btn" class="btn" type="button" style="margin:0;padding:14px 32px;font-size:16px;width:100%;">Install App</button>
+    </div>
+  </div>
 
-            <!-- This displays the live and scheduled games -->
-            <api-sports-widget 
-                 data-type="games" 
-                 data-refresh="60">
-            </api-sports-widget>
+  <nav class="mobile-bottom-nav" aria-label="Mobile navigation">
+    <a href="../index.html">Home</a>
+    <a href="competition.html" class="active">Competition</a>
+    <a href="predictions.html">Predictions</a>
+    <a href="donate.html">Donate</a>
+  </nav>
+
+  <section class="section">
+    <div class="section-heading">
+      <h2>🏆 Competition &amp; Live Matches</h2>
+      <p>Follow real-time match scores and stay up to date with all the football action.</p>
+    </div>
+
+    <!-- Live Match Center Container -->
+    <div class="competition-widget-container">
+      <h2>📺 Live Match Center</h2>
+      
+      <!-- API-Sports Configuration -->
+      <api-sports-widget 
+           data-type="config" 
+           data-key="6e2987eec8066be0a986f648fe4a9cf7"
+           data-sport="football" 
+           data-theme="dark" 
+           data-show-logos="true"
+           data-timezone="Africa/Lagos">
+      </api-sports-widget>
+
+      <!-- Live and scheduled games -->
+      <api-sports-widget 
+           data-type="games" 
+           data-refresh="60">
+      </api-sports-widget>
+    </div>
+
+    <!-- Custom Live Score Mini-Feed -->
+    <div class="section-heading" style="margin-top:60px;">
+      <h3>⚡ Today's Live Matches</h3>
+      <p>Real-time scores fetched from API-Sports.</p>
+    </div>
+    <div id="live-scores-feed" class="scores-grid" style="max-width:1200px;margin:0 auto;">
+      <p style="color:#64748b;">⏳ Fetching live match updates...</p>
+    </div>
+  </section>
+
+  <footer>
+    <p>Global Football Hope Fund © 2026</p>
+  </footer>
+
+  <!-- ===== AUTH MODAL ===== -->
+  <div id="authModal" class="auth-modal">
+    <div id="authModalOverlay" class="auth-modal-overlay"></div>
+    <div class="auth-modal-card">
+      <button id="authModalClose" class="auth-modal-close" type="button">&times;</button>
+      <div class="auth-modal-header">
+        <div class="auth-modal-icon">⚽</div>
+        <h3 id="authModalTitle">Sign In</h3>
+      </div>
+      <div id="authModalMsg" class="message"></div>
+
+      <div class="auth-tabs">
+        <button id="authLoginTab" class="auth-tab active" type="button">Sign In</button>
+        <button id="authRegisterTab" class="auth-tab" type="button">Register</button>
+      </div>
+
+      <form id="authLoginForm" class="auth-form">
+        <div class="auth-form-row">
+          <label for="authLoginEmail">Email</label>
+          <input id="authLoginEmail" name="email" type="email" placeholder="you@example.com" required>
         </div>
-
-        <!-- Custom Dashboard Live Score Mini-Feed -->
-        <div class="custom-dashboard-scores">
-            <h3>Today's Live Matches</h3>
-            <div id="live-scores-feed" class="scores-grid">
-                <p class="loading-text">⏳ Fetching live match updates...</p>
-            </div>
-
-        <!-- Donation Form -->
-        <div class="form-container" style="grid-template-columns: 1fr; max-width: 900px;">
-            <h2>Donate to the Competition</h2>
-            <form action="/pages/donation-confirmation.html" method="post">
-                <label for="amount">Amount:</label>
-                <input type="number" id="amount" name="amount" required>
-                <label for="name">Name:</label>
-                <input type="text" id="name" name="name" required>
-                <label for="email">Email:</label>
-                <input type="email" id="email" name="email" required>
-                <input type="submit" value="Donate">
-            </form>
+        <div class="auth-form-row">
+          <label for="authLoginPass">Password</label>
+          <input id="authLoginPass" name="password" type="password" placeholder="••••••" required>
         </div>
-    </main>
+        <button type="submit" class="btn auth-submit-btn">Sign In</button>
+      </form>
 
-    <footer>
-        <!-- Footer Content -->
-    </footer>
+      <form id="authRegisterForm" class="auth-form" style="display:none;">
+        <div class="auth-form-row">
+          <label for="authRegName">Display Name</label>
+          <input id="authRegName" name="displayName" type="text" placeholder="Your name" required>
+        </div>
+        <div class="auth-form-row">
+          <label for="authRegEmail">Email</label>
+          <input id="authRegEmail" name="email" type="email" placeholder="you@example.com" required>
+        </div>
+        <div class="auth-form-row">
+          <label for="authRegPass">Password</label>
+          <input id="authRegPass" name="password" type="password" placeholder="Min 6 characters" required>
+        </div>
+        <div class="auth-form-row">
+          <label for="authRegConfirm">Confirm Password</label>
+          <input id="authRegConfirm" name="confirmPassword" type="password" placeholder="Repeat password" required>
+        </div>
+        <button type="submit" class="btn auth-submit-btn">Create Account</button>
+      </form>
 
-    <!-- API-Sports Widget Loader Script -->
-    <script type="module" src="https://widgets.api-sports.io/3.1.0/widgets.js"></script>
+      <div class="auth-divider"><span>or</span></div>
+      <button id="googleSignInBtn" class="btn btn-google" type="button">
+        <svg viewBox="0 0 48 48" width="18" height="18"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.54 28.59A14.5 14.5 0 0 1 9.5 24c0-1.59.28-3.14.76-4.59l-7.98-6.19A23.99 23.99 0 0 0 0 24c0 3.77.87 7.35 2.56 10.56l7.98-5.97z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 5.97C6.51 42.62 14.62 48 24 48z"/></svg>
+        Continue with Google
+      </button>
+    </div>
+  </div>
 
-    <!-- Custom Live Score Mini-Feed JavaScript -->
-    <script type="module" src="../js/competition.js"></script>
-    <div class="powered-by-kinesis">Powered by Kinesis</div>
+  <!-- API-Sports Widget Loader Script -->
+  <script type="module" src="https://widgets.api-sports.io/3.1.0/widgets.js"></script>
+
+  <script src="../js/pwa.js"></script>
+  <script type="module" src="../js/auth.js"></script>
+  <script type="module" src="../js/competition.js"></script>
+  <script>
+    window.addEventListener('load', () => {
+      const splash = document.getElementById('appSplash');
+      if (splash) {
+        setTimeout(() => splash.classList.add('hidden'), 900);
+      }
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('../sw.js').then((registration) => {
+          if (registration.waiting) {
+            registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+          }
+        }).catch(console.error);
+      }
+    });
+  </script>
+<div class="powered-by-kinesis">Powered by Kinesis</div>
 </body>
 </html>
