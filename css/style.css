@@ -1848,7 +1848,11 @@ footer {
     }
 }
 
-/* ===== LIVE ODDS & PREDICTIONS ===== */
+/* ===== COMPETITION COLOR-CODING CLASSES ===== */
+.text-winner { color: #16a34a !important; font-weight: 600; }
+.text-loser  { color: #dc2626 !important; font-weight: 500; }
+.text-draw   { color: #2563eb !important; font-weight: 600; }
+.text-neutral { color: #1f2937 !important; }
 .odds-section {
     background: linear-gradient(135deg, #0b2d4d 0%, #1a4a6e 100%);
     color: #fff;

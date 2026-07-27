@@ -32,7 +32,7 @@
             <!-- This configures the API connection -->
             <api-sports-widget 
                  data-type="config" 
-                 data-key="6e2987eec8066be0a986f648fe4a9cf7" <!-- Your API key -->
+                 data-key="6e2987eec8066be0a986f648fe4a9cf7"
                  data-sport="football" 
                  data-theme="dark" 
                  data-show-logos="true"
@@ -50,9 +50,8 @@
         <div class="custom-dashboard-scores">
             <h3>Today's Live Matches</h3>
             <div id="live-scores-feed" class="scores-grid">
-                <p class="loading-text">Fetching live match updates...</p>
+                <p class="loading-text">⏳ Fetching live match updates...</p>
             </div>
-        </div>
 
         <!-- Donation Form -->
         <div class="form-container" style="grid-template-columns: 1fr; max-width: 900px;">
@@ -76,10 +75,8 @@
     <!-- API-Sports Widget Loader Script -->
     <script type="module" src="https://widgets.api-sports.io/3.1.0/widgets.js"></script>
 
-    <!-- Custom Dashboard Live Score Mini-Feed JavaScript -->
-    <script>
-        // Add your custom JavaScript code here to fetch and display live match updates
-    </script>
-<div class="powered-by-kinesis">Powered by Kinesis</div>
+    <!-- Custom Live Score Mini-Feed JavaScript -->
+    <script type="module" src="../js/competition.js"></script>
+    <div class="powered-by-kinesis">Powered by Kinesis</div>
 </body>
 </html>
