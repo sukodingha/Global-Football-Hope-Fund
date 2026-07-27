@@ -1,42 +1,20 @@
-# Predictions Overhaul - DONE ✅
+# Implementation TODOs: Expandable Slips, Leaderboard Visibility, 3-Day Expiry & 3/Day Limit
 
-## Completed Changes
+## All Steps Completed ✅
 
-### 1. Removed ALL Mock/Hardcoded Data ✅
-- [x] Deleted `TEAMS_POOL` constant array (Arsenal, Chelsea, Inter Milan, Juventus, etc.)
-- [x] Deleted `getShuffledTeamsForDate()` function
-- [x] Deleted `generateFixturesForDate()` function
-- [x] Deleted `getMockResult()` function and `getScoreWinner()` helper (kept `getScoreWinner` for real API use)
-- [x] Removed mock fallback in leaderboard (5 dummy users)
-- [x] Removed fallback padding logic for late-hour fixture generation
+- [x] Analyzed existing codebase (predictions.js, predictions.html, style.css)
+- [x] Created implementation plan
+- [x] Plan approved
+- [x] **CSS styles added** — New styles in `css/style.css`:
+  - Expandable slip styles (`.slip-history-item`, `.slip-toggle-btn`, `.slip-expanded-content`, `.slip-pick-row`, etc.)
+  - Daily limit counter (`.daily-limit-counter`, `.daily-limit-counter.limit-reached`)
+  - Winning slip modal styles (`.winning-slip-modal-body`, `.winning-slip-pick`, `.winning-slip-badge`, etc.)
+  - Leaderboard view button (`.leaderboard-view-btn`)
+- [x] **predictions.html updated** — Added `#dailyLimitCounter` span in the slip banner
+- [x] **Feature 1: Expandable History** — `loadSlipHistory()` renders slips with toggle buttons; `toggleSlipExpand()` handles expand/collapse; each pick shows Home vs Away + formatted pick value
+- [x] **Feature 2: Winning Slips on Leaderboard** — `loadLeaderboard()` adds "🏆 View" button in 5th column; `openWinningSlipModal()` creates modal with full 7-pick ticket details
+- [x] **Feature 3: 3-Day Expiry** — `loadSlipHistory()` filters out non-won slips older than 3 days; optionally deletes expired docs with `deleteDoc()`
+- [x] **Feature 4: Daily 3-Slip Limit** — `updateDailyLimitCounter()` queries today's count and displays "Today's Submissions: X / 3"; `submitSlip()` blocks submission if >= 3 with alert message
+- [x] **Final review completed** — All code verified via `read_file` on all modified files
 
-### 2. Added Real API Fetching ✅
-- [x] Added `API_KEY` and `API_HOST` constants from dashboard.js
-- [x] Added `async function fetchFixturesFromAPI(dateStr)` that calls `GET /fixtures?date=YYYY-MM-DD`
-- [x] Maps API response to fixture shape: `id` (real fixture.fixture.id), `league`, `homeTeam`, `awayTeam`, `date`, `status`
-
-### 3. Filter by Current Time ("Today") ✅
-- [x] Gets `const now = new Date()` on Today tab
-- [x] Filters fixtures to only show matches where `kickoffTime > now`
-- [x] Displays "⏰ No more upcoming matches scheduled for today. Please select tomorrow's tab!" when none remain
-
-### 4. Updated `loadFixturesForDate()` to be async ✅
-- [x] Calls `fetchFixturesFromAPI(dateStr)` instead of `generateFixturesForDate()`
-- [x] Time filtering applied only for Today tab
-
-### 5. Updated Settlement Engine ✅
-- [x] Settlement uses real API results via `fetchRealFixtureResult(matchId)`
-- [x] Only settles matches with status "FT" (full-time)
-- [x] Supports both new `pick` field format and legacy `winner`/`goals` fields
-
-### 6. Removed Mock Leaderboard Fallback ✅
-- [x] Replaced with: "No winners yet. Be the first to get 6/7 correct! 🏆"
-
-### 7. NEW: 1 Pick Per Match (Single Button) ✅
-- [x] Each match card now shows 5 buttons: winner_1, winner_X, winner_2, goals_over2.5, goals_under2.5
-- [x] Clicking any button selects it (adds to slip)
-- [x] Clicking the same button again deselects it
-- [x] Clicking a different button swaps the pick
-- [x] Visual feedback: `selected-btn` class + `odds-card-selected` highlight
-- [x] Must select exactly 7 different matches to submit
 

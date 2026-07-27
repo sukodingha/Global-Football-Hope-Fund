@@ -6,12 +6,17 @@
  * - Save to Firestore "user_predictions" collection
  * - Settlement engine: >=6/7 correct → 2 HP
  * - History query without orderBy to prevent index crashes
+ * FEATURES:
+ *   1. Expandable slip history (click to view picks)
+ *   2. View Winning Slip button in leaderboard
+ *   3. 3-day expiry for non-winning slips
+ *   4. Daily 3-slip submission limit
  */
 
 import { auth, db } from "./firebase.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  doc, getDoc, getDocs, addDoc, collection, query, where, updateDoc, increment, serverTimestamp, limit
+  doc, getDoc, getDocs, addDoc, collection, query, where, updateDoc, increment, serverTimestamp, limit, deleteDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getHPBadgeHTML, getUserHP } from "./rewards.js";
 
@@ -30,11 +35,13 @@ const slipCount = document.getElementById("slipCount");
 const slipProgress = document.getElementById("slipProgress");
 const slipSubmitBtn = document.getElementById("slipSubmitBtn");
 const slipHistoryContainer = document.getElementById("slipHistory");
+const dailyLimitContainer = document.getElementById("dailyLimitCounter");
 
 // ===== STATE =====
 let currentUser = null;
 let currentUserName = "Guest";
 let currentUserUniqueId = "";
+let todaySlipCount = 0;
 
 /** @type {{ matchId: string, pick: string, homeTeam: string, awayTeam: string, league: string, kickoff: string }[]} */
 let userSlip = [];
@@ -84,6 +91,22 @@ function isToday(dateStr) {
   return dateStr === toDateStr(new Date());
 }
 
+/** Format pick value into a friendly string */
+function formatPick(pick) {
+  if (!pick) return "—";
+  if (pick === "winner_1") return "Winner: 1 (Home)";
+  if (pick === "winner_X") return "Winner: Draw (X)";
+  if (pick === "winner_2") return "Winner: 2 (Away)";
+  if (pick === "goals_over2.5") return "Total Goals: Over 2.5";
+  if (pick === "goals_under2.5") return "Total Goals: Under 2.5";
+  return pick;
+}
+
+/** Generate a unique slip ID for client-side tracking */
+function generateSlipDisplayId() {
+  return 'slip_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6);
+}
+
 // ===== 1. 5-DAY ROLLING CALENDAR =====
 function buildCalendar() {
   if (!calendarEl) return;
@@ -108,7 +131,6 @@ function buildCalendar() {
     `;
 
     btn.addEventListener("click", () => {
-      // Update active tab styling
       calendarEl.querySelectorAll(".cal-tab").forEach(b => {
         b.style.background = "rgba(255,255,255,0.06)";
         b.style.color = "rgba(255,255,255,0.8)";
@@ -121,7 +143,6 @@ function buildCalendar() {
 
     calendarEl.appendChild(btn);
 
-    // Auto-select first day (today) if none selected
     if (i === 0 && !selectedDateStr) {
       selectedDateStr = dateStr;
       btn.style.background = "#00c853";
@@ -139,7 +160,7 @@ function renderFixtures(fixturesList) {
     return;
   }
 
-let html = "";
+  let html = "";
   fixturesList.forEach((match) => {
     const matchId = match.id;
     const slipEntry = userSlip.find(s => s.matchId === matchId);
@@ -189,7 +210,6 @@ let html = "";
 
   fixturesContainer.innerHTML = html;
 
-  // Attach pick button handlers
   fixturesContainer.querySelectorAll(".pick-btn").forEach(btn => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -202,12 +222,11 @@ let html = "";
   });
 }
 
-// ===== 4. PICK HANDLER — 1 PICK PER MATCH (toggle on/off) =====
+// ===== 4. PICK HANDLER =====
 function handlePick(btn) {
   const matchId = btn.dataset.match;
-  const pick = btn.dataset.pick; // e.g. "winner_1" or "goals_over2.5"
+  const pick = btn.dataset.pick;
 
-  // Find match data from rendered fixtures
   const card = btn.closest(".odds-card");
   const teamEls = card.querySelectorAll(".odds-team");
   const leagueEl = card.querySelector(".league-pill");
@@ -216,17 +235,13 @@ function handlePick(btn) {
   const league = leagueEl?.textContent?.replace("⚽ ", "") || "";
   const kickoff = "";
 
-  // Find existing entry for this match in the slip
   const existingIdx = userSlip.findIndex(s => s.matchId === matchId);
 
   if (existingIdx !== -1 && userSlip[existingIdx].pick === pick) {
-    // Same pick clicked again → DESELECT (remove from slip)
     userSlip.splice(existingIdx, 1);
   } else if (existingIdx !== -1) {
-    // Different pick clicked on same match → SWAP the pick value
     userSlip[existingIdx].pick = pick;
   } else {
-    // No existing entry — create one with the single pick field
     userSlip.push({
       matchId,
       pick,
@@ -237,7 +252,6 @@ function handlePick(btn) {
     });
   }
 
-  // Update all visual states for this match
   updateCardVisuals(matchId);
   updateSlipBanner();
 }
@@ -248,12 +262,10 @@ function updateCardVisuals(matchId) {
 
   const entry = userSlip.find(s => s.matchId === matchId);
 
-  // Update ALL pick buttons in this card: only the selected pick gets .selected-btn
   card.querySelectorAll(".pick-btn").forEach(b => {
     b.classList.toggle("selected-btn", entry ? entry.pick === b.dataset.pick : false);
   });
 
-  // Card highlight
   card.classList.toggle("odds-card-selected", !!entry);
 }
 
@@ -283,17 +295,61 @@ function updateSlipBanner() {
   }
 }
 
-// ===== 6. SUBMISSION ENGINE =====
+// ===== FEATURE 4: DAILY SLIP LIMIT COUNTER =====
+async function updateDailyLimitCounter() {
+  if (!dailyLimitContainer || !currentUser) return;
+  try {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const q = query(
+      collection(db, "user_predictions"),
+      where("userId", "==", currentUser.uid),
+      where("dateSubmitted", "==", todayStr)
+    );
+    const snap = await getDocs(q);
+    todaySlipCount = snap.size;
+    const remaining = 3 - todaySlipCount;
+    const limitReached = remaining <= 0;
+
+    dailyLimitContainer.textContent = `Today's Submissions: ${todaySlipCount} / 3`;
+    dailyLimitContainer.className = `daily-limit-counter${limitReached ? ' limit-reached' : ''}`;
+
+    // Also disable submit if limit reached
+    if (slipSubmitBtn && limitReached) {
+      slipSubmitBtn.disabled = true;
+    }
+  } catch (err) {
+    console.warn("Daily limit counter error:", err);
+  }
+}
+
+// ===== 6. SUBMISSION ENGINE (Feature 4: 3-slip daily limit) =====
 async function submitSlip() {
   if (!currentUser) { showGlobalMsg("Please sign in first.", "error"); return; }
   if (isSubmitting) return;
-if (userSlip.length !== 7) { showGlobalMsg("You must select exactly 7 matches.", "error"); return; }
+  if (userSlip.length !== 7) { showGlobalMsg("You must select exactly 7 matches.", "error"); return; }
 
   // Validate all entries have a pick selected
   const invalid = userSlip.some(s => !s.pick);
   if (invalid) {
     showGlobalMsg("Each match needs a pick selected.", "error");
     return;
+  }
+
+  // FEATURE 4: Check daily 3-slip limit
+  const todayStr = new Date().toISOString().split('T')[0];
+  try {
+    const todayQ = query(
+      collection(db, "user_predictions"),
+      where("userId", "==", currentUser.uid),
+      where("dateSubmitted", "==", todayStr)
+    );
+    const todaySnap = await getDocs(todayQ);
+    if (todaySnap.size >= 3) {
+      showGlobalMsg("You have reached your limit of 3 prediction slips for today! Please return tomorrow.", "error");
+      return;
+    }
+  } catch (limitErr) {
+    console.warn("Daily limit check error:", limitErr);
   }
 
   isSubmitting = true;
@@ -306,21 +362,19 @@ if (userSlip.length !== 7) { showGlobalMsg("You must select exactly 7 matches.",
       userName: currentUser.displayName || "Anonymous",
       slip: userSlip,
       status: "pending",
-      dateSubmitted: new Date().toISOString().split('T')[0],
+      dateSubmitted: todayStr,
       createdAt: serverTimestamp()
     });
 
     showGlobalMsg("✅ Prediction Slip Submitted Successfully!", "success");
 
-    // Clear slip
     userSlip = [];
     updateSlipBanner();
 
-    // Re-render fixtures to clear visual selections
     if (selectedDateStr) loadFixturesForDate(selectedDateStr);
 
-    // Refresh history
     loadSlipHistory();
+    updateDailyLimitCounter();
   } catch (err) {
     console.error("Submit error:", err);
     showGlobalMsg("Failed to submit slip. Try again.", "error");
@@ -331,10 +385,6 @@ if (userSlip.length !== 7) { showGlobalMsg("You must select exactly 7 matches.",
 }
 
 // ===== 7. SETTLEMENT ENGINE (Real API-based) =====
-/**
- * Fetch real fixture result from API for a given match ID.
- * Returns { homeScore, awayScore } or null if not finished.
- */
 async function fetchRealFixtureResult(matchId) {
   try {
     const response = await fetch(`https://${API_HOST}/fixtures?id=${matchId}`, {
@@ -347,7 +397,6 @@ async function fetchRealFixtureResult(matchId) {
     const data = await response.json();
     if (!data.response || data.response.length === 0) return null;
     const fixture = data.response[0];
-    // Only settle if match is finished
     if (fixture.fixture.status.short !== "FT") return null;
     return {
       homeScore: fixture.goals.home ?? 0,
@@ -374,16 +423,13 @@ async function settleSlip(slipDoc) {
   let correctCount = 0;
   let settledCount = 0;
 
-for (const sel of data.slip) {
+  for (const sel of data.slip) {
     const result = await fetchRealFixtureResult(sel.matchId);
     if (!result) {
-      // Match not finished yet — skip this selection
       continue;
     }
     settledCount++;
 
-    // Parse the pick field: "winner_1" -> { category: "winner", value: "1" }
-    //                       "goals_over2.5" -> { category: "goals", value: "over2.5" }
     let pickCategory = null, pickValue = null;
     if (sel.pick) {
       if (sel.pick.startsWith("winner_")) {
@@ -394,7 +440,6 @@ for (const sel of data.slip) {
         pickValue = sel.pick.replace("goals_", "");
       }
     }
-    // Support legacy slips that still have winner/goals fields
     if (!pickCategory) {
       pickCategory = "winner";
       pickValue = sel.winner;
@@ -410,14 +455,12 @@ for (const sel of data.slip) {
     }
   }
 
-  // Only settle if at least some matches have finished
   if (settledCount === 0) return;
 
   const scoreStr = `${correctCount}/${settledCount}`;
 
   try {
     if (correctCount >= 6) {
-      // Award 2 HP
       const userRef = doc(db, "users", data.userId);
       await updateDoc(userRef, {
         hpBalance: increment(2),
@@ -466,16 +509,22 @@ async function settleAllPendingSlips() {
   }
 }
 
-// ===== 8. HISTORY (NO orderBy — prevents index crash) =====
+// ===== FEATURE 1: EXPANDABLE SLIP HISTORY + FEATURE 3: 3-DAY EXPIRY =====
 async function loadSlipHistory() {
-  if (!slipHistoryContainer || !currentUser) return;
+  if (!slipHistoryContainer) return;
+  if (!currentUser) {
+    slipHistoryContainer.innerHTML = '<p class="helper-text" style="text-align:center;color:rgba(255,255,255,0.7);">Sign in to see your prediction history.</p>';
+    return;
+  }
+
+  slipHistoryContainer.innerHTML = '<p class="helper-text" style="text-align:center;color:rgba(255,255,255,0.7);">⏳ Loading history...</p>';
 
   try {
-    // No orderBy to prevent composite index requirement
+    // Query without orderBy to prevent index crashes
     const q = query(
       collection(db, "user_predictions"),
       where("userId", "==", currentUser.uid),
-      limit(50)
+      limit(100)
     );
     const snap = await getDocs(q);
 
@@ -493,11 +542,32 @@ async function loadSlipHistory() {
       return tb - ta;
     });
 
-    let html = "";
-    docs.forEach(slip => {
-      const dateStr = slip.dateSubmitted || "—";
-      let statusText, statusClass;
+    // FEATURE 3: 3-day expiry for non-winning slips
+    const filteredDocs = docs.filter(slip => {
+      if (slip.status === "won") return true; // Always show won slips
 
+      const createdAt = slip.createdAt?.toMillis ? slip.createdAt.toMillis() : (slip.dateSubmitted ? new Date(slip.dateSubmitted).getTime() : Date.now());
+      const ageInDays = (Date.now() - createdAt) / (1000 * 60 * 60 * 24);
+
+      if (ageInDays > 3) {
+        // FEATURE 3 OPTIONAL: Delete expired doc from Firestore
+        deleteDoc(doc(db, "user_predictions", slip.id)).catch(err => console.warn("Failed to delete expired slip:", err));
+        return false; // Filter it out
+      }
+      return true;
+    });
+
+    if (filteredDocs.length === 0) {
+      slipHistoryContainer.innerHTML = '<p class="helper-text" style="text-align:center;color:rgba(255,255,255,0.7);">No prediction slips yet. Select 7 matches and submit!</p>';
+      return;
+    }
+
+    let html = "";
+    filteredDocs.forEach((slip, index) => {
+      const dateStr = slip.dateSubmitted || "—";
+      const displayId = generateSlipDisplayId();
+
+      let statusText, statusClass;
       if (slip.status === "won") {
         statusText = `✅ Won (${slip.score || "?"}) +2 HP 🏆`;
         statusClass = "won";
@@ -509,31 +579,85 @@ async function loadSlipHistory() {
         statusClass = "pending";
       }
 
+      // FEATURE 1: Build expandable picks HTML
+      let picksHtml = "";
+      if (slip.slip && slip.slip.length > 0) {
+        picksHtml = slip.slip.map(pick => {
+          const homeTeam = pick.homeTeam || "Home";
+          const awayTeam = pick.awayTeam || "Away";
+          return `
+            <div class="slip-pick-row">
+              <div class="slip-pick-team home">${escapeHtml(homeTeam)}</div>
+              <div class="slip-pick-vs">vs</div>
+              <div class="slip-pick-team away">${escapeHtml(awayTeam)}</div>
+              <div class="slip-pick-detail">
+                <span class="slip-pick-label">🎯 Pick</span>
+                <span class="slip-pick-value">${escapeHtml(formatPick(pick.pick))}</span>
+              </div>
+            </div>
+          `;
+        }).join("");
+      } else {
+        picksHtml = '<div style="font-size:12px;color:rgba(255,255,255,0.5);padding:8px;">No picks data available</div>';
+      }
+
       html += `
         <div class="slip-history-item ${statusClass}">
-          <div class="slip-history-header">
-            <span><strong>${dateStr}</strong></span>
+          <div class="slip-history-header" data-target="${displayId}">
+            <div class="slip-history-header-left">
+              <span><strong>${dateStr}</strong></span>
+              <span class="slip-history-status ${statusClass}">${statusText}</span>
+            </div>
             <span style="font-size:12px;color:rgba(255,255,255,0.5);">${slip.slip?.length || 0} picks</span>
+            <button class="slip-toggle-btn" data-target="${displayId}">🔽 View Picks</button>
           </div>
-          <div style="font-size:13px;">${statusText}</div>
+          <div id="${displayId}" class="slip-expanded-content" style="display:none;">
+            ${picksHtml}
+          </div>
         </div>
       `;
     });
 
     slipHistoryContainer.innerHTML = html;
+
+    // FEATURE 1: Attach toggle click handlers
+    slipHistoryContainer.querySelectorAll('.slip-toggle-btn, .slip-history-header').forEach(el => {
+      el.addEventListener('click', (e) => {
+        // Don't toggle if clicking the button itself (it's handled)
+        if (e.target.classList.contains('slip-toggle-btn')) return;
+        const targetId = el.dataset.target;
+        if (targetId) toggleSlipExpand(targetId);
+      });
+    });
+
+    slipHistoryContainer.querySelectorAll('.slip-toggle-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const targetId = btn.dataset.target;
+        if (targetId) toggleSlipExpand(targetId);
+      });
+    });
   } catch (err) {
     console.warn("Load history error:", err);
     slipHistoryContainer.innerHTML = '<p class="helper-text" style="text-align:center;color:rgba(255,255,255,0.7);">Could not load history.</p>';
   }
 }
 
+/** Toggle expand/collapse for a slip history item */
+function toggleSlipExpand(targetId) {
+  const content = document.getElementById(targetId);
+  if (!content) return;
+  const isHidden = content.style.display === 'none';
+  content.style.display = isHidden ? 'grid' : 'none';
+
+  // Update toggle button text
+  const btn = document.querySelector(`.slip-toggle-btn[data-target="${targetId}"]`);
+  if (btn) {
+    btn.textContent = isHidden ? '🔼 Hide Picks' : '🔽 View Picks';
+  }
+}
+
 // ===== 2. FETCH REAL FIXTURES FROM API =====
-/**
- * Fetch real football fixtures from API-Sports for a given date.
- * Maps API response to the fixture shape expected by renderFixtures().
- * @param {string} dateStr - "YYYY-MM-DD"
- * @returns {Promise<Array>} Array of fixture objects
- */
 async function fetchFixturesFromAPI(dateStr) {
   try {
     const response = await fetch(`https://${API_HOST}/fixtures?date=${dateStr}`, {
@@ -562,16 +686,14 @@ async function fetchFixturesFromAPI(dateStr) {
   }
 }
 
-// ===== 9. FETCH FIXTURES PER DATE (async, uses real API) =====
+// ===== 9. FETCH FIXTURES PER DATE =====
 async function loadFixturesForDate(dateStr) {
   if (!fixturesContainer) return;
   fixturesContainer.innerHTML = '<div class="card" style="grid-column:1/-1;text-align:center;background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.7);"><p style="padding:40px 0;">⏳ Loading fixtures...</p></div>';
 
   try {
-    // Fetch real fixtures from the API
     let fixtures = await fetchFixturesFromAPI(dateStr);
 
-    // For TODAY: filter to only show matches with kickoff time > current time
     if (isToday(dateStr)) {
       const now = new Date();
       fixtures = fixtures.filter(match => {
@@ -579,14 +701,12 @@ async function loadFixturesForDate(dateStr) {
         return kickoffTime > now;
       });
 
-      // If no remaining matches for later today, show explicit message
       if (fixtures.length === 0) {
         fixturesContainer.innerHTML = '<div class="card" style="grid-column:1/-1;text-align:center;background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.7);"><p style="padding:40px 0;">⏰ No more upcoming matches scheduled for today. Please select tomorrow\'s tab!</p></div>';
         return;
       }
     }
 
-    // For future dates, show all upcoming fixtures unfiltered
     renderFixtures(fixtures);
   } catch (err) {
     console.error("loadFixturesForDate error:", err);
@@ -594,7 +714,99 @@ async function loadFixturesForDate(dateStr) {
   }
 }
 
-// ===== 10. LEADERBOARD =====
+// ===== FEATURE 2: VIEW WINNING SLIP MODAL =====
+/**
+ * Open a modal showing a user's winning slip details.
+ * @param {string} userName - Name of the user
+ * @param {string} slipId - The Firestore doc ID of the winning slip
+ */
+async function openWinningSlipModal(userName, slipId) {
+  // Remove any existing modal first
+  const oldModal = document.getElementById('winningSlipModal');
+  if (oldModal) oldModal.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'winningSlipModal';
+  modal.className = 'fb-modal';
+  modal.style.display = 'flex';
+  modal.innerHTML = `
+    <div class="fb-modal-overlay" id="winningSlipModalOverlay"></div>
+    <div class="fb-modal-card" style="max-width:500px;">
+      <div class="fb-modal-header">
+        <h3>🏆 Winning Prediction Slip</h3>
+        <button class="fb-modal-close" id="winningSlipModalClose">&times;</button>
+      </div>
+      <div class="winning-slip-modal-body">
+        <div style="text-align:center;padding:30px 0;color:#64748b;">⏳ Loading slip details...</div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  // Close handlers
+  document.getElementById('winningSlipModalClose').addEventListener('click', () => modal.remove());
+  document.getElementById('winningSlipModalOverlay').addEventListener('click', () => modal.remove());
+
+  // Fetch the slip data
+  try {
+    const slipSnap = await getDoc(doc(db, "user_predictions", slipId));
+    if (!slipSnap.exists()) {
+      modal.querySelector('.winning-slip-modal-body').innerHTML = '<div style="text-align:center;padding:20px;color:#ef4444;">Slip not found.</div>';
+      return;
+    }
+    const slip = slipSnap.data();
+
+    const dateStr = slip.dateSubmitted || "—";
+    const scoreStr = slip.score || "?";
+    const picksCount = slip.slip?.length || 0;
+
+    let picksHtml = "";
+    if (slip.slip && slip.slip.length > 0) {
+      picksHtml = slip.slip.map(pick => {
+        const homeTeam = pick.homeTeam || "Home";
+        const awayTeam = pick.awayTeam || "Away";
+        return `
+          <div class="winning-slip-pick">
+            <div class="winning-slip-pick-team home">${escapeHtml(homeTeam)}</div>
+            <div class="winning-slip-pick-vs">vs</div>
+            <div class="winning-slip-pick-team away">${escapeHtml(awayTeam)}</div>
+            <div class="winning-slip-pick-detail">
+              <span class="winning-slip-pick-label">🎯 Pick</span>
+              <span class="winning-slip-pick-value">${escapeHtml(formatPick(pick.pick))}</span>
+            </div>
+          </div>
+        `;
+      }).join("");
+    } else {
+      picksHtml = '<div style="text-align:center;padding:12px;color:#94a3b8;">No picks data available</div>';
+    }
+
+    modal.querySelector('.winning-slip-modal-body').innerHTML = `
+      <div class="winning-slip-user">
+        <div class="winning-slip-avatar">🏆</div>
+        <div>
+          <div class="winning-slip-name">${escapeHtml(userName)}</div>
+          <div class="winning-slip-date">Submitted: ${dateStr} · Score: ${scoreStr}</div>
+        </div>
+      </div>
+      <div class="winning-slip-ticket">
+        <div class="winning-slip-ticket-header">
+          <span>🎯 Winning Ticket (${picksCount} picks)</span>
+          <span>✅ ${scoreStr} correct</span>
+        </div>
+        ${picksHtml}
+      </div>
+      <div class="winning-slip-badge">
+        🏆 +2 HP Awarded for 6+ correct predictions!
+      </div>
+    `;
+  } catch (err) {
+    console.error("Winning slip fetch error:", err);
+    modal.querySelector('.winning-slip-modal-body').innerHTML = '<div style="text-align:center;padding:20px;color:#ef4444;">Failed to load slip details.</div>';
+  }
+}
+
+// ===== 10. LEADERBOARD (Feature 2: View Winning Slip button) =====
 async function loadLeaderboard() {
   if (!leaderboardContainer) return;
 
@@ -606,6 +818,7 @@ async function loadLeaderboard() {
     );
     const snap = await getDocs(q);
 
+    // Build user aggregates AND store winning slip IDs
     const userRewards = {};
     snap.docs.forEach(docSnap => {
       const slip = docSnap.data();
@@ -615,11 +828,13 @@ async function loadLeaderboard() {
           userId: slip.userId,
           userName: slip.userName || "Anonymous",
           totalSlips: 0,
-          hpEarned: 0
+          hpEarned: 0,
+          winningSlipIds: [] // FEATURE 2: store winning slip IDs
         };
       }
       userRewards[slip.userId].totalSlips++;
       userRewards[slip.userId].hpEarned += 2;
+      userRewards[slip.userId].winningSlipIds.push(docSnap.id);
     });
 
     const sorted = Object.values(userRewards).sort((a, b) => b.hpEarned - a.hpEarned);
@@ -646,6 +861,7 @@ async function loadLeaderboard() {
       return;
     }
 
+    // Update leaderboard header to include a "View" column
     leaderboardContainer.innerHTML = `
       <div class="leaderboard-table">
         <div class="leaderboard-header">
@@ -653,18 +869,23 @@ async function loadLeaderboard() {
           <span>Player</span>
           <span>HP 🏆</span>
           <span>Slips</span>
+          <span></span>
         </div>
         ${sorted.map((u, i) => {
           const isYou = u.userId === currentUserId;
           const rank = i + 1;
           const rankDisplay = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : `#${rank}`;
           const displayName = isYou ? `${u.userName} (You)` : u.userName;
+          const firstWinningSlipId = u.winningSlipIds[0] || null;
           return `
             <div class="leaderboard-row ${isYou ? "leaderboard-you" : ""}">
               <span class="leaderboard-rank">${rankDisplay}</span>
               <span class="leaderboard-name"><strong>${displayName}</strong></span>
               <span class="leaderboard-pts"><strong>${u.hpEarned} HP</strong></span>
               <span class="leaderboard-exact">${u.totalSlips}</span>
+              <span class="leaderboard-exact">
+                ${firstWinningSlipId ? `<button class="leaderboard-view-btn" data-user="${escapeHtml(u.userName)}" data-slip="${firstWinningSlipId}">🏆 View</button>` : ''}
+              </span>
             </div>
           `;
         }).join("")}
@@ -673,6 +894,18 @@ async function loadLeaderboard() {
         <p>🏆 Get <strong>6/7</strong> correct predictions to earn <strong>2 HP</strong> per slip!</p>
       </div>
     `;
+
+    // FEATURE 2: Attach click handlers for View Winning Slip buttons
+    leaderboardContainer.querySelectorAll('.leaderboard-view-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const userName = btn.dataset.user;
+        const slipId = btn.dataset.slip;
+        if (slipId) {
+          openWinningSlipModal(userName, slipId);
+        }
+      });
+    });
   } catch (err) {
     console.error("Leaderboard error:", err);
     leaderboardContainer.innerHTML = '<div class="admin-error">Failed to load leaderboard.</div>';
@@ -709,12 +942,17 @@ onAuthStateChanged(auth, async (user) => {
 
     await loadSlipHistory();
     await settleAllPendingSlips();
+    await updateDailyLimitCounter();
   } else {
     currentUserUniqueId = "";
     currentUserName = "Guest";
+    todaySlipCount = 0;
     if (userStatus) {
       userStatus.textContent = "Sign in to make predictions!";
       userStatus.classList.remove("active");
+    }
+    if (dailyLimitContainer) {
+      dailyLimitContainer.textContent = "";
     }
     if (slipHistoryContainer) {
       slipHistoryContainer.innerHTML = '<p class="helper-text" style="text-align:center;color:rgba(255,255,255,0.7);">Sign in to see your prediction history.</p>';
