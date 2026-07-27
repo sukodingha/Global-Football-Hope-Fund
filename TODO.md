@@ -1,27 +1,18 @@
-# Implementation TODOs: Expandable Slips, Leaderboard Visibility, 3-Day Expiry & 3/Day Limit
+# API & Fallback Fix — Progress Tracker ✅ ALL DONE
 
-## ✅ Completed
+## File 1: js/competition.js  ✅ COMPLETE
+- [x] Fix API_KEY → `"a7ba1c6350msha38f55a1caaad1dp19506fjsn7159adf87d0e"`
+- [x] Fix API_HOST → `"api-football-v1.p.rapidapi.com"`
+- [x] Fix fetch URL → `https://${API_HOST}/v3/fixtures?live=all`
+- [x] Rename `renderMockLiveMatches()` → `renderMockFixtures()`
+- [x] Both call sites (empty-data & catch) now call `renderMockFixtures()`
 
-- [x] Analyzed existing codebase (predictions.js, predictions.html, style.css)
-- [x] Created implementation plan (Plan approved)
-- [x] **Step 1: Added CSS styles** — expandable slips, winning slip modal, daily limit counter, leaderboard view button ✅
-- [x] **Step 2: Feature 4 — Daily 3-Slip Limit** ✅
-  - `updateDailyLimitCounter()` queries today's submissions and shows "X / 3"
-  - `submitSlip()` checks the limit before allowing submission
-  - Counter displays with `limit-reached` CSS class when at max
-- [x] **Step 3: Feature 3 — 3-Day Expiry** ✅
-  - `loadSlipHistory()` filters out non-winning slips older than 3 days
-  - Optionally deletes expired docs from Firestore via `deleteDoc()`
-  - Winning slips always shown regardless of age
-- [x] **Step 4: Feature 1 — Expandable History** ✅
-  - Each slip rendered with a "🔽 View Picks" toggle button
-  - Expanded view shows all 7 picks with Home vs Away, user's pick, and match info
-  - Friendly labels like "Winner: 1 (Home)" and "Total Goals: Over 2.5"
-- [x] **Step 5: Feature 2 — Winning Slips on Leaderboard** ✅
-  - First winning slip ID stored per user in leaderboard aggregation
-  - "🏆 View" button renders next to each leaderboard entry
-  - `openWinningSlipModal()` creates a styled modal with full winning slip details
-  - Modal shows ticket header, all picks, and "+2 HP Awarded" badge
-- [x] **Step 6: Fixed `competition.html`** — Modernized with splash screen, auth modal, PWA install, mobile nav, service worker registration
-- [x] **Step 7: Final review** — All features verified in predictions.js and style.css
+## File 2: js/predictions.js  ✅ COMPLETE
+- [x] Fix API_KEY → `"a7ba1c6350msha38f55a1caaad1dp19506fjsn7159adf87d0e"`
+- [x] Fix API_HOST → `"api-football-v1.p.rapidapi.com"`
+- [x] Fix `fetchFixturesFromAPI` URL → `v3/fixtures?date=${dateStr}`
+- [x] Fix `fetchRealFixtureResult` URL → `v3/fixtures?id=${matchId}`
+- [x] Fix broken `submitSlip` catch block (was missing error handler + missing `finally`)
+- [x] Add `renderMockFixtures(dateStr)` function → 7 mock match cards for prediction selection
+- [x] Update `loadFixturesForDate` — empty data, empty today, and catch all call `renderMockFixtures(dateStr)`
 

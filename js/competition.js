@@ -4,13 +4,13 @@
  * Displays live matches in the #live-scores-feed container
  */
 
-const API_KEY = "a7ba1c6350msha38155a1caaad1dp19506fjsn7159adf87d0e";
-const API_HOST = "free-api-live-football-data.p.rapidapi.com";
+const API_KEY = "a7ba1c6350msha38f55a1caaad1dp19506fjsn7159adf87d0e";
+const API_HOST = "api-football-v1.p.rapidapi.com";
 
 /**
  * Generate mock live match cards as fallback when API fails or returns empty.
  */
-function renderMockLiveMatches() {
+function renderMockFixtures() {
     const mockMatches = [
         { league: 'Premier League', home: 'Arsenal', away: 'Chelsea', hScore: 2, aScore: 1, min: 67, status: 'live', leagueLogo: '' },
         { league: 'La Liga', home: 'Barcelona', away: 'Real Madrid', hScore: 1, aScore: 1, min: 42, status: 'live', leagueLogo: '' },
@@ -36,12 +36,10 @@ function renderMockLiveMatches() {
                 <div class="match-team">
                     <span class="team-name">${m.away}</span>
                 </div>
-            </div>
             <div class="match-extra">
                 <span class="match-date">Today</span>
                 <span class="match-attendees">👥 Live</span>
             </div>
-        </div>
     `).join('');
 }
 
@@ -57,7 +55,7 @@ async function fetchLiveScores() {
     feedContainer.innerHTML = '<p class="loading-text">⏳ Fetching live match updates...</p>';
 
     try {
-        const response = await fetch(`https://${API_HOST}/fixtures?live=all`, {
+        const response = await fetch(`https://${API_HOST}/v3/fixtures?live=all`, {
             method: "GET",
             headers: {
                 "x-rapidapi-host": API_HOST,
@@ -69,7 +67,7 @@ async function fetchLiveScores() {
 
         if (!data.response || data.response.length === 0) {
             // MOCK FALLBACK: Show default match cards instead of "No live matches"
-            feedContainer.innerHTML = renderMockLiveMatches();
+            feedContainer.innerHTML = renderMockFixtures();
             return;
         }
 
@@ -135,7 +133,7 @@ async function fetchLiveScores() {
     } catch (error) {
         console.error("Error fetching live matches:", error);
         // MOCK FALLBACK: Show default match cards on error
-        feedContainer.innerHTML = renderMockLiveMatches();
+        feedContainer.innerHTML = renderMockFixtures();
     }
 }
 
