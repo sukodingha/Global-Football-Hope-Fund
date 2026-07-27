@@ -416,6 +416,12 @@ async function fetchRealFixtureResult(matchId) {
         "x-rapidapi-key": API_KEY
       }
     });
+
+    // HARD FALLBACK: If non-200 (including 403/401/429), return null to skip settlement
+    if (!response.ok) {
+      throw new Error(`API returned ${response.status} ${response.statusText}`);
+    }
+
     const data = await response.json();
     if (!data.response || data.response.length === 0) return null;
     const fixture = data.response[0];
@@ -559,6 +565,8 @@ async function loadSlipHistory() {
       return;
     }
 
+    // Process documents into a usable array
+    const filteredDocs = snap.docs.map(doc => ({ ...doc.data(), id: doc.id }));
 
     if (filteredDocs.length === 0) {
       slipHistoryContainer.innerHTML = '<p class="helper-text" style="text-align:center;color:rgba(255,255,255,0.7);">No prediction slips yet. Select 7 matches and submit!</p>';
@@ -671,9 +679,9 @@ async function fetchFixturesFromAPI(dateStr) {
       }
     });
 
-    // HARD FALLBACK: If 403/401 Forbidden/Unauthorized, throw to trigger mock data
-    if (response.status === 403 || response.status === 401) {
-      throw new Error(`API returned ${response.status} Forbidden/Unauthorized`);
+    // HARD FALLBACK: If non-200 (including 403/401/429), throw to trigger mock data
+    if (!response.ok) {
+      throw new Error(`API returned ${response.status} ${response.statusText}`);
     }
 
     const data = await response.json();

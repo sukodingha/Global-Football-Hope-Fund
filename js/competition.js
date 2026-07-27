@@ -63,9 +63,9 @@ async function fetchLiveScores() {
             }
         });
 
-        // HARD FALLBACK: If 403/401 Forbidden/Unauthorized, throw to trigger mock data
-        if (response.status === 403 || response.status === 401) {
-            throw new Error(`API returned ${response.status} Forbidden/Unauthorized`);
+        // HARD FALLBACK: If non-200 (including 403/401/429), throw to trigger mock data
+        if (!response.ok) {
+            throw new Error(`API returned ${response.status} ${response.statusText}`);
         }
 
         const data = await response.json();
@@ -145,7 +145,7 @@ async function fetchLiveScores() {
 // Kick off the fetch when the competition page loads
 document.addEventListener('DOMContentLoaded', fetchLiveScores);
 
-// Auto-refresh live scores every 60 seconds
-setInterval(fetchLiveScores, 60000);
+// NOTE: Auto-refresh removed to prevent 429 rate-limit errors.
+// User can manually refresh via page reload or navigation.
 
 export { fetchLiveScores };
