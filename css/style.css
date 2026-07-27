@@ -2086,6 +2086,83 @@ footer {
     box-shadow: none;
 }
 
+/* ===== PREDICTION BUTTONS ===== */
+.prediction-section {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.prediction-section-label {
+    font-size: 13px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.8);
+    margin-bottom: 8px;
+}
+
+.winner-buttons,
+.goals-buttons {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.pred-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.pred-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.3);
+    transform: translateY(-1px);
+}
+
+.pred-btn.selected-btn {
+    background: #dc2626 !important;
+    color: #fff !important;
+    border-color: #ef4444 !important;
+    box-shadow: 0 0 12px rgba(220, 38, 38, 0.3);
+}
+
+.pred-btn-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.15);
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.pred-btn.selected-btn .pred-btn-label {
+    background: rgba(255, 255, 255, 0.25);
+}
+
+.pred-btn-team {
+    font-size: 12px;
+    opacity: 0.9;
+}
+
+/* ===== ODDS CARD SELECTED STATE ===== */
+.odds-card-selected {
+    border-color: #00c853 !important;
+    box-shadow: 0 0 20px rgba(0, 200, 83, 0.15), inset 0 0 0 1px rgba(0, 200, 83, 0.2);
+}
+
 /* ===== PREDICTION SELECTED BUTTON — RED ACCENT ===== */
 .pred-btn.selected-btn {
     background-color: #dc2626 !important;

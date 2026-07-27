@@ -782,6 +782,19 @@ async function fetchLiveScores() {
             }
         });
 
+        // Gracefully handle non-OK HTTP statuses (e.g., 403, 429)
+        if (!response.ok) {
+            if (response.status === 403) {
+                console.warn("API returned 403 (Forbidden). API key may be expired or unauthorized. Falling back to mock matches.");
+            } else if (response.status === 429) {
+                console.warn("API returned 429 (Rate Limited). Too many requests. Falling back to mock matches.");
+            } else {
+                console.warn(`API returned ${response.status} (${response.statusText}). Falling back to mock matches.`);
+            }
+            feedContainer.innerHTML = renderMockMatches();
+            return;
+        }
+
         const data = await response.json();
         
         if (!data.response || data.response.length === 0) {

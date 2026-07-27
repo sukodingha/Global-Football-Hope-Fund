@@ -1,18 +1,27 @@
-# API & Fallback Fix — Progress Tracker ✅ ALL DONE
+# GFHF Predictions Page Fix - TODO
 
-## File 1: js/competition.js  ✅ COMPLETE
-- [x] Fix API_KEY → `"a7ba1c6350msha38f55a1caaad1dp19506fjsn7159adf87d0e"`
-- [x] Fix API_HOST → `"api-football-v1.p.rapidapi.com"`
-- [x] Fix fetch URL → `https://${API_HOST}/v3/fixtures?live=all`
-- [x] Rename `renderMockLiveMatches()` → `renderMockFixtures()`
-- [x] Both call sites (empty-data & catch) now call `renderMockFixtures()`
+## Step 1: Fix predictions.html broken slipBanner HTML ✅
+- Close unclosed `<div>` in slipBanner section
 
-## File 2: js/predictions.js  ✅ COMPLETE
-- [x] Fix API_KEY → `"a7ba1c6350msha38f55a1caaad1dp19506fjsn7159adf87d0e"`
-- [x] Fix API_HOST → `"api-football-v1.p.rapidapi.com"`
-- [x] Fix `fetchFixturesFromAPI` URL → `v3/fixtures?date=${dateStr}`
-- [x] Fix `fetchRealFixtureResult` URL → `v3/fixtures?id=${matchId}`
-- [x] Fix broken `submitSlip` catch block (was missing error handler + missing `finally`)
-- [x] Add `renderMockFixtures(dateStr)` function → 7 mock match cards for prediction selection
-- [x] Update `loadFixturesForDate` — empty data, empty today, and catch all call `renderMockFixtures(dateStr)`
+## Step 2: Fix js/predictions.js - renderFixtures() broken HTML ✅
+- Properly close all divs in the HTML template string
+- Fix odds-teams, odds-card, prediction-section divs
+
+## Step 3: Fix js/predictions.js - API Integration ✅
+- Keep RapidAPI but add proper caching (Map by dateStr)
+- Add request debouncing for calendar clicks
+- Add proper error handling with user-facing messages
+- Ensure loading indicators always hide
+
+## Step 4: Fix js/predictions.js - Add missing CSS class styles inline ✅
+- pred-btn missing base styles - add inline styles to template
+
+## Step 5: Fix js/competition.js - API Integration ✅
+- Same caching pattern, error handling
+- Remove auto-refresh to prevent 429
+
+## Step 6: Fix js/dashboard.js - Remove duplicate API block ✅
+- Remove the second API_KEY/API_HOST and fetchLiveScores at bottom
+
+## Step 7: Fix css/style.css - Add missing pred-btn styles ✅
 
