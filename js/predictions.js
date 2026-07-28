@@ -735,7 +735,6 @@ async function loadFixturesForDate(dateStr) {
     try {
         let fixtures;
 
-        // Bypass stale cache for live API integration to ensure date switching works
         const apiFixtures = await fetchFixturesFromAPI(dateStr);
         
         if (apiFixtures && Array.isArray(apiFixtures) && apiFixtures.length > 0) {
@@ -751,15 +750,14 @@ async function loadFixturesForDate(dateStr) {
             fixtures = generateFixturesForDate(dateStr);
         }
 
-        // Save to cache for this specific date string
         fixtureCache[dateStr] = fixtures;
         
-        // Render fixtures to the UI for this date
-        renderFixturesForDate(dateStr, fixtures);
+        // Use your original renderFixtures function name
+        renderFixtures(fixtures);
 
     } catch (err) {
         console.error("Error loading fixtures for date:", dateStr, err);
-        renderFixturesForDate(dateStr, generateFixturesForDate(dateStr));
+        renderFixtures(generateFixturesForDate(dateStr));
     } finally {
         fixtureFetchInProgress[dateStr] = false;
     }
