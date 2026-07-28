@@ -21,6 +21,10 @@ import {
   doc, getDoc, getDocs, addDoc, collection, query, where, updateDoc, increment, serverTimestamp, limit, deleteDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getHPBadgeHTML, getUserHP } from "./rewards.js";
+// ===== API CONFIG =====
+const RAPIDAPI_KEY = "a7ba1c6350msha38f55a1caaad1dp19506fjsn7159adf87d0e";
+const RAPIDAPI_HOST = "sportapi7.p.rapidapi.com";
+
 
 // ===== DOM REFS (with existence checks) =====
 function getEl(id) { return document.getElementById(id); }
@@ -159,29 +163,36 @@ const PREDICTIONS_API_BASE = "/api";
  */
 async function fetchFixturesFromAPI(dateStr) {
     try {
-        const response = await fetch(`${PREDICTIONS_API_BASE}/matches?date=${encodeURIComponent(dateStr)}`, {
+        const response = await fetch("https://sportapi7.p.rapidapi.com/api/v1/sport/football/events/live", {
             method: "GET",
-            headers: { "Accept": "application/json" }
+            headers: {
+                "x-rapidapi-key": RAPIDAPI_KEY,
+                "x-rapidapi-host": RAPIDAPI_HOST
+            }
         });
 
         if (!response.ok) {
-            console.warn(`/api/matches returned ${response.status} for ${dateStr}. Falling back to generated fixtures.`);
-            return null;
+            throw new Error(`API error: ${response.status}`);
         }
 
         const data = await response.json();
+        
+        if (data && data.events && data.events.length > 0) {
+            return data.events.map(event => ({
+                id: event.id,
+                homeTeam: event.homeTeam?.name || "Home Team",
+                awayTeam: event.awayTeam?.name || "Away Team",
+                league: event.tournament?.name || "FOOTBALL",
+                time: new Date(event.startTimestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            }));
+        }
 
-        // Support multiple response shapes: { matches: [...] }, { data: [...] }, or direct array
-        let matches = data.matches || data.data || data.response || data;
-        if (!Array.isArray(matches)) matches = null;
-
-        return matches;
+        return generateFixturesForDate(dateStr);
     } catch (err) {
-        console.error("fetchFixturesFromAPI error:", err);
-        return null; // triggers fallback
+        console.warn("RapidAPI fetch failed, using fallback:", err);
+        return generateFixturesForDate(dateStr);
     }
 }
-
 
 // ===== 1. 5-DAY ROLLING CALENDAR =====
 function buildCalendar() {
