@@ -817,7 +817,14 @@ async function loadFixturesForDate(dateStr) {
         fixtureFetchInProgress[dateStr] = false;
     }
 }
-
+// Fallback function for generating fixtures if API fails
+function generateFixturesForDate(dateStr) {
+    return [
+        { id: 101, homeTeam: "Valencia", awayTeam: "Sevilla", league: "LA LIGA", time: "11:00 AM" },
+        { id: 102, homeTeam: "Bayern Munich", awayTeam: "Borussia M'gladbach", league: "BUNDESLIGA", time: "12:15 PM" },
+        { id: 103, homeTeam: "Nice", awayTeam: "Marseille", league: "LIGUE 1", time: "12:45 PM" }
+    ];
+}
 // ===== FEATURE 2: VIEW WINNING SLIP MODAL =====
 /**
  * Open a modal showing a user's winning slip details.
