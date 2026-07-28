@@ -162,39 +162,33 @@ const PREDICTIONS_API_BASE = "/api";
  * Falls back to generated fixtures if the API fails or returns < 16 matches.
  */
 async function fetchFixturesFromAPI(dateStr) {
-    try {
-        const response = await fetch(`https://sportapi7.p.rapidapi.com/api/v1/sport/football/events/live`, {
-            method: "GET",
-            headers: {
-                "x-rapidapi-key": RAPIDAPI_KEY,
-                "x-rapidapi-host": RAPIDAPI_HOST
-            }
-        });
+  try {
+    const response = await fetch(`https://api.football-data.org/v4/matches?date=${dateStr}`, {
+      method: "GET",
+      headers: {
+        "X-Auth-Token": "ad2907bd88474985b7b195697774f8c3"
+      }
+    });
 
-        if (!response.ok) {
-            throw new Error(`API error: ${response.status}`);
-        }
-
-        const data = await response.json();
-        const events = data.events || data.matches || data;
-        
-        if (Array.isArray(events) && events.length > 0) {
-            return events.map(event => ({
-                id: event.id,
-                homeTeam: event.homeTeam?.name || "Home Team",
-                awayTeam: event.awayTeam?.name || "Away Team",
-                league: event.tournament?.name || "FOOTBALL",
-                time: new Date(event.startTimestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            }));
-        }
-
-        return generateFixturesForDate(dateStr);
-    } catch (err) {
-        console.warn("RapidAPI fetch failed, using fallback:", err);
-        return generateFixturesForDate(dateStr);
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
     }
-}
 
+    const data = await response.json();
+    const matches = data.matches || [];
+
+    if (Array.isArray(matches) && matches.length > 0) {
+      return matches.map(match => ({
+        id: match.id,
+        homeTeam: { name: match.homeTeam?.name || "Home" },
+        awayTeam: { name: match.awayTeam?.name || "Away" },
+        league: { name: match.competition?.name || "FOOTBALL" },
+        time: match.utcDate ? new Date(match.utcDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Live"
+      }));
+    }
+
+    return generateFixturesForDate(dateStr);
+}
 // ===== 1. 5-DAY ROLLING CALENDAR =====
 function buildCalendar() {
   if (!calendarEl) return;
