@@ -150,46 +150,38 @@ function pickRandom(arr) {
 }
 
 // ===== STATIC FIXTURE GENERATOR (replaces RapidAPI) =====
+// ===== API FIXTURE FETCHER (replaces static generator) =====
+const PREDICTIONS_API_BASE = "/api";
+
 /**
- * Generates realistic fixtures for a given date.
- * This replaces the broken RapidAPI integration that was returning 403/429 errors.
- * The data is structured identically to what the API used to return,
- * so the rest of the code works without changes.
+ * Fetch real upcoming matches from the API for a given date.
+ * Falls back to generated fixtures if the API fails or returns < 16 matches.
  */
-function generateFixturesForDate(dateStr) {
-  const fixtures = [];
-  const matchCount = 7 + Math.floor(Math.random() * 5); // 7-11 matches
+async function fetchFixturesFromAPI(dateStr) {
+    try {
+        const response = await fetch(`${PREDICTIONS_API_BASE}/matches?date=${encodeURIComponent(dateStr)}`, {
+            method: "GET",
+            headers: { "Accept": "application/json" }
+        });
 
-  for (let i = 0; i < matchCount; i++) {
-    const league = pickRandom(LEAGUES);
-    const teams = TEAMS_BY_LEAGUE[league];
-    const homeTeam = pickRandom(teams);
-    let awayTeam = pickRandom(teams);
-    // Ensure different teams
-    while (awayTeam === homeTeam) {
-      awayTeam = pickRandom(teams);
+        if (!response.ok) {
+            console.warn(`/api/matches returned ${response.status} for ${dateStr}. Falling back to generated fixtures.`);
+            return null;
+        }
+
+        const data = await response.json();
+
+        // Support multiple response shapes: { matches: [...] }, { data: [...] }, or direct array
+        let matches = data.matches || data.data || data.response || data;
+        if (!Array.isArray(matches)) matches = null;
+
+        return matches;
+    } catch (err) {
+        console.error("fetchFixturesFromAPI error:", err);
+        return null; // triggers fallback
     }
-
-    // Generate a realistic kickoff time (spread across the day)
-    const hour = 10 + Math.floor(Math.random() * 11); // 10:00 - 20:00
-    const minute = [0, 15, 30, 45][Math.floor(Math.random() * 4)];
-    const kickoff = new Date(`${dateStr}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00Z`);
-
-    fixtures.push({
-      id: `fixture_${dateStr.replace(/-/g, '')}_${i}`,
-      league: league,
-      homeTeam: homeTeam,
-      awayTeam: awayTeam,
-      date: kickoff.toISOString(),
-      status: "upcoming"
-    });
-  }
-
-  // Sort by kickoff time
-  fixtures.sort((a, b) => new Date(a.date) - new Date(b.date));
-
-  return fixtures;
 }
+
 
 // ===== 1. 5-DAY ROLLING CALENDAR =====
 function buildCalendar() {
@@ -721,53 +713,109 @@ function toggleSlipExpand(targetId) {
   }
 }
 
-// ===== 2. FETCH FIXTURES (uses local generator instead of API) =====
+
+// ===== 2. FETCH FIXTURES (API-first with static fallback) =====
+let pollIntervalId = null;
+
 async function loadFixturesForDate(dateStr) {
-  if (!fixturesContainer) return;
+    if (!fixturesContainer) return;
 
-  // Show loading indicator
-  fixturesContainer.innerHTML = '<div class="card" style="grid-column:1/-1;text-align:center;background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.7);"><p style="padding:40px 0;">⏳ Loading fixtures...</p></div>';
+    // Show loading indicator
+    fixturesContainer.innerHTML = '<div class="card" style="grid-column:1/-1;text-align:center;background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.7);"><p style="padding:40px 0;">⏳ Loading fixtures...</p></div>';
 
-  // Prevent duplicate parallel fetches for the same date
-  if (fixtureFetchInProgress[dateStr]) return;
-  fixtureFetchInProgress[dateStr] = true;
+    // Prevent duplicate parallel fetches for the same date
+    if (fixtureFetchInProgress[dateStr]) return;
+    fixtureFetchInProgress[dateStr] = true;
 
-  try {
-    let fixtures;
+    try {
+        let fixtures;
 
-    // Check cache first
-    if (fixtureCache[dateStr]) {
-      fixtures = fixtureCache[dateStr];
-    } else {
-      // Generate fixtures locally (no API call needed)
-      fixtures = generateFixturesForDate(dateStr);
-      // Cache the result
-      fixtureCache[dateStr] = fixtures;
+        // 1. Try cache first
+        if (fixtureCache[dateStr]) {
+            fixtures = fixtureCache[dateStr];
+        } else {
+            // 2. Try live API
+            const apiFixtures = await fetchFixturesFromAPI(dateStr);
+            if (apiFixtures && Array.isArray(apiFixtures) && apiFixtures.length >= 16) {
+                fixtures = apiFixtures.map((m, i) => ({
+                    id: m.id || `api_fixture_${dateStr.replace(/-/g, '')}_${i}`,
+                    league: m.league || m.tournament?.name || m.competition?.name || "International",
+                    homeTeam: m.homeTeam || m.teams?.home?.name || m.home?.name || "Home",
+                    awayTeam: m.awayTeam || m.teams?.away?.name || m.away?.name || "Away",
+                    date: m.date || m.startTime || m.kickoff || m.fixture?.date || new Date().toISOString(),
+                    status: m.status || "notstarted"
+                }));
+            } else {
+                // 3. Fallback to generated fixtures
+                console.warn(`API returned < 16 matches for ${dateStr}. Using generated fixtures.`);
+                fixtures = generateFixturesForDate(dateStr);
+                // Ensure at least 16 for a good selection pool
+                while (fixtures.length < 16) {
+                    const extra = generateFixturesForDate(dateStr);
+                    fixtures = fixtures.concat(extra);
+                }
+                fixtures = fixtures.slice(0, 20);
+            }
+            // Cache the result
+            fixtureCache[dateStr] = fixtures;
+        }
+
+        // 4. Filter out live/finished matches — only show NOT STARTED or future kickoff
+        const now = new Date();
+        const upcomingFixtures = fixtures.filter(match => {
+            // Skip if status indicates started or finished
+            const status = (match.status || "").toLowerCase();
+            if (status === "live" || status === "inprogress" || status === "started" ||
+                status === "finished" || status === "ended" || status === "ft" || status === "completed") {
+                return false;
+            }
+
+            // Skip if kickoff time has passed
+            const kickoffTime = new Date(match.date);
+            if (!isNaN(kickoffTime.getTime()) && kickoffTime <= now) {
+                return false;
+            }
+
+            return true;
+        });
+
+        // 5. Ensure we always show at least 16 upcoming matches
+        if (upcomingFixtures.length >= 16) {
+            fixtures = upcomingFixtures;
+        } else if (fixtures.length >= 16) {
+            // Keep the full list if filtering removed too many
+            fixtures = fixtures.slice(0, 20);
+        } else {
+            // Pad with generated fixtures to reach 16
+            const padCount = 16 - fixtures.length;
+            for (let i = 0; i < padCount; i++) {
+                const league = pickRandom(LEAGUES);
+                const teams = TEAMS_BY_LEAGUE[league];
+                const homeTeam = pickRandom(teams);
+                let awayTeam = pickRandom(teams);
+                while (awayTeam === homeTeam) awayTeam = pickRandom(teams);
+                const hour = 10 + Math.floor(Math.random() * 11);
+                const minute = [0, 15, 30, 45][Math.floor(Math.random() * 4)];
+                const kickoff = new Date(`${dateStr}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00Z`);
+                fixtures.push({
+                    id: `pad_${dateStr.replace(/-/g, '')}_${i}`,
+                    league,
+                    homeTeam,
+                    awayTeam,
+                    date: kickoff.toISOString(),
+                    status: "upcoming"
+                });
+            }
+        }
+
+        renderFixtures(fixtures);
+    } catch (err) {
+        console.error("loadFixturesForDate error:", err);
+        fixturesContainer.innerHTML = '<div class="card" style="grid-column:1/-1;text-align:center;background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.7);"><p style="padding:40px 0;">⚠️ Could not load fixtures. Please try again.</p></div>';
+        showGlobalMsg("⚠️ Could not load fixtures. Using fallback data.", "error");
+    } finally {
+        fixtureFetchInProgress[dateStr] = false;
     }
-
-    // Filter out past matches for today
-    if (isToday(dateStr)) {
-      const now = new Date();
-      const upcomingFixtures = fixtures.filter(match => {
-        const kickoffTime = new Date(match.date);
-        return kickoffTime > now;
-      });
-
-      if (upcomingFixtures.length >= 7) {
-        fixtures = upcomingFixtures;
-      }
-      // If fewer than 7 upcoming matches, keep all fixtures
-    }
-
-    renderFixtures(fixtures);
-  } catch (err) {
-    console.error("loadFixturesForDate error:", err);
-    // Show error message instead of blank page
-    fixturesContainer.innerHTML = '<div class="card" style="grid-column:1/-1;text-align:center;background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.7);"><p style="padding:40px 0;">⚠️ Could not load fixtures. Please try again.</p></div>';
-    showGlobalMsg("⚠️ Could not load fixtures. Using fallback data.", "error");
-  } finally {
-    fixtureFetchInProgress[dateStr] = false;
-  }
 }
 
 // ===== FEATURE 2: VIEW WINNING SLIP MODAL =====
@@ -1043,4 +1091,23 @@ window.addEventListener("load", () => {
     loadLeaderboard();
   }
   updateSlipBanner();
+  startPolling();
 });
+
+// ===== AUTO-REFRESH POLLING (every 45 seconds) =====
+function startPolling() {
+    stopPolling(); // clear any existing interval
+    pollIntervalId = setInterval(() => {
+        if (selectedDateStr) {
+            console.log(`[Poll] Refreshing fixtures for ${selectedDateStr}...`);
+            loadFixturesForDate(selectedDateStr);
+        }
+    }, 45000); // 45 seconds
+}
+
+function stopPolling() {
+    if (pollIntervalId) {
+        clearInterval(pollIntervalId);
+        pollIntervalId = null;
+    }
+}
