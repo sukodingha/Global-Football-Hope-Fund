@@ -163,7 +163,7 @@ const PREDICTIONS_API_BASE = "/api";
  */
 async function fetchFixturesFromAPI(dateStr) {
   try {
-    const response = await fetch(`https://free-api-live-football-data.p.rapidapi.com/football-get-matches-by-date?date=${dateStr}`, {
+    const response = await fetch(`https://free-api-live-football-data.p.rapidapi.com/matches/date/${dateStr}`, {
       method: "GET",
       headers: {
         "x-rapidapi-key": "2b8eb7f146msh22b241ee1eaebdp192f09jsn540fffdcff6c",
