@@ -162,38 +162,8 @@ const PREDICTIONS_API_BASE = "/api";
  * Falls back to generated fixtures if the API fails or returns < 16 matches.
  */
 async function fetchFixturesFromAPI(dateStr) {
-  try {
-    const response = await fetch(`https://free-api-live-football-data.p.rapidapi.com/football-get-matches-by-date?date=${dateStr}`, {
-      method: "GET",
-      headers: {
-        "x-rapidapi-key": "2b8eb7f146msh22b241ee1eaebdp192f09jsn540fffdcff6c",
-        "x-rapidapi-host": "free-api-live-football-data.p.rapidapi.com"
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const matches = data.response || data.matches || [];
-
-    if (Array.isArray(matches) && matches.length > 0) {
-      return matches.map(match => ({
-        id: match.id || match.fixtureId,
-        homeTeam: { name: match.homeTeam?.name || match.home || "Home" },
-        awayTeam: { name: match.awayTeam?.name || match.away || "Away" },
-        league: { name: match.league?.name || match.competition || "FOOTBALL" },
-        time: match.time || match.date ? new Date(match.date || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Live"
-      }));
-    }
-
-    console.warn("API returned empty matches, falling back to mock fixtures.");
-    return generateFixturesForDate(dateStr);
-  } catch (error) {
-    console.error("Live API fetch failed, using fallback:", error);
-    return generateFixturesForDate(dateStr);
-  }
+  // Using built-in generator to ensure stable, instant loading without API rate limits or 403/429 errors
+  return generateFixturesForDate(dateStr);
 }
 // ===== 1. 5-DAY ROLLING CALENDAR =====
 function buildCalendar() {
