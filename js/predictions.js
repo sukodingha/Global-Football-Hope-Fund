@@ -725,106 +725,41 @@ function toggleSlipExpand(targetId) {
   }
 }
 
-
 // ===== 2. FETCH FIXTURES (API-first with static fallback) =====
 let pollIntervalId = null;
 
 async function loadFixturesForDate(dateStr) {
-    if (!fixturesContainer) return;
-
-    // Show loading indicator
-    fixturesContainer.innerHTML = '<div class="card" style="grid-column:1/-1;text-align:center;background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.7);"><p style="padding:40px 0;">⏳ Loading fixtures...</p></div>';
-
-    // Prevent duplicate parallel fetches for the same date
     if (fixtureFetchInProgress[dateStr]) return;
     fixtureFetchInProgress[dateStr] = true;
 
     try {
         let fixtures;
 
-        // 1. Try cache first
-        if (fixtureCache[dateStr]) {
-            fixtures = fixtureCache[dateStr];
+        // Bypass stale cache for live API integration to ensure date switching works
+        const apiFixtures = await fetchFixturesFromAPI(dateStr);
+        
+        if (apiFixtures && Array.isArray(apiFixtures) && apiFixtures.length > 0) {
+            fixtures = apiFixtures.map((m, i) => ({
+                id: m.id || `api_fixture_${dateStr}_${i}`,
+                league: m.league || "FOOTBALL",
+                homeTeam: m.homeTeam || "Home Team",
+                awayTeam: m.awayTeam || "Away Team",
+                time: m.time || "15:00",
+                status: m.status || "notstarted"
+            }));
         } else {
-            // 2. Try live API
-            const apiFixtures = await fetchFixturesFromAPI(dateStr);
-            if (apiFixtures && Array.isArray(apiFixtures) && apiFixtures.length >= 16) {
-                fixtures = apiFixtures.map((m, i) => ({
-                    id: m.id || `api_fixture_${dateStr.replace(/-/g, '')}_${i}`,
-                    league: m.league || m.tournament?.name || m.competition?.name || "International",
-                    homeTeam: m.homeTeam || m.teams?.home?.name || m.home?.name || "Home",
-                    awayTeam: m.awayTeam || m.teams?.away?.name || m.away?.name || "Away",
-                    date: m.date || m.startTime || m.kickoff || m.fixture?.date || new Date().toISOString(),
-                    status: m.status || "notstarted"
-                }));
-            } else {
-                // 3. Fallback to generated fixtures
-                console.warn(`API returned < 16 matches for ${dateStr}. Using generated fixtures.`);
-                fixtures = generateFixturesForDate(dateStr);
-                // Ensure at least 16 for a good selection pool
-                while (fixtures.length < 16) {
-                    const extra = generateFixturesForDate(dateStr);
-                    fixtures = fixtures.concat(extra);
-                }
-                fixtures = fixtures.slice(0, 20);
-            }
-            // Cache the result
-            fixtureCache[dateStr] = fixtures;
+            fixtures = generateFixturesForDate(dateStr);
         }
 
-        // 4. Filter out live/finished matches — only show NOT STARTED or future kickoff
-        const now = new Date();
-        const upcomingFixtures = fixtures.filter(match => {
-            // Skip if status indicates started or finished
-            const status = (match.status || "").toLowerCase();
-            if (status === "live" || status === "inprogress" || status === "started" ||
-                status === "finished" || status === "ended" || status === "ft" || status === "completed") {
-                return false;
-            }
+        // Save to cache for this specific date string
+        fixtureCache[dateStr] = fixtures;
+        
+        // Render fixtures to the UI for this date
+        renderFixturesForDate(dateStr, fixtures);
 
-            // Skip if kickoff time has passed
-            const kickoffTime = new Date(match.date);
-            if (!isNaN(kickoffTime.getTime()) && kickoffTime <= now) {
-                return false;
-            }
-
-            return true;
-        });
-
-        // 5. Ensure we always show at least 16 upcoming matches
-        if (upcomingFixtures.length >= 16) {
-            fixtures = upcomingFixtures;
-        } else if (fixtures.length >= 16) {
-            // Keep the full list if filtering removed too many
-            fixtures = fixtures.slice(0, 20);
-        } else {
-            // Pad with generated fixtures to reach 16
-            const padCount = 16 - fixtures.length;
-            for (let i = 0; i < padCount; i++) {
-                const league = pickRandom(LEAGUES);
-                const teams = TEAMS_BY_LEAGUE[league];
-                const homeTeam = pickRandom(teams);
-                let awayTeam = pickRandom(teams);
-                while (awayTeam === homeTeam) awayTeam = pickRandom(teams);
-                const hour = 10 + Math.floor(Math.random() * 11);
-                const minute = [0, 15, 30, 45][Math.floor(Math.random() * 4)];
-                const kickoff = new Date(`${dateStr}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00Z`);
-                fixtures.push({
-                    id: `pad_${dateStr.replace(/-/g, '')}_${i}`,
-                    league,
-                    homeTeam,
-                    awayTeam,
-                    date: kickoff.toISOString(),
-                    status: "upcoming"
-                });
-            }
-        }
-
-        renderFixtures(fixtures);
     } catch (err) {
-        console.error("loadFixturesForDate error:", err);
-        fixturesContainer.innerHTML = '<div class="card" style="grid-column:1/-1;text-align:center;background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.7);"><p style="padding:40px 0;">⚠️ Could not load fixtures. Please try again.</p></div>';
-        showGlobalMsg("⚠️ Could not load fixtures. Using fallback data.", "error");
+        console.error("Error loading fixtures for date:", dateStr, err);
+        renderFixturesForDate(dateStr, generateFixturesForDate(dateStr));
     } finally {
         fixtureFetchInProgress[dateStr] = false;
     }
