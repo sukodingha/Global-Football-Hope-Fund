@@ -163,8 +163,7 @@ const PREDICTIONS_API_BASE = "/api";
  */
 async function fetchFixturesFromAPI(dateStr) {
     try {
-        // Querying fixtures by date parameter
-        const response = await fetch(`https://sportapi7.p.rapidapi.com/api/v1/sport/football/events/date/${dateStr}`, {
+        const response = await fetch(`https://sportapi7.p.rapidapi.com/api/v1/sport/football/events?date=${dateStr}`, {
             method: "GET",
             headers: {
                 "x-rapidapi-key": RAPIDAPI_KEY,
@@ -191,7 +190,7 @@ async function fetchFixturesFromAPI(dateStr) {
 
         return generateFixturesForDate(dateStr);
     } catch (err) {
-        console.warn("RapidAPI date fetch failed, using fallback:", err);
+        console.warn("RapidAPI fetch failed, using fallback:", err);
         return generateFixturesForDate(dateStr);
     }
 }
