@@ -163,11 +163,11 @@ const PREDICTIONS_API_BASE = "/api";
  */
 async function fetchFixturesFromAPI(dateStr) {
   try {
-    const response = await fetch(`https://api-football-v1.p.rapidapi.com/v3/fixtures?date=${dateStr}`, {
+    const response = await fetch(`https://free-api-live-football-data.p.rapidapi.com/football-get-matches-by-date?date=${dateStr}`, {
       method: "GET",
       headers: {
         "x-rapidapi-key": "2b8eb7f146msh22b241ee1eaebdp192f09jsn540fffdcff6c",
-        "x-rapidapi-host": "api-football-v1.p.rapidapi.com"
+        "x-rapidapi-host": "free-api-live-football-data.p.rapidapi.com"
       }
     });
 
@@ -176,15 +176,15 @@ async function fetchFixturesFromAPI(dateStr) {
     }
 
     const data = await response.json();
-    const fixtures = data.response || [];
+    const matches = data.response || data.matches || [];
 
-    if (Array.isArray(fixtures) && fixtures.length > 0) {
-      return fixtures.map(item => ({
-        id: item.fixture.id,
-        homeTeam: { name: item.teams.home.name || "Home" },
-        awayTeam: { name: item.teams.away.name || "Away" },
-        league: { name: item.league.name || "FOOTBALL" },
-        time: item.fixture.date ? new Date(item.fixture.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Live"
+    if (Array.isArray(matches) && matches.length > 0) {
+      return matches.map(match => ({
+        id: match.id || match.fixtureId,
+        homeTeam: { name: match.homeTeam?.name || match.home || "Home" },
+        awayTeam: { name: match.awayTeam?.name || match.away || "Away" },
+        league: { name: match.league?.name || match.competition || "FOOTBALL" },
+        time: match.time || match.date ? new Date(match.date || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Live"
       }));
     }
 
