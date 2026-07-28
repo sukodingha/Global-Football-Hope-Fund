@@ -188,6 +188,10 @@ async function fetchFixturesFromAPI(dateStr) {
     }
 
     return generateFixturesForDate(dateStr);
+  } catch (error) {
+    console.error("API fetch failed, using fallback:", error);
+    return generateFixturesForDate(dateStr);
+  }
 }
 // ===== 1. 5-DAY ROLLING CALENDAR =====
 function buildCalendar() {
