@@ -163,8 +163,8 @@ const PREDICTIONS_API_BASE = "/api";
  */
 async function fetchFixturesFromAPI(dateStr) {
   try {
-    const targetUrl = encodeURIComponent(`https://api.football-data.org/v4/matches?date=${dateStr}`);
-    const response = await fetch(`https://api.allorigins.win/raw?url=${targetUrl}`, {
+    const targetUrl = `https://api.football-data.org/v4/matches?date=${dateStr}`;
+    const response = await fetch(`https://corsproxy.io/?${encodeURIComponent(targetUrl)}`, {
       method: "GET",
       headers: {
         "X-Auth-Token": "ad2907bd88474985b7b195697774f8c3"
