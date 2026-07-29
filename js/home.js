@@ -1,5 +1,6 @@
 import { db } from "./firebase.js";
-import { collection, doc, getDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { collection, doc, getDoc, getDocs, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getHPBadgeHTML } from "./rewards.js";
 
 const memberCount = document.getElementById("memberCount");
 const donationCount = document.getElementById("donationCount");
@@ -61,3 +62,49 @@ async function loadHomeStats() {
 }
 
 loadHomeStats();
+
+// ===== TOP 20 HP EARNERS LEADERBOARD (Home Page) =====
+async function loadTopEarnersLeaderboard() {
+  const container = document.getElementById('topEarnersList');
+  if (!container) return;
+  if (!db) { container.innerHTML = '<p style="text-align:center;color:rgba(255,255,255,0.5);padding:20px 0;">Database unavailable.</p>'; return; }
+
+  try {
+    const usersRef = collection(db, "users");
+    const q = query(usersRef, orderBy("rewardPoints", "desc"), limit(20));
+    const querySnapshot = await getDocs(q);
+
+    if (querySnapshot.empty) {
+      container.innerHTML = '<p style="text-align:center;color:rgba(255,255,255,0.5);padding:20px 0;">No earners found yet. Start earning HP today!</p>';
+      return;
+    }
+
+    let html = '';
+    let rank = 1;
+
+    querySnapshot.forEach((docSnap) => {
+      const data = docSnap.data();
+      const username = data.displayName || data.username || data.email?.split('@')[0] || "User";
+      const hp = data.rewardPoints || 0;
+
+      const rankIcon = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : `#${rank}`;
+
+      html += `
+        <div class="leaderboard-item">
+          <span class="leaderboard-rank">${rankIcon}</span>
+          <span class="leaderboard-name"><strong>${username}</strong></span>
+          <span class="leaderboard-hp">${hp} HP</span>
+        </div>
+      `;
+      rank++;
+    });
+
+    container.innerHTML = html;
+  } catch (error) {
+    console.error("Error loading top earners leaderboard:", error);
+    container.innerHTML = '<p style="text-align:center;color:rgba(255,255,255,0.5);padding:20px 0;">Unable to load leaderboard.</p>';
+  }
+}
+
+// Load leaderboard on DOMContentLoaded (works even when not signed in)
+document.addEventListener('DOMContentLoaded', loadTopEarnersLeaderboard);
