@@ -348,6 +348,18 @@ export async function loadPointHistory(userId, maxResults = 50) {
   }
 }
 
+// ===== GLOBAL HP FORMATTER =====
+/**
+ * Format a value to exactly 3 decimal places for HP display.
+ * Falls back to "0.000" if the value is invalid/missing.
+ * @param {any} val - The value to format
+ * @returns {string} Formatted string with 3 decimal places, e.g. "1.500"
+ */
+export function formatHP(val) {
+  const n = Number(val);
+  return isNaN(n) ? "0.000" : n.toFixed(3);
+}
+
 // ===== GENERATE HP BADGE HTML =====
 /**
  * Generate the HP badge HTML string for display under a username.
@@ -357,7 +369,7 @@ export async function loadPointHistory(userId, maxResults = 50) {
 export function getHPBadgeHTML(rewardPoints = 0) {
   const pts = typeof rewardPoints === 'number' ? rewardPoints : 0;
   return `<div class="user-hp-badge">
-    <span class="hp-symbol">HP</span>◇◇ ${pts}
+    <span class="hp-symbol">HP</span>◇◇ ${formatHP(pts)}
   </div>`;
 }
 

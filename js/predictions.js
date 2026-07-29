@@ -20,7 +20,7 @@ import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/f
 import {
   doc, getDoc, getDocs, addDoc, collection, query, where, updateDoc, increment, serverTimestamp, limit, deleteDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { getHPBadgeHTML, getUserHP } from "./rewards.js";
+import { getHPBadgeHTML, getUserHP, formatHP } from "./rewards.js";
 // ===== API CONFIG =====
 const RAPIDAPI_KEY = "a7ba1c6350msha38f55a1caaad1dp19506fjsn7159adf87d0e";
 const RAPIDAPI_HOST = "sportapi7.p.rapidapi.com";
@@ -911,7 +911,7 @@ async function loadLeaderboard() {
             <div class="leaderboard-row ${isYou ? "leaderboard-you" : ""}">
               <span class="leaderboard-rank">${rankDisplay}</span>
               <span class="leaderboard-name"><strong>${escapeHtml(displayName)}</strong></span>
-              <span class="leaderboard-pts"><strong>${u.hpEarned} HP</strong></span>
+              <span class="leaderboard-pts"><strong>${formatHP(u.hpEarned)} HP</strong></span>
               <span class="leaderboard-exact">${u.totalSlips}</span>
               <span class="leaderboard-exact">
                 ${firstWinningSlipId ? `<button class="leaderboard-view-btn" data-user="${escapeHtml(u.userName)}" data-slip="${firstWinningSlipId}">🏆 View</button>` : ''}

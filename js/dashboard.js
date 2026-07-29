@@ -12,7 +12,7 @@ import { updateHeaderAvatar } from "./auth.js";
 import {
   DAILY_LOGIN_BONUS, HP_PER_DOLLAR, REDEMPTION_RATE, CURRENCY_PER_REDEMPTION,
   loadRewardData, checkDailyLoginBonus, awardActionBonus,
-  redeemHPForWallet, listenToPointHistory, loadPointHistory, getHPBadgeHTML, getUserHP, invalidateHPCache
+  redeemHPForWallet, listenToPointHistory, loadPointHistory, getHPBadgeHTML, getUserHP, invalidateHPCache, formatHP
 } from "./rewards.js";
 
 // Import shared multi-currency wallet module
@@ -968,7 +968,7 @@ async function renderRewardsCard(userId) {
     const streak = rewardData.currentStreak || 0;
 
     // Update HP display
-    hpNumberEl.textContent = hp;
+    hpNumberEl.textContent = formatHP(hp);
     hpStreakText.textContent = `🔥 ${streak}-Day Streak`;
 
     // Update redeem button text
@@ -1021,15 +1021,15 @@ async function renderRewardsCard(userId) {
 
           return `<div style="display:flex;justify-content:space-between;padding:6px 8px;border-bottom:1px solid #f1f5f9;font-size:13px;">
             <span>${symbol} ${p.reason || 'HP Activity'}</span>
-            <span style="color:${color};font-weight:700;">${sign}${pts} HP</span>
+            <span style="color:${color};font-weight:700;">${sign}${formatHP(pts)} HP</span>
             ${dateStr ? `<span style="color:#94a3b8;font-size:11px;">${dateStr}</span>` : ''}
           </div>`;
         }).join('');
       }
 
       // Update totals
-      if (hpTotalEarned) hpTotalEarned.textContent = totalEarned;
-      if (hpTotalSpent) hpTotalSpent.textContent = totalSpent;
+      if (hpTotalEarned) hpTotalEarned.textContent = formatHP(totalEarned);
+      if (hpTotalSpent) hpTotalSpent.textContent = formatHP(totalSpent);
     });
   }
 

@@ -1,6 +1,6 @@
 import { db } from "./firebase.js";
 import { collection, doc, getDoc, getDocs, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { getHPBadgeHTML } from "./rewards.js";
+import { getHPBadgeHTML, formatHP } from "./rewards.js";
 
 const memberCount = document.getElementById("memberCount");
 const donationCount = document.getElementById("donationCount");
@@ -93,7 +93,7 @@ async function loadTopEarnersLeaderboard() {
         <div class="leaderboard-item">
           <span class="leaderboard-rank">${rankIcon}</span>
           <span class="leaderboard-name"><strong>${username}</strong></span>
-          <span class="leaderboard-hp">${hp} HP</span>
+          <span class="leaderboard-hp">${formatHP(hp)} HP</span>
         </div>
       `;
       rank++;

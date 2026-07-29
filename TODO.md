@@ -1,27 +1,15 @@
-# GFHF Predictions Page Fix - TODO
+# HP Formatting Task - TODO
 
-## Step 1: Fix predictions.html broken slipBanner HTML ✅
-- Close unclosed `<div>` in slipBanner section
+## Objective
+Ensure every HP point displayed in the DOM uses `.toFixed(3)` formatting via a global `formatHP()` helper.
 
-## Step 2: Fix js/predictions.js - renderFixtures() broken HTML ✅
-- Properly close all divs in the HTML template string
-- Fix odds-teams, odds-card, prediction-section divs
+## Steps
 
-## Step 3: Fix js/predictions.js - API Integration ✅
-- Keep RapidAPI but add proper caching (Map by dateStr)
-- Add request debouncing for calendar clicks
-- Add proper error handling with user-facing messages
-- Ensure loading indicators always hide
-
-## Step 4: Fix js/predictions.js - Add missing CSS class styles inline ✅
-- pred-btn missing base styles - add inline styles to template
-
-## Step 5: Fix js/competition.js - API Integration ✅
-- Same caching pattern, error handling
-- Remove auto-refresh to prevent 429
-
-## Step 6: Fix js/dashboard.js - Remove duplicate API block ✅
-- Remove the second API_KEY/API_HOST and fetchLiveScores at bottom
-
-## Step 7: Fix css/style.css - Add missing pred-btn styles ✅
+- [x] Step 1: Add `formatHP()` function to `js/rewards.js` and export it
+- [x] Step 2: Update `getHPBadgeHTML()` in `js/rewards.js` to use `formatHP()`
+- [x] Step 3: Update `js/home.js` - format leaderboard HP display with `formatHP()`
+- [x] Step 4: Update `js/dashboard.js` - format all HP displays in rewards card with `formatHP()`
+- [x] Step 5: Update `js/community.js` - ensure HP badges use `formatHP()` (via rewards.js)
+- [x] Step 6: Update `js/predictions.js` - format leaderboard HP values and HP messages with `formatHP()`
+- [x] Step 7: Verify all changes are consistent
 
