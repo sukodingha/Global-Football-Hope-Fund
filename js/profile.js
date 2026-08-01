@@ -275,42 +275,26 @@ function updateAddTeammateBtnUI(isTeammate) {
 async function handleAddTeammate(targetUid) {
   if (!loggedInUserId || !targetUid || loggedInUserId === targetUid) return;
   try {
-    // Get sender's display name
     const senderSnap = await getDoc(doc(db, "users", loggedInUserId));
     const senderData = senderSnap.exists() ? senderSnap.data() : {};
     const senderName = senderData.displayName || senderData.firstName || "A user";
+    const senderAvatar = senderData.photoURL || "👤";
 
-    // 1. Save teammate relationship both ways in the teammates subcollection
-    // Add target to current user's teammates
-    await setDoc(doc(db, "users", loggedInUserId, "teammates", targetUid), {
-      addedAt: serverTimestamp(),
-      displayName: senderData.displayName || senderData.firstName || "Unknown"
-    });
-    // Add current user to target's teammates (mutual)
-    const targetSnap = await getDoc(doc(db, "users", targetUid));
-    const targetData = targetSnap.exists() ? targetSnap.data() : {};
-    await setDoc(doc(db, "users", targetUid, "teammates", loggedInUserId), {
-      addedAt: serverTimestamp(),
-      displayName: targetData.displayName || targetData.firstName || "Unknown"
-    });
-
-    // 2. Send a teammate_request notification to the target user
     const notificationsRef = collection(db, "notifications", targetUid, "items");
     await addDoc(notificationsRef, {
       type: "teammate_request",
       senderId: loggedInUserId,
       recipientId: targetUid,
-      senderName: senderName,
-      status: "accepted",
-      message: `${senderName} added you as a teammate! 🤝`,
+      senderName,
+      senderAvatar,
+      status: "pending",
+      message: `${senderName} wants to connect as a teammate.`,
       read: false,
       createdAt: serverTimestamp()
     });
 
-    // 3. Immediately update UI to show "TEAMMATES" state without page reload
-    updateAddTeammateBtnUI(true);
-
-    alert("✅ You are now teammates! 🤝");
+    updateAddTeammateBtnUI(false);
+    alert("✅ Teammate request sent! Waiting for approval.");
   } catch (err) {
     console.error("Error sending teammate request:", err);
     alert("Failed to send teammate request. Please try again.");

@@ -17,6 +17,7 @@ import {
 let currentUser = null;
 let unsubscribeNotifications = null;
 let notificationCount = 0;
+let notificationSoundsEnabled = true;
 
 // ===== DOM REFS (injected dynamically) =====
 const notificationContainerId = "gfhfNotificationContainer";
@@ -37,6 +38,7 @@ function injectNotificationBell() {
       <span class="notification-bell-icon">🔔</span>
       <span id="notificationBadge" class="notification-badge" hidden>0</span>
     </button>
+    <button id="notificationSoundToggle" class="notification-sound-toggle" type="button" aria-label="Toggle notification sounds">🔊</button>
     <div id="notificationDropdown" class="notification-dropdown" hidden>
       <div class="notification-dropdown-header">
         <strong>Notifications</strong>
@@ -58,6 +60,7 @@ function injectNotificationBell() {
   const bellBtn = document.getElementById("notificationBellBtn");
   const dropdown = document.getElementById("notificationDropdown");
   const markAllBtn = document.getElementById("markAllReadBtn");
+  const soundToggle = document.getElementById("notificationSoundToggle");
 
   if (bellBtn && dropdown) {
     bellBtn.addEventListener("click", (e) => {
@@ -79,6 +82,29 @@ function injectNotificationBell() {
       dropdown.hidden = true;
     });
   }
+
+  if (soundToggle) {
+    soundToggle.addEventListener("click", () => {
+      notificationSoundsEnabled = !notificationSoundsEnabled;
+      soundToggle.textContent = notificationSoundsEnabled ? "🔊" : "🔈";
+      soundToggle.title = notificationSoundsEnabled ? "Disable notification sounds" : "Enable notification sounds";
+    });
+  }
+}
+
+function playNotificationSound(type) {
+  if (!notificationSoundsEnabled) return;
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const oscillator = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  oscillator.type = 'sine';
+  oscillator.frequency.setValueAtTime(type === 'teammate_request' || type === 'teammate_accepted' || type === 'teammate_declined' ? 660 : 440, audioCtx.currentTime);
+  gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.25);
+  oscillator.connect(gain);
+  gain.connect(audioCtx.destination);
+  oscillator.start();
+  oscillator.stop(audioCtx.currentTime + 0.25);
 }
 
 /**
@@ -208,10 +234,13 @@ async function handleAcceptTeammate(notifId, senderId, senderName) {
     await addDoc(senderNotifRef, {
       type: "teammate_accepted",
       senderId: currentUser.uid,
+      senderName: currentUser.displayName || "Your teammate",
+      senderAvatar: currentUser.photoURL || "✅",
       message: `${currentUser.displayName || "Your teammate"} accepted your teammate request!`,
       read: false,
       createdAt: serverTimestamp()
     });
+    playNotificationSound("teammate_accepted");
 
     alert("✅ Teammate added! You can now chat with each other.");
   } catch (err) {
@@ -237,10 +266,13 @@ async function handleRejectTeammate(notifId, senderId, senderName) {
     await addDoc(senderNotifRef, {
       type: "teammate_declined",
       senderId: currentUser.uid,
+      senderName: currentUser.displayName || "A user",
+      senderAvatar: currentUser.photoURL || "❌",
       message: `${currentUser.displayName || "A user"} declined your teammate request.`,
       read: false,
       createdAt: serverTimestamp()
     });
+    playNotificationSound("teammate_declined");
 
     alert("Teammate request declined.");
   } catch (err) {
@@ -287,11 +319,16 @@ function renderNotifications(notifications) {
       actionButtons = `<div style="margin-top:6px;font-size:11px;color:#ef4444;font-weight:700;">❌ Declined</div>`;
     }
 
+    const senderAvatar = notif.senderAvatar || notif.avatar || "👤";
+    const senderName = notif.senderName || "Someone";
+    const senderBlock = notif.senderId ? `<div class="notification-sender" style="display:flex;align-items:center;gap:8px;margin-top:6px;"><span style="font-size:20px;">${senderAvatar}</span><strong>${senderName}</strong></div>` : "";
+
     return `
       <div class="notification-item ${notif.read ? "read" : "unread"}" data-id="${notif.id}">
         <div class="notification-icon">${icon}</div>
         <div class="notification-content">
           <div class="notification-text">${notif.message || "New notification"}</div>
+          ${senderBlock}
           <div class="notification-time">${timeAgo}</div>
           ${actionButtons}
         </div>
@@ -387,6 +424,7 @@ export async function createNotification(targetUid, type, message) {
       read: false,
       createdAt: serverTimestamp()
     });
+    playNotificationSound(type);
   } catch (err) {
     console.warn("Could not create notification:", err);
   }

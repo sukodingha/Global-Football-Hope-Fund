@@ -34,8 +34,24 @@ let unsubscribeFeed = null;
 let activeInterest = "All";
 let activeDMUserId = null;
 let pendingFiles = [];
+let pendingMediaType = "image";
 let userDirectory = {}; // uniqueId -> { displayName, uid }
 let userPhotoCache = {}; // uid -> photoURL (cached to avoid repeated Firestore reads)
+let liveStreamTimer = null;
+let liveStreamStartTime = null;
+let liveStreamActive = false;
+let cameraStream = null;
+let capturedPhotoDataUrl = null;
+let privacySettings = {
+  accountType: "public",
+  posts: "everyone",
+  photos: "everyone",
+  videos: "everyone",
+  predictionHistory: "everyone",
+  onlineStatus: "everyone",
+  lastActive: "everyone",
+  profile: "everyone"
+};
 
 // ===== DOM REFS =====
 const feed = document.getElementById("communityFeed");
@@ -50,12 +66,32 @@ const postModalFile = document.getElementById("postModalFile");
 const postModalSubmit = document.getElementById("postModalSubmit");
 const postModalStatus = document.getElementById("postModalStatus");
 const postModalInterest = document.getElementById("postModalInterest");
+const postPrivacySelect = document.getElementById("postPrivacySelect");
 const postImagePreview = document.getElementById("postImagePreview");
 const postPreviewImg = document.getElementById("postPreviewImg");
+const postPreviewVideo = document.getElementById("postPreviewVideo");
 const removeImageBtn = document.getElementById("removeImageBtn");
 const createPostInput = document.getElementById("createPostInput");
 const createPostAvatar = document.getElementById("createPostAvatar");
 const openPhotoBtn = document.getElementById("openPhotoBtn");
+const openVideoBtn = document.getElementById("openVideoBtn");
+const openCameraBtn = document.getElementById("openCameraBtn");
+const cameraPreviewWrapper = document.getElementById("cameraPreviewWrapper");
+const cameraPreview = document.getElementById("cameraPreview");
+const capturePhotoBtn = document.getElementById("capturePhotoBtn");
+const retakePhotoBtn = document.getElementById("retakePhotoBtn");
+const uploadPhotoBtn = document.getElementById("uploadPhotoBtn");
+const liveVideoModal = document.getElementById("liveVideoModal");
+const liveVideoOverlay = document.getElementById("liveVideoOverlay");
+const liveVideoClose = document.getElementById("liveVideoClose");
+const liveVideoStartBtn = document.getElementById("liveVideoStartBtn");
+const liveVideoEndBtn = document.getElementById("liveVideoEndBtn");
+const liveVideoPreview = document.getElementById("liveVideoPreview");
+const liveVideoStatus = document.getElementById("liveVideoStatus");
+const liveVideoBadge = document.getElementById("liveVideoBadge");
+const liveViewerCount = document.getElementById("liveViewerCount");
+const liveVideoTimer = document.getElementById("liveVideoTimer");
+const privacySettingsPanel = document.getElementById("privacySettingsPanel");
 
 // Profile Modal
 const profileModal = document.getElementById("profileModal");
@@ -197,8 +233,13 @@ function openPostModal() {
   }
   postModalText.value = "";
   postModalInterest.value = "Football";
+  if (postPrivacySelect) postPrivacySelect.value = privacySettings.posts || "everyone";
   pendingFiles = [];
+  pendingMediaType = "image";
+  capturedPhotoDataUrl = null;
   postImagePreview.hidden = true;
+  if (postPreviewVideo) { postPreviewVideo.hidden = true; postPreviewVideo.removeAttribute('src'); }
+  if (cameraPreviewWrapper) cameraPreviewWrapper.hidden = true;
   postModalStatus.className = "message";
   postModalStatus.textContent = "";
   postModal.hidden = false;
@@ -225,54 +266,160 @@ if (openPhotoBtn) openPhotoBtn.addEventListener("click", (e) => { e.preventDefau
 if (postModalOverlay) postModalOverlay.addEventListener("click", closePostModal);
 if (postModalClose) postModalClose.addEventListener("click", closePostModal);
 
+function resetMediaPreview() {
+  pendingFiles = [];
+  pendingMediaType = "image";
+  capturedPhotoDataUrl = null;
+  if (postPreviewImg) postPreviewImg.removeAttribute('src');
+  if (postPreviewVideo) {
+    postPreviewVideo.pause();
+    postPreviewVideo.removeAttribute('src');
+    postPreviewVideo.hidden = true;
+  }
+  if (cameraPreviewWrapper) cameraPreviewWrapper.hidden = true;
+  postImagePreview.hidden = true;
+  if (postModalFile) postModalFile.value = "";
+}
+
+function showMediaPreview(file) {
+  if (!file) return;
+  pendingFiles = [file];
+  pendingMediaType = file.type.startsWith('video/') ? 'video' : 'image';
+  if (pendingMediaType === 'video') {
+    const url = URL.createObjectURL(file);
+    postPreviewVideo.src = url;
+    postPreviewVideo.hidden = false;
+    postPreviewVideo.load();
+    postImagePreview.hidden = true;
+    if (postPreviewImg) postPreviewImg.removeAttribute('src');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    postPreviewImg.src = ev.target.result;
+    postImagePreview.hidden = false;
+    if (postPreviewVideo) {
+      postPreviewVideo.removeAttribute('src');
+      postPreviewVideo.hidden = true;
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
 if (postModalFile) {
   postModalFile.addEventListener("change", (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    pendingFiles = [file];
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      postPreviewImg.src = ev.target.result;
-      postImagePreview.hidden = false;
-    };
-    reader.readAsDataURL(file);
+    if (file.size > 10 * 1024 * 1024 * 60) {
+      postModalStatus.className = "message error";
+      postModalStatus.textContent = "Video must be 10 minutes or less.";
+      return;
+    }
+    showMediaPreview(file);
   });
 }
 
 if (removeImageBtn) {
   removeImageBtn.addEventListener("click", () => {
-    pendingFiles = [];
-    postImagePreview.hidden = true;
-    postModalFile.value = "";
+    resetMediaPreview();
   });
 }
 
-async function uploadImage(file) {
+async function compressMedia(file) {
+  if (!file) return file;
+  if (file.type.startsWith('video/')) {
+    return file;
+  }
+  const imageBitmap = await createImageBitmap(file);
+  const canvas = document.createElement('canvas');
+  const maxSide = 1600;
+  const scale = Math.min(1, maxSide / Math.max(imageBitmap.width, imageBitmap.height));
+  canvas.width = Math.max(1, Math.round(imageBitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(imageBitmap.height * scale));
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(imageBitmap, 0, 0, canvas.width, canvas.height);
+  return await new Promise((resolve) => canvas.toBlob((blob) => resolve(blob || file), 'image/jpeg', 0.8));
+}
+
+function generateThumbnail(file) {
+  if (!file || !file.type.startsWith('video/')) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.onloadeddata = () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const width = 320;
+      const height = Math.round((video.videoHeight / video.videoWidth) * width);
+      canvas.width = width;
+      canvas.height = height;
+      ctx.drawImage(video, 0, 0, width, height);
+      canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.8);
+    };
+    video.onerror = () => resolve(null);
+    video.src = URL.createObjectURL(file);
+  });
+}
+
+async function uploadMedia(file) {
   if (!file) return null;
-  // Try Cloudinary first
+  const compressedFile = await compressMedia(file);
+  const isVideo = file.type.startsWith('video/');
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/webm', 'video/quicktime'];
+  if (!allowedTypes.includes(file.type)) {
+    throw new Error('Unsupported file type.');
+  }
+
+  const videoDurationPromise = isVideo ? new Promise((resolve) => {
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.onloadedmetadata = () => resolve(video.duration);
+    video.onerror = () => resolve(0);
+    video.src = URL.createObjectURL(file);
+  }) : Promise.resolve(0);
+  const duration = await videoDurationPromise;
+  if (isVideo && duration > 600) {
+    throw new Error('Video must be 10 minutes or less.');
+  }
+
   try {
     const fd = new FormData();
-    fd.append("file", file);
+    fd.append("file", compressedFile || file);
     fd.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-    const res = await fetch(CLOUDINARY_UPLOAD_URL, { method: "POST", body: fd });
-    if (res.ok) {
-      const data = await res.json();
-      // Enforce HTTPS: ensure the URL always starts with "https://"
-      if (data.secure_url) {
-        return data.secure_url.startsWith("https://") ? data.secure_url : "https://" + data.secure_url.replace(/^http:\/\//i, "");
-      }
-      // Fallback to url if secure_url missing
-      if (data.url) {
-        const url = data.url.startsWith("https://") ? data.url : "https://" + data.url.replace(/^http:\/\//i, "");
-        return url;
-      }
-    }
+    postModalStatus.className = "message";
+    postModalStatus.textContent = "Uploading media...";
+    const xhr = new XMLHttpRequest();
+    const uploadPromise = new Promise((resolve, reject) => {
+      xhr.open('POST', CLOUDINARY_UPLOAD_URL, true);
+      xhr.upload.onprogress = (evt) => {
+        if (evt.lengthComputable) {
+          const percent = Math.round((evt.loaded / evt.total) * 100);
+          postModalStatus.textContent = `Uploading media... ${percent}%`;
+        }
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const data = JSON.parse(xhr.responseText);
+            const url = data.secure_url || data.url;
+            const thumbnailUrl = data.thumbnail_url || null;
+            resolve({ url: url.startsWith("https://") ? url : "https://" + url.replace(/^http:\/\//i, ""), thumbnailUrl });
+          } catch (err) {
+            reject(err);
+          }
+        } else {
+          reject(new Error('Upload failed'));
+        }
+      };
+      xhr.onerror = () => reject(new Error('Upload failed'));
+      xhr.send(fd);
+    });
+    return await uploadPromise;
   } catch {}
-  // Fallback: return base64 data URL
   return new Promise((resolve) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.readAsDataURL(file);
+    reader.onload = () => resolve({ url: reader.result, thumbnailUrl: null });
+    reader.readAsDataURL(compressedFile || file);
   });
 }
 
@@ -294,23 +441,29 @@ if (postModalSubmit) {
     postModalSubmit.textContent = "Posting...";
 
     try {
-      let imageUrl = null;
+      let mediaUrl = null;
+      let thumbnailUrl = null;
       if (pendingFiles.length > 0) {
-        imageUrl = await uploadImage(pendingFiles[0]);
+        const uploadResult = await uploadMedia(pendingFiles[0]);
+        mediaUrl = uploadResult?.url || null;
+        thumbnailUrl = uploadResult?.thumbnailUrl || null;
       }
 
-      // Parse @mentions in the post text
       const { cleanText: parsedText, taggedIds } = parseMentions(text);
 
       await addDoc(collection(db, "posts"), {
         authorId: currentUser.uid,
         authorName: currentUserName,
         authorAvatar: currentUserAvatar,
-        text: parsedText, // Store with HTML mentions
-        rawText: text,    // Keep original for editing
+        text: parsedText,
+        rawText: text,
         taggedUserIds: taggedIds,
         interest: postModalInterest.value,
-        imageUrl: imageUrl || null,
+        mediaUrl: mediaUrl || null,
+        imageUrl: mediaUrl || null,
+        thumbnailUrl,
+        mediaType: pendingMediaType,
+        privacy: postPrivacySelect?.value || "everyone",
         likes: [],
         comments: [],
         impressions: 0,
@@ -318,6 +471,7 @@ if (postModalSubmit) {
       });
 
       closePostModal();
+      resetMediaPreview();
     } catch (err) {
       postModalStatus.className = "message error";
       postModalStatus.textContent = "Failed to post. Try again.";
@@ -326,6 +480,180 @@ if (postModalSubmit) {
       postModalSubmit.disabled = false;
       postModalSubmit.textContent = "Post";
     }
+  });
+}
+
+// ===== LIVE VIDEO =====
+async function stopCameraStream() {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(track => track.stop());
+    cameraStream = null;
+  }
+  if (cameraPreview) {
+    cameraPreview.srcObject = null;
+  }
+}
+
+async function openCamera() {
+  if (!cameraPreviewWrapper || !cameraPreview) return;
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+    cameraPreview.srcObject = cameraStream;
+    cameraPreviewWrapper.hidden = false;
+    postImagePreview.hidden = true;
+  } catch (err) {
+    postModalStatus.className = "message error";
+    postModalStatus.textContent = "Camera access was denied or unavailable.";
+  }
+}
+
+if (openCameraBtn) openCameraBtn.addEventListener("click", openCamera);
+if (capturePhotoBtn) capturePhotoBtn.addEventListener("click", () => {
+  if (!cameraPreview || !cameraPreview.videoWidth) return;
+  const canvas = document.getElementById("cameraCaptureCanvas");
+  const ctx = canvas.getContext('2d');
+  canvas.width = cameraPreview.videoWidth;
+  canvas.height = cameraPreview.videoHeight;
+  ctx.drawImage(cameraPreview, 0, 0, canvas.width, canvas.height);
+  capturedPhotoDataUrl = canvas.toDataURL('image/jpeg', 0.9);
+  postPreviewImg.src = capturedPhotoDataUrl;
+  postImagePreview.hidden = false;
+  cameraPreviewWrapper.hidden = true;
+  if (postPreviewVideo) {
+    postPreviewVideo.removeAttribute('src');
+    postPreviewVideo.hidden = true;
+  }
+  pendingFiles = [dataURLToFile(capturedPhotoDataUrl, 'captured-photo.jpg')];
+  pendingMediaType = 'image';
+  stopCameraStream();
+});
+if (retakePhotoBtn) retakePhotoBtn.addEventListener("click", () => { capturedPhotoDataUrl = null; openCamera(); });
+if (uploadPhotoBtn) uploadPhotoBtn.addEventListener("click", () => { if (capturedPhotoDataUrl) { postPreviewImg.src = capturedPhotoDataUrl; postImagePreview.hidden = false; cameraPreviewWrapper.hidden = true; } });
+
+function dataURLToFile(dataUrl, filename) {
+  const arr = dataUrl.split(',');
+  const mime = arr[0].match(/:(.*?);/)[1];
+  const bstr = atob(arr[1]);
+  let n = bstr.length;
+  const u8arr = new Uint8Array(n);
+  while (n--) { u8arr[n] = bstr.charCodeAt(n); }
+  return new File([u8arr], filename, { type: mime });
+}
+
+function openLiveVideoModal() {
+  if (!liveVideoModal) return;
+  liveVideoModal.hidden = false;
+  liveVideoStatus.textContent = "Start a live broadcast for up to 5 minutes.";
+  liveVideoBadge.hidden = true;
+  liveViewerCount.textContent = "👁 0 viewers";
+  liveVideoTimer.textContent = "⏱ 00:00";
+  liveVideoEndBtn.hidden = true;
+}
+
+function closeLiveVideoModal() {
+  if (liveVideoModal) liveVideoModal.hidden = true;
+}
+
+function updateLiveTimer() {
+  if (!liveStreamActive || !liveStreamStartTime) return;
+  const elapsed = Math.floor((Date.now() - liveStreamStartTime) / 1000);
+  const seconds = elapsed % 60;
+  const minutes = Math.floor(elapsed / 60);
+  liveVideoTimer.textContent = `⏱ ${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  if (elapsed >= 300) {
+    endLiveVideo();
+  }
+}
+
+function startLiveVideo() {
+  if (liveStreamActive) return;
+  liveStreamActive = true;
+  liveStreamStartTime = Date.now();
+  liveVideoBadge.hidden = false;
+  liveVideoStatus.textContent = "Live now. Your stream is running.";
+  liveVideoEndBtn.hidden = false;
+  liveStreamTimer = setInterval(updateLiveTimer, 1000);
+  updateLiveTimer();
+}
+
+function endLiveVideo() {
+  if (!liveStreamActive) return;
+  liveStreamActive = false;
+  clearInterval(liveStreamTimer);
+  liveStreamTimer = null;
+  liveStreamStartTime = null;
+  liveVideoBadge.hidden = true;
+  liveVideoTimer.textContent = "⏱ 00:00";
+  liveVideoStatus.textContent = "Live stream ended automatically after 5 minutes.";
+  liveVideoEndBtn.hidden = true;
+}
+
+if (openVideoBtn) openVideoBtn.addEventListener("click", openLiveVideoModal);
+if (liveVideoOverlay) liveVideoOverlay.addEventListener("click", closeLiveVideoModal);
+if (liveVideoClose) liveVideoClose.addEventListener("click", closeLiveVideoModal);
+if (liveVideoStartBtn) liveVideoStartBtn.addEventListener("click", startLiveVideo);
+if (liveVideoEndBtn) liveVideoEndBtn.addEventListener("click", endLiveVideo);
+
+function renderPrivacySettings() {
+  if (!privacySettingsPanel) return;
+  privacySettingsPanel.innerHTML = `
+    <div class="privacy-settings-card-inner">
+      <h4>Privacy Settings</h4>
+      <div class="privacy-row"><label>Account Type</label><select id="accountTypeSelect"><option value="public" ${privacySettings.accountType === 'public' ? 'selected' : ''}>Public Account</option><option value="private" ${privacySettings.accountType === 'private' ? 'selected' : ''}>Private Account</option></select></div>
+      <div class="privacy-row"><label>Posts</label><select id="postsPrivacySelect"><option value="everyone" ${privacySettings.posts === 'everyone' ? 'selected' : ''}>Everyone</option><option value="teammates" ${privacySettings.posts === 'teammates' ? 'selected' : ''}>Teammates Only</option><option value="me" ${privacySettings.posts === 'me' ? 'selected' : ''}>Only Me</option></select></div>
+      <div class="privacy-row"><label>Photos</label><select id="photosPrivacySelect"><option value="everyone" ${privacySettings.photos === 'everyone' ? 'selected' : ''}>Everyone</option><option value="teammates" ${privacySettings.photos === 'teammates' ? 'selected' : ''}>Teammates Only</option><option value="me" ${privacySettings.photos === 'me' ? 'selected' : ''}>Only Me</option></select></div>
+      <div class="privacy-row"><label>Videos</label><select id="videosPrivacySelect"><option value="everyone" ${privacySettings.videos === 'everyone' ? 'selected' : ''}>Everyone</option><option value="teammates" ${privacySettings.videos === 'teammates' ? 'selected' : ''}>Teammates Only</option><option value="me" ${privacySettings.videos === 'me' ? 'selected' : ''}>Only Me</option></select></div>
+      <div class="privacy-row"><label>Prediction History</label><select id="predictionPrivacySelect"><option value="everyone" ${privacySettings.predictionHistory === 'everyone' ? 'selected' : ''}>Everyone</option><option value="teammates" ${privacySettings.predictionHistory === 'teammates' ? 'selected' : ''}>Teammates Only</option><option value="me" ${privacySettings.predictionHistory === 'me' ? 'selected' : ''}>Only Me</option></select></div>
+      <div class="privacy-row"><label>Online Status</label><select id="onlinePrivacySelect"><option value="everyone" ${privacySettings.onlineStatus === 'everyone' ? 'selected' : ''}>Everyone</option><option value="teammates" ${privacySettings.onlineStatus === 'teammates' ? 'selected' : ''}>Teammates Only</option><option value="me" ${privacySettings.onlineStatus === 'me' ? 'selected' : ''}>Only Me</option></select></div>
+      <div class="privacy-row"><label>Last Active</label><select id="lastActivePrivacySelect"><option value="everyone" ${privacySettings.lastActive === 'everyone' ? 'selected' : ''}>Everyone</option><option value="teammates" ${privacySettings.lastActive === 'teammates' ? 'selected' : ''}>Teammates Only</option><option value="me" ${privacySettings.lastActive === 'me' ? 'selected' : ''}>Only Me</option></select></div>
+      <div class="privacy-row"><label>Profile</label><select id="profilePrivacySelect"><option value="everyone" ${privacySettings.profile === 'everyone' ? 'selected' : ''}>Everyone</option><option value="teammates" ${privacySettings.profile === 'teammates' ? 'selected' : ''}>Teammates Only</option><option value="me" ${privacySettings.profile === 'me' ? 'selected' : ''}>Only Me</option></select></div>
+    </div>
+  `;
+}
+
+async function savePrivacySettings() {
+  if (!currentUser?.uid) return;
+  try {
+    await updateDoc(doc(db, 'users', currentUser.uid), privacySettings);
+  } catch (err) {
+    console.warn('Could not save privacy settings:', err);
+  }
+}
+
+async function loadPrivacySettings() {
+  if (!currentUser?.uid) return;
+  try {
+    const snap = await getDoc(doc(db, 'users', currentUser.uid));
+    if (snap.exists()) {
+      const data = snap.data();
+      privacySettings = { ...privacySettings, ...data };
+      if (postPrivacySelect) postPrivacySelect.value = privacySettings.posts || 'everyone';
+      renderPrivacySettings();
+    }
+  } catch (err) {
+    console.warn('Could not load privacy settings:', err);
+  }
+}
+
+function bindPrivacySettings() {
+  if (!privacySettingsPanel) return;
+  renderPrivacySettings();
+  const selects = ['accountTypeSelect','postsPrivacySelect','photosPrivacySelect','videosPrivacySelect','predictionPrivacySelect','onlinePrivacySelect','lastActivePrivacySelect','profilePrivacySelect'];
+  selects.forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('change', async () => {
+      if (id === 'accountTypeSelect') privacySettings.accountType = el.value;
+      if (id === 'postsPrivacySelect') privacySettings.posts = el.value;
+      if (id === 'photosPrivacySelect') privacySettings.photos = el.value;
+      if (id === 'videosPrivacySelect') privacySettings.videos = el.value;
+      if (id === 'predictionPrivacySelect') privacySettings.predictionHistory = el.value;
+      if (id === 'onlinePrivacySelect') privacySettings.onlineStatus = el.value;
+      if (id === 'lastActivePrivacySelect') privacySettings.lastActive = el.value;
+      if (id === 'profilePrivacySelect') privacySettings.profile = el.value;
+      if (postPrivacySelect && id === 'postsPrivacySelect') postPrivacySelect.value = privacySettings.posts || 'everyone';
+      await savePrivacySettings();
+    });
   });
 }
 
@@ -1537,7 +1865,7 @@ function hideAppSplash() {
 }
 
 // ===== AUTH STATE =====
-onAuthStateChanged(auth, (user) => {
+onAuthStateChanged(auth, async (user) => {
   currentUser = user;
   currentUserName = user?.displayName || user?.email?.split("@")[0] || "Guest";
   currentUserAvatar = "👤";
@@ -1550,6 +1878,7 @@ onAuthStateChanged(auth, (user) => {
   renderMembers();
   renderFriendRequests();
   loadTeammates(); // Load teammates on auth change
+  await loadPrivacySettings();
 });
 
 window.addEventListener("load", hideAppSplash);
@@ -1643,6 +1972,7 @@ loadFeed();
 listenToChat();
 renderMembers();
 renderFriendRequests();
+bindPrivacySettings();
 loadUserDirectory(); // Load @mention directory
 
 // Initialize the Fund Wallet modal (must be called after modal HTML is in DOM)
