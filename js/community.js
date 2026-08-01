@@ -12,6 +12,9 @@ import {
   serverTimestamp, doc, updateDoc, arrayUnion, getDoc, getDocs, deleteDoc, increment
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { createNotification } from "./notifications.js";
+import { createReport, checkRateLimit } from "./moderation.js";
+import { normalizePrivacy } from "./privacy.js";
+import { startLiveStream, endLiveStream } from "./livestream.js";
 
 // Import rewards system for HP badges
 import { getHPBadgeHTML, getUserHP, invalidateHPCache, loadRewardData } from "./rewards.js";
@@ -40,6 +43,7 @@ let userPhotoCache = {}; // uid -> photoURL (cached to avoid repeated Firestore 
 let liveStreamTimer = null;
 let liveStreamStartTime = null;
 let liveStreamActive = false;
+let currentLiveStreamId = null;
 let cameraStream = null;
 let capturedPhotoDataUrl = null;
 let privacySettings = {
@@ -233,7 +237,7 @@ function openPostModal() {
   }
   postModalText.value = "";
   postModalInterest.value = "Football";
-  if (postPrivacySelect) postPrivacySelect.value = privacySettings.posts || "everyone";
+  if (postPrivacySelect) postPrivacySelect.value = normalizePrivacy(privacySettings.posts || "everyone");
   pendingFiles = [];
   pendingMediaType = "image";
   capturedPhotoDataUrl = null;
@@ -463,7 +467,7 @@ if (postModalSubmit) {
         imageUrl: mediaUrl || null,
         thumbnailUrl,
         mediaType: pendingMediaType,
-        privacy: postPrivacySelect?.value || "everyone",
+        privacy: normalizePrivacy(postPrivacySelect?.value || "everyone"),
         likes: [],
         comments: [],
         impressions: 0,
@@ -565,7 +569,7 @@ function updateLiveTimer() {
   }
 }
 
-function startLiveVideo() {
+async function startLiveVideo() {
   if (liveStreamActive) return;
   liveStreamActive = true;
   liveStreamStartTime = Date.now();
@@ -573,15 +577,23 @@ function startLiveVideo() {
   liveVideoStatus.textContent = "Live now. Your stream is running.";
   liveVideoEndBtn.hidden = false;
   liveStreamTimer = setInterval(updateLiveTimer, 1000);
+  currentLiveStreamId = await startLiveStream(currentUser?.uid || "", {
+    title: "Community livestream",
+    privacy: normalizePrivacy(privacySettings.videos || "everyone")
+  });
   updateLiveTimer();
 }
 
-function endLiveVideo() {
+async function endLiveVideo() {
   if (!liveStreamActive) return;
   liveStreamActive = false;
   clearInterval(liveStreamTimer);
   liveStreamTimer = null;
   liveStreamStartTime = null;
+  if (currentLiveStreamId) {
+    await endLiveStream(currentLiveStreamId);
+    currentLiveStreamId = null;
+  }
   liveVideoBadge.hidden = true;
   liveVideoTimer.textContent = "⏱ 00:00";
   liveVideoStatus.textContent = "Live stream ended automatically after 5 minutes.";
@@ -614,6 +626,13 @@ function renderPrivacySettings() {
 async function savePrivacySettings() {
   if (!currentUser?.uid) return;
   try {
+    privacySettings.posts = normalizePrivacy(privacySettings.posts || 'everyone');
+    privacySettings.photos = normalizePrivacy(privacySettings.photos || 'everyone');
+    privacySettings.videos = normalizePrivacy(privacySettings.videos || 'everyone');
+    privacySettings.predictionHistory = normalizePrivacy(privacySettings.predictionHistory || 'everyone');
+    privacySettings.onlineStatus = normalizePrivacy(privacySettings.onlineStatus || 'everyone');
+    privacySettings.lastActive = normalizePrivacy(privacySettings.lastActive || 'everyone');
+    privacySettings.profile = normalizePrivacy(privacySettings.profile || 'everyone');
     await updateDoc(doc(db, 'users', currentUser.uid), privacySettings);
   } catch (err) {
     console.warn('Could not save privacy settings:', err);
@@ -627,6 +646,13 @@ async function loadPrivacySettings() {
     if (snap.exists()) {
       const data = snap.data();
       privacySettings = { ...privacySettings, ...data };
+      privacySettings.posts = normalizePrivacy(privacySettings.posts || 'everyone');
+      privacySettings.photos = normalizePrivacy(privacySettings.photos || 'everyone');
+      privacySettings.videos = normalizePrivacy(privacySettings.videos || 'everyone');
+      privacySettings.predictionHistory = normalizePrivacy(privacySettings.predictionHistory || 'everyone');
+      privacySettings.onlineStatus = normalizePrivacy(privacySettings.onlineStatus || 'everyone');
+      privacySettings.lastActive = normalizePrivacy(privacySettings.lastActive || 'everyone');
+      privacySettings.profile = normalizePrivacy(privacySettings.profile || 'everyone');
       if (postPrivacySelect) postPrivacySelect.value = privacySettings.posts || 'everyone';
       renderPrivacySettings();
     }
@@ -844,6 +870,9 @@ function renderPostCard(post) {
     <button class="fb-action-btn" data-action="share">
       📤 <span>Share</span>
     </button>
+    <button class="fb-action-btn" data-action="report">
+      🚩 <span>Report</span>
+    </button>
   `;
   card.appendChild(actions);
 
@@ -968,6 +997,31 @@ function renderPostCard(post) {
   shareBtn.addEventListener("click", () => {
     if (!currentUser) { document.getElementById("authModal")?.classList.add("auth-modal--open"); return; }
     openShareModal(post);
+  });
+
+  const reportBtn = actions.querySelector('[data-action="report"]');
+  reportBtn?.addEventListener("click", async () => {
+    if (!currentUser) { document.getElementById("authModal")?.classList.add("auth-modal--open"); return; }
+    const allowed = await checkRateLimit("report", currentUser.uid, 60 * 1000, 3);
+    if (!allowed) {
+      alert("Slow down. Please wait a moment before reporting again.");
+      return;
+    }
+    const reason = window.prompt("Why are you reporting this post?", "Spam or abuse");
+    if (!reason) return;
+    const reportId = await createReport({
+      reporterId: currentUser.uid,
+      targetType: "post",
+      targetId: post.id,
+      reason,
+      details: { authorId: post.authorId || null },
+      targetUserId: post.authorId || null
+    });
+    if (reportId) {
+      alert("✅ Report submitted for review.");
+    } else {
+      alert("Unable to submit report right now.");
+    }
   });
 
   // Comment submit

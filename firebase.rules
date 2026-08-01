@@ -1,0 +1,119 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isOwn(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isActiveUser() {
+      return isSignedIn() && (!('moderationStatus' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data) || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.moderationStatus != 'suspended');
+    }
+
+    function notBlocked(targetUid) {
+      return !exists(/databases/$(database)/documents/users/$(request.auth.uid)/blockedUsers/$(targetUid));
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isSignedIn() && (isOwn(userId) || isAdmin());
+      allow delete: if isAdmin();
+
+      match /blockedUsers/{targetUid} {
+        allow read, write: if isOwn(userId);
+      }
+
+      match /blockedBy/{blockerUid} {
+        allow read: if isOwn(userId);
+        allow write: if isAdmin();
+      }
+      match /teammates/{teammateId} {
+        allow read: if isSignedIn();
+        allow write: if isOwn(userId);
+      }
+    }
+
+    match /posts/{postId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isActiveUser() && request.resource.data.authorId == request.auth.uid && !request.resource.data.deleted;
+      allow update: if isSignedIn() && (resource.data.authorId == request.auth.uid || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /media/{mediaId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isActiveUser() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if isSignedIn() && (resource.data.ownerId == request.auth.uid || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /predictions/{predictionId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isActiveUser() && request.resource.data.userId == request.auth.uid;
+      allow update: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /messages/{messageId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isActiveUser() && request.resource.data.senderId == request.auth.uid && notBlocked(request.resource.data.recipientId);
+      allow update: if isSignedIn() && (resource.data.senderId == request.auth.uid || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /notifications/{uid}/items/{notifId} {
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      allow create: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow update: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /reports/{reportId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn() && request.resource.data.reporterId == request.auth.uid;
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /liveStreams/{streamId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isActiveUser() && request.resource.data.hostId == request.auth.uid;
+      allow update: if isSignedIn() && (resource.data.hostId == request.auth.uid || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /chats/{chatId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isActiveUser();
+    }
+
+    match /liveChats/{chatId}/messages/{messageId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isActiveUser() && request.resource.data.authorId == request.auth.uid;
+      allow update: if isSignedIn() && (resource.data.authorId == request.auth.uid || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /community_chats/{chatId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isActiveUser();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /donations/{docId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+  }
+}

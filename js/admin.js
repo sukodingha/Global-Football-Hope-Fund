@@ -10,8 +10,9 @@ import { auth, db } from "./firebase.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection,
-  query, where, orderBy, limit
+  query, where, orderBy, limit, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { setUserModerationStatus, softDeleteContent, restoreContent } from "./moderation.js";
 
 // ===== DOM REFS =====
 const adminContent = document.getElementById("adminContent");
@@ -31,6 +32,7 @@ const adminRecentTransactions = document.getElementById("adminRecentTransactions
 const adminUsersList = document.getElementById("adminUsersList");
 const adminDonationsList = document.getElementById("adminDonationsList");
 const adminPostsList = document.getElementById("adminPostsList");
+const adminReportsList = document.getElementById("adminReportsList");
 
 // ===== STATE =====
 let currentUser = null;
@@ -267,6 +269,15 @@ async function loadUsers() {
                 <button class="admin-btn-sm ${user.role === 'admin' ? 'danger' : 'success'} toggle-role-btn" data-uid="${user.uid}" data-current="${user.role}">
                   ${user.role === 'admin' ? '🔽 Demote' : '🔼 Make Admin'}
                 </button>
+                <button class="admin-btn-sm success suspend-user-btn" data-uid="${user.uid}" data-name="${user.displayName}" style="margin-left:4px;">
+                  ⏸️ Suspend
+                </button>
+                <button class="admin-btn-sm danger ban-user-btn" data-uid="${user.uid}" data-name="${user.displayName}" style="margin-left:4px;">
+                  🚫 Ban
+                </button>
+                <button class="admin-btn-sm success clear-user-btn" data-uid="${user.uid}" data-name="${user.displayName}" style="margin-left:4px;">
+                  ✅ Clear
+                </button>
                 <button class="admin-btn-sm danger delete-user-btn" data-uid="${user.uid}" data-name="${user.displayName}" style="margin-left:4px;">
                   🗑️ Delete
                 </button>
@@ -293,7 +304,51 @@ async function loadUsers() {
       });
     });
 
-    // Attach delete handlers
+    adminUsersList.querySelectorAll(".suspend-user-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const uid = btn.dataset.uid;
+        const name = btn.dataset.name;
+        if (!confirm(`Suspend user "${name}"?`)) return;
+        try {
+          await setUserModerationStatus(uid, "suspended", "Suspended by admin");
+          loadUsers();
+        } catch (err) {
+          console.error("Suspend user error:", err);
+          alert("Failed to suspend user.");
+        }
+      });
+    });
+
+    adminUsersList.querySelectorAll(".ban-user-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const uid = btn.dataset.uid;
+        const name = btn.dataset.name;
+        if (!confirm(`Ban user "${name}"?`)) return;
+        try {
+          await setUserModerationStatus(uid, "banned", "Banned by admin");
+          loadUsers();
+        } catch (err) {
+          console.error("Ban user error:", err);
+          alert("Failed to ban user.");
+        }
+      });
+    });
+
+    adminUsersList.querySelectorAll(".clear-user-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const uid = btn.dataset.uid;
+        const name = btn.dataset.name;
+        if (!confirm(`Clear moderation status for "${name}"?`)) return;
+        try {
+          await setUserModerationStatus(uid, "active", "");
+          loadUsers();
+        } catch (err) {
+          console.error("Clear moderation error:", err);
+          alert("Failed to clear moderation status.");
+        }
+      });
+    });
+
     adminUsersList.querySelectorAll(".delete-user-btn").forEach(btn => {
       btn.addEventListener("click", async () => {
         const uid = btn.dataset.uid;
@@ -399,6 +454,7 @@ async function loadPosts() {
           likesCount: data.likes?.length || 0,
           commentsCount: data.comments?.length || 0,
           hasImage: !!data.imageUrl,
+          deleted: !!data.deleted,
           createdAt: data.createdAt?.toMillis ? new Date(data.createdAt.toMillis()) : (data.createdAt || new Date())
         });
       });
@@ -425,8 +481,9 @@ async function loadPosts() {
               <td style="text-align:center;">${p.commentsCount}</td>
               <td>
                 <button class="admin-btn-sm danger delete-post-btn" data-post-id="${p.id}" data-author="${p.authorName}">
-                  🗑️ Delete
+                  ${p.deleted ? '🗑️ Delete Forever' : '🗑️ Delete'}
                 </button>
+                ${p.deleted ? `<button class="admin-btn-sm success restore-post-btn" data-post-id="${p.id}" data-author="${p.authorName}">↩️ Restore</button>` : ''}
               </td>
             </tr>
           `).join("")}
@@ -434,14 +491,13 @@ async function loadPosts() {
       </table>
     `;
 
-    // Attach delete handlers
     adminPostsList.querySelectorAll(".delete-post-btn").forEach(btn => {
       btn.addEventListener("click", async () => {
         const postId = btn.dataset.postId;
         const author = btn.dataset.author;
-        if (!confirm(`Delete post by "${author}"? This cannot be undone.`)) return;
+        if (!confirm(`Delete post by "${author}"?`)) return;
         try {
-          await deleteDoc(doc(db, "posts", postId));
+          await softDeleteContent("posts", postId, `Removed by admin ${currentUser?.uid || "system"}`);
           loadPosts();
         } catch (err) {
           console.error("Delete post error:", err);
@@ -449,10 +505,108 @@ async function loadPosts() {
         }
       });
     });
+
+    adminPostsList.querySelectorAll(".restore-post-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const postId = btn.dataset.postId;
+        const author = btn.dataset.author;
+        if (!confirm(`Restore post by "${author}"?`)) return;
+        try {
+          await restoreContent("posts", postId);
+          loadPosts();
+        } catch (err) {
+          console.error("Restore post error:", err);
+          alert("Failed to restore post.");
+        }
+      });
+    });
   } catch (err) {
     console.error("Posts load error:", err);
     if (adminPostsList) {
       adminPostsList.innerHTML = '<div class="admin-error">Failed to load posts.</div>';
+    }
+  }
+}
+
+// ===== LOAD REPORTS =====
+async function loadReports() {
+  if (!adminReportsList) return;
+
+  try {
+    const reportsRef = collection(db, "reports");
+    const q = query(reportsRef, orderBy("createdAt", "desc"), limit(50));
+    const snap = await getDocs(q);
+    const reports = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    if (reports.length === 0) {
+      adminReportsList.innerHTML = '<div class="admin-empty">No reports yet.</div>';
+      return;
+    }
+
+    adminReportsList.innerHTML = `
+      <table class="admin-table">
+        <thead>
+          <tr><th>Reason</th><th>Target</th><th>User</th><th>Reporter</th><th>Status</th><th>Actions</th></tr>
+        </thead>
+        <tbody>
+          ${reports.map(report => `
+            <tr>
+              <td><strong>${report.reason || "Unspecified"}</strong>${report.details ? `<br><span style="font-size:12px;color:#64748b;">${JSON.stringify(report.details).substring(0, 80)}</span>` : ''}</td>
+              <td><code style="background:#f1f5f9;padding:2px 6px;border-radius:4px;font-size:12px;">${report.targetType}/${report.targetId || "—"}</code></td>
+              <td>${report.targetUserId || "—"}</td>
+              <td>${report.reporterId || "—"}</td>
+              <td><span class="admin-badge" style="background:${report.status === 'resolved' ? '#d1fae5' : report.status === 'dismissed' ? '#fef3c7' : '#fee2e2'};color:${report.status === 'resolved' ? '#059669' : report.status === 'dismissed' ? '#d97706' : '#dc2626'};">${report.status || 'open'}</span></td>
+              <td>
+                <button class="admin-btn-sm success resolve-report-btn" data-report-id="${report.id}">✅ Resolve</button>
+                <button class="admin-btn-sm danger dismiss-report-btn" data-report-id="${report.id}">🗑️ Dismiss</button>
+                ${report.targetUserId ? `<button class="admin-btn-sm success suspend-report-btn" data-user-id="${report.targetUserId}" data-reason="${report.reason || 'Reported content'}">⏸️ Suspend</button>` : ''}
+                ${report.targetType === 'post' ? `<button class="admin-btn-sm danger delete-report-post-btn" data-post-id="${report.targetId}" data-author="${report.targetId}">🗑️ Delete</button>` : ''}
+              </td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    `;
+
+    adminReportsList.querySelectorAll(".resolve-report-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        try {
+          await updateDoc(doc(db, "reports", btn.dataset.reportId), { status: "resolved", reviewedBy: currentUser?.uid || "admin", reviewedAt: serverTimestamp() });
+          loadReports();
+        } catch (err) { console.error("Resolve report error:", err); }
+      });
+    });
+
+    adminReportsList.querySelectorAll(".dismiss-report-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        try {
+          await updateDoc(doc(db, "reports", btn.dataset.reportId), { status: "dismissed", reviewedBy: currentUser?.uid || "admin", reviewedAt: serverTimestamp() });
+          loadReports();
+        } catch (err) { console.error("Dismiss report error:", err); }
+      });
+    });
+
+    adminReportsList.querySelectorAll(".suspend-report-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        try {
+          await setUserModerationStatus(btn.dataset.userId, "suspended", btn.dataset.reason || "Reported content");
+          loadReports();
+        } catch (err) { console.error("Suspend from report error:", err); }
+      });
+    });
+
+    adminReportsList.querySelectorAll(".delete-report-post-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        try {
+          await softDeleteContent("posts", btn.dataset.postId, btn.dataset.reason || "Removed by admin");
+          loadReports();
+        } catch (err) { console.error("Delete report post error:", err); }
+      });
+    });
+  } catch (err) {
+    console.error("Reports load error:", err);
+    if (adminReportsList) {
+      adminReportsList.innerHTML = '<div class="admin-error">Failed to load reports.</div>';
     }
   }
 }
@@ -465,6 +619,7 @@ async function refreshAllData() {
   await loadUsers();
   await loadDonationsList();
   await loadPosts();
+  await loadReports();
 }
 
 // ===== AUTH STATE =====

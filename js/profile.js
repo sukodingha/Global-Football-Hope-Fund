@@ -10,6 +10,7 @@ import {
   doc, getDoc, collection, query, where, orderBy, getDocs, setDoc, addDoc, arrayUnion, arrayRemove, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { createNotification } from "./notifications.js";
+import { blockUser, createReport } from "./moderation.js";
 
 // ===== DOM REFS =====
 const profileAvatar = document.getElementById("profileAvatar");
@@ -24,6 +25,8 @@ const profileGallery = document.getElementById("profileGallery");
 const profileGalleryEmpty = document.getElementById("profileGalleryEmpty");
 const profileWallFeed = document.getElementById("profileWallFeed");
 const profileWallEmpty = document.getElementById("profileWallEmpty");
+const reportUserBtn = document.getElementById("reportUserBtn");
+const blockUserBtn = document.getElementById("blockUserBtn");
 
 /**
  * Safe HTML escaping
@@ -301,6 +304,47 @@ async function handleAddTeammate(targetUid) {
   }
 }
 
+async function handleReportUser(targetUid, targetName) {
+  if (!loggedInUserId || !targetUid || loggedInUserId === targetUid) return;
+  const reason = window.prompt(`Why are you reporting ${targetName || "this user"}?`, "Spam or abuse");
+  if (!reason) return;
+  try {
+    const reportId = await createReport({
+      reporterId: loggedInUserId,
+      targetType: "user",
+      targetId: targetUid,
+      reason,
+      details: { profileView: true },
+      targetUserId: targetUid
+    });
+    if (reportId) {
+      alert("✅ Report submitted for review.");
+    } else {
+      alert("Unable to submit report right now.");
+    }
+  } catch (err) {
+    console.error("Error reporting user:", err);
+    alert("Failed to report user.");
+  }
+}
+
+async function handleBlockUser(targetUid, targetName) {
+  if (!loggedInUserId || !targetUid || loggedInUserId === targetUid) return;
+  const confirmed = window.confirm(`Block ${targetName || "this user"}? You will no longer interact with them on the platform.`);
+  if (!confirmed) return;
+  try {
+    const blocked = await blockUser(loggedInUserId, targetUid, "Blocked from profile action");
+    if (blocked) {
+      alert("✅ User blocked.");
+    } else {
+      alert("Unable to block this user right now.");
+    }
+  } catch (err) {
+    console.error("Error blocking user:", err);
+    alert("Failed to block user.");
+  }
+}
+
 // ===== PAGE LOAD =====
 onAuthStateChanged(auth, async (user) => {
   // Get uid from URL params
@@ -311,7 +355,7 @@ onAuthStateChanged(auth, async (user) => {
 
   loadProfile(uid);
 
-  // Show "Add Teammate" button only if viewing another user's profile
+  // Show profile action buttons only if viewing another user's profile
   const addTeammateBtn = document.getElementById("addTeammateBtn");
   if (addTeammateBtn) {
     if (loggedInUserId && profileUserId && loggedInUserId !== profileUserId) {
@@ -321,9 +365,27 @@ onAuthStateChanged(auth, async (user) => {
       const alreadyTeammate = await isAlreadyTeammate(profileUserId);
       updateAddTeammateBtnUI(alreadyTeammate);
 
-      addTeammateBtn.addEventListener("click", () => handleAddTeammate(profileUserId));
+      addTeammateBtn.onclick = () => handleAddTeammate(profileUserId);
     } else {
       addTeammateBtn.style.display = "none";
+    }
+  }
+
+  if (reportUserBtn) {
+    if (loggedInUserId && profileUserId && loggedInUserId !== profileUserId) {
+      reportUserBtn.style.display = "inline-block";
+      reportUserBtn.onclick = () => handleReportUser(profileUserId, profileDisplayName.textContent);
+    } else {
+      reportUserBtn.style.display = "none";
+    }
+  }
+
+  if (blockUserBtn) {
+    if (loggedInUserId && profileUserId && loggedInUserId !== profileUserId) {
+      blockUserBtn.style.display = "inline-block";
+      blockUserBtn.onclick = () => handleBlockUser(profileUserId, profileDisplayName.textContent);
+    } else {
+      blockUserBtn.style.display = "none";
     }
   }
 });
