@@ -1,18 +1,7 @@
 /**
- * GFHF Prediction League Module (FIXED — No RapidAPI dependency)
- * Uses static/mock fixture data to avoid 403/429 errors
- * All API calls removed — fixtures are generated locally
- * 
- * Changes from original:
- * 1. REMOVED: All RapidAPI calls (sportapi7.p.rapidapi.com) — was returning 403/429
- * 2. ADDED: Static fixture generator for reliable data
- * 3. ADDED: Rate-limit protection (fixtures fetched once, cached)
- * 4. ADDED: Proper error handling (try/catch) with user-friendly messages
- * 5. FIXED: Loading indicators now hide even on error
- * 6. FIXED: DOM element existence checks before updates
- * 7. FIXED: Unclosed divs in HTML template
- * 8. ADDED: Fixture cache to prevent duplicate fetches
- * 9. FIXED: All async functions use await correctly
+ * GFHF Prediction League Module
+ * Renders prediction cards from the shared live fixture service used by the competition page.
+ * No local fixture generation or mock results are used.
  */
 
 import { auth, db } from "./firebase.js";
@@ -21,9 +10,7 @@ import {
   doc, getDoc, getDocs, addDoc, collection, query, where, updateDoc, increment, serverTimestamp, limit, deleteDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getHPBadgeHTML, getUserHP, formatHP } from "./rewards.js";
-// ===== API CONFIG =====
-const RAPIDAPI_KEY = "a7ba1c6350msha38f55a1caaad1dp19506fjsn7159adf87d0e";
-const RAPIDAPI_HOST = "sportapi7.p.rapidapi.com";
+import { getLiveFixtures, subscribeToFixtureUpdates } from "./fixturesService.js";
 
 
 // ===== DOM REFS (with existence checks) =====
@@ -57,31 +44,11 @@ let isSubmitting = false;
 let todaySlipCount = 0;
 let selectedDateStr = "";
 
-/** Fixture cache: { "2025-01-15": [...fixtures] } — prevents repeated API calls */
-let fixtureCache = {};
-
-/** Tracks if a fetch is in progress for a given date — prevents duplicate parallel requests */
-let fixtureFetchInProgress = {};
+let fixtureCache = { current: [] };
+let fixtureFetchInProgress = { current: false };
 
 // ===== CONSTANTS =====
 const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-
-/** Top leagues for realistic fixture generation */
-const LEAGUES = [
-  "Premier League", "La Liga", "Serie A", "Bundesliga", "Ligue 1",
-  "Eredivisie", "Primeira Liga", "MLS"
-];
-
-const TEAMS_BY_LEAGUE = {
-  "Premier League": ["Arsenal", "Chelsea", "Liverpool", "Man City", "Man United", "Tottenham", "Aston Villa", "Newcastle", "West Ham", "Brighton"],
-  "La Liga": ["Barcelona", "Real Madrid", "Atletico Madrid", "Sevilla", "Valencia", "Real Sociedad", "Athletic Bilbao", "Villarreal"],
-  "Serie A": ["Inter Milan", "AC Milan", "Juventus", "Napoli", "Roma", "Lazio", "Atalanta", "Fiorentina"],
-  "Bundesliga": ["Bayern Munich", "Borussia Dortmund", "Bayer Leverkusen", "RB Leipzig", "Borussia M'gladbach", "Wolfsburg", "Eintracht Frankfurt", "Stuttgart"],
-  "Ligue 1": ["PSG", "Marseille", "Lyon", "Monaco", "Lille", "Nice", "Rennes", "Lens"],
-  "Eredivisie": ["Ajax", "Feyenoord", "PSV", "AZ Alkmaar", "Twente", "Utrecht"],
-  "Primeira Liga": ["Benfica", "Porto", "Sporting CP", "Braga", "Vitoria SC"],
-  "MLS": ["Inter Miami", "LA Galaxy", "NYC FC", "Atlanta Utd", "Seattle Sounders", "LAFC", "Columbus Crew"]
-};
 
 // ===== HELPER FUNCTIONS =====
 function escapeHtml(text) {
@@ -148,22 +115,27 @@ function generateSlipDisplayId() {
   return 'slip_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6);
 }
 
-/** Pick a random item from an array */
-function pickRandom(arr) {
-  return arr[Math.floor(Math.random() * arr.length)];
+function normalizePredictionFixture(fixture) {
+  return {
+    fixture_id: fixture?.fixture_id ?? fixture?.id,
+    league: fixture?.league_name ?? fixture?.league,
+    league_logo: fixture?.league_logo ?? fixture?.leagueLogo ?? "",
+    homeTeam: fixture?.home_team_name ?? fixture?.homeTeam?.name ?? fixture?.homeTeam ?? "Home",
+    homeTeamLogo: fixture?.home_team_logo ?? fixture?.homeTeamLogo ?? "",
+    awayTeam: fixture?.away_team_name ?? fixture?.awayTeam?.name ?? fixture?.awayTeam ?? "Away",
+    awayTeamLogo: fixture?.away_team_logo ?? fixture?.awayTeamLogo ?? "",
+    date: fixture?.kickoff_time ?? fixture?.date ?? fixture?.kickoff ?? null,
+    kickoff: fixture?.kickoff_time ?? fixture?.date ?? fixture?.kickoff ?? null,
+    status: fixture?.status ?? "scheduled",
+    minute: fixture?.minute ?? "",
+    homeScore: fixture?.home_score ?? fixture?.homeScore?.current ?? fixture?.homeScore ?? 0,
+    awayScore: fixture?.away_score ?? fixture?.awayScore?.current ?? fixture?.awayScore ?? 0
+  };
 }
 
-// ===== STATIC FIXTURE GENERATOR (replaces RapidAPI) =====
-// ===== API FIXTURE FETCHER (replaces static generator) =====
-const PREDICTIONS_API_BASE = "/api";
-
-/**
- * Fetch real upcoming matches from the API for a given date.
- * Falls back to generated fixtures if the API fails or returns < 16 matches.
- */
-async function fetchFixturesFromAPI(dateStr) {
-  // Using built-in generator to ensure stable, instant loading without API rate limits or 403/429 errors
-  return generateFixturesForDate(dateStr);
+async function fetchFixturesFromAPI() {
+  const fixtures = await getLiveFixtures();
+  return fixtures.map(normalizePredictionFixture);
 }
 // ===== 1. 5-DAY ROLLING CALENDAR =====
 function buildCalendar() {
@@ -196,7 +168,7 @@ function buildCalendar() {
       btn.style.background = "#00c853";
       btn.style.color = "#fff";
       selectedDateStr = dateStr;
-      loadFixturesForDate(dateStr);
+      loadFixturesForDate();
     });
 
     calendarEl.appendChild(btn);
@@ -215,52 +187,66 @@ function renderFixtures(fixturesList) {
   if (!fixturesContainer) return;
 
   if (!fixturesList || fixturesList.length === 0) {
-    fixturesContainer.innerHTML = '<div class="card" style="grid-column:1/-1;text-align:center;background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.7);"><p style="padding:40px 0;">No fixtures available for this date.</p></div>';
+    fixturesContainer.innerHTML = '<div class="card" style="grid-column:1/-1;text-align:center;background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.7);"><p style="padding:40px 0;">No live fixtures available right now.</p></div>';
     return;
   }
 
   let html = "";
   fixturesList.forEach((match) => {
-    const matchId = match.id;
+    const matchId = match.fixture_id || match.id;
     const slipEntry = userSlip.find(s => s.matchId === matchId);
     const selectedClass = slipEntry ? " odds-card-selected" : "";
     const selectedPick = slipEntry ? slipEntry.pick : null;
+    const kickoffLabel = formatKickoff(match.date || match.kickoff);
+    const matchStatus = match.status || "scheduled";
+    const isLocked = matchStatus === "live" || matchStatus === "half_time" || matchStatus === "finished";
+    const leagueLogo = match.league_logo || match.leagueLogo || "";
+    const homeLogo = match.homeTeamLogo || match.home_logo || "";
+    const awayLogo = match.awayTeamLogo || match.away_logo || "";
 
     html += `
       <div class="odds-card${selectedClass}" data-match-id="${matchId}">
         <div class="odds-header">
-          <span class="league-pill">⚽ ${escapeHtml(match.league)}</span>
-          <span class="odds-time">⏰ ${formatKickoff(match.date)}</span>
+          <span class="league-pill">${leagueLogo ? `<img src="${escapeHtml(leagueLogo)}" alt="" style="width:18px;height:18px;object-fit:contain;display:inline-block;vertical-align:middle;margin-right:6px;">` : "⚽"} ${escapeHtml(match.league || "League")}</span>
+          <span class="odds-time">⏰ ${escapeHtml(kickoffLabel || "TBD")}</span>
         </div>
-        <div class="odds-teams">
-          <div class="odds-team">${escapeHtml(match.homeTeam)}</div>
+        <div class="odds-teams" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+          <div class="odds-team" style="display:flex;flex-direction:column;align-items:center;gap:8px;flex:1;">
+            ${homeLogo ? `<img src="${escapeHtml(homeLogo)}" alt="" style="width:32px;height:32px;object-fit:contain;">` : ""}
+            <span>${escapeHtml(match.homeTeam)}</span>
+          </div>
           <div class="odds-vs">vs</div>
-          <div class="odds-team">${escapeHtml(match.awayTeam)}</div>
+          <div class="odds-team" style="display:flex;flex-direction:column;align-items:center;gap:8px;flex:1;">
+            ${awayLogo ? `<img src="${escapeHtml(awayLogo)}" alt="" style="width:32px;height:32px;object-fit:contain;">` : ""}
+            <span>${escapeHtml(match.awayTeam)}</span>
+          </div>
         </div>
-        <!-- Winner selection -->
+        <div class="prediction-section" style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;font-size:12px;color:rgba(255,255,255,0.75);">
+          <span>📊 ${escapeHtml(matchStatus === "live" ? `Live ${match.minute ? `${match.minute}'` : ""}` : matchStatus === "finished" ? "Finished" : "Scheduled")}</span>
+          <span>⚽ ${match.homeScore ?? 0} - ${match.awayScore ?? 0}</span>
+        </div>
         <div class="prediction-section">
           <div class="prediction-section-label">🎯 Pick Winner</div>
           <div class="winner-buttons">
-            <button class="pred-btn pick-btn${selectedPick === "winner_1" ? " selected-btn" : ""}" data-match="${matchId}" data-pick="winner_1">
+            <button class="pred-btn pick-btn${selectedPick === "winner_1" ? " selected-btn" : ""}" data-match="${matchId}" data-pick="winner_1" ${isLocked ? "disabled" : ""}>
               <span class="pred-btn-label">1</span>
               <span class="pred-btn-team">${escapeHtml(match.homeTeam)}</span>
             </button>
-            <button class="pred-btn pick-btn${selectedPick === "winner_X" ? " selected-btn" : ""}" data-match="${matchId}" data-pick="winner_X">
+            <button class="pred-btn pick-btn${selectedPick === "winner_X" ? " selected-btn" : ""}" data-match="${matchId}" data-pick="winner_X" ${isLocked ? "disabled" : ""}>
               <span class="pred-btn-label">X</span>
               <span class="pred-btn-team">Draw</span>
             </button>
-            <button class="pred-btn pick-btn${selectedPick === "winner_2" ? " selected-btn" : ""}" data-match="${matchId}" data-pick="winner_2">
+            <button class="pred-btn pick-btn${selectedPick === "winner_2" ? " selected-btn" : ""}" data-match="${matchId}" data-pick="winner_2" ${isLocked ? "disabled" : ""}>
               <span class="pred-btn-label">2</span>
               <span class="pred-btn-team">${escapeHtml(match.awayTeam)}</span>
             </button>
           </div>
         </div>
-        <!-- Goals selection -->
         <div class="prediction-section">
           <div class="prediction-section-label">⚽ Pick Total Goals</div>
           <div class="goals-buttons">
-            <button class="pred-btn pick-btn${selectedPick === "goals_over2.5" ? " selected-btn" : ""}" data-match="${matchId}" data-pick="goals_over2.5">Over 2.5</button>
-            <button class="pred-btn pick-btn${selectedPick === "goals_under2.5" ? " selected-btn" : ""}" data-match="${matchId}" data-pick="goals_under2.5">Under 2.5</button>
+            <button class="pred-btn pick-btn${selectedPick === "goals_over2.5" ? " selected-btn" : ""}" data-match="${matchId}" data-pick="goals_over2.5" ${isLocked ? "disabled" : ""}>Over 2.5</button>
+            <button class="pred-btn pick-btn${selectedPick === "goals_under2.5" ? " selected-btn" : ""}" data-match="${matchId}" data-pick="goals_under2.5" ${isLocked ? "disabled" : ""}>Under 2.5</button>
           </div>
         </div>
       </div>
@@ -269,7 +255,6 @@ function renderFixtures(fixturesList) {
 
   fixturesContainer.innerHTML = html;
 
-  // Attach pick button handlers
   fixturesContainer.querySelectorAll(".pick-btn").forEach(btn => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -434,8 +419,7 @@ async function submitSlip() {
     updateSlipBanner();
     await updateDailyLimitCounter();
 
-    // Re-render fixtures to clear visual selections
-    if (selectedDateStr) loadFixturesForDate(selectedDateStr);
+    await loadFixturesForDate();
 
     // Refresh history
     loadSlipHistory();
@@ -448,35 +432,14 @@ async function submitSlip() {
   }
 }
 
-// ===== 7. SETTLEMENT ENGINE (no API calls — uses mock results) =====
-/**
- * Generate a mock result for a fixture.
- * In production, this would come from an API. For now, we generate
- * random but realistic results for settlement testing.
- */
-function generateMockResult(matchId) {
-  // Use matchId as seed for deterministic results
-  let hash = 0;
-  for (let i = 0; i < matchId.length; i++) {
-    const char = matchId.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32bit integer
-  }
-  const seed = Math.abs(hash) / 2147483647;
-  
-  const homeScore = Math.floor(seed * 5);
-  const awayScore = Math.floor((1 - seed) * 4);
-  
-  return { homeScore, awayScore };
-}
-
+// ===== 7. SETTLEMENT ENGINE =====
 function getScoreWinner(home, away) {
   if (home > away) return "1";
   if (home < away) return "2";
   return "X";
 }
 
-async function settleSlip(slipDoc) {
+async function settleSlip(slipDoc, fixtures = []) {
   const data = slipDoc.data();
   const slipId = slipDoc.id;
 
@@ -485,11 +448,19 @@ async function settleSlip(slipDoc) {
   let correctCount = 0;
   let settledCount = 0;
 
-  for (const sel of data.slip) {
-    const result = generateMockResult(sel.matchId);
+  for (const sel of data.slip || []) {
+    const fixture = fixtures.find((item) => String(item.fixture_id) === String(sel.matchId));
+    if (!fixture) continue;
+
+    const status = String(fixture.status || "").toLowerCase();
+    if (!["finished", "ft", "ended"].includes(status)) continue;
+
+    const homeScore = Number(fixture.home_score ?? fixture.homeScore?.current ?? 0);
+    const awayScore = Number(fixture.away_score ?? fixture.awayScore?.current ?? 0);
+    if (!Number.isFinite(homeScore) || !Number.isFinite(awayScore)) continue;
+
     settledCount++;
 
-    // Parse the pick field
     let pickCategory = null, pickValue = null;
     if (sel.pick) {
       if (sel.pick.startsWith("winner_")) {
@@ -500,23 +471,22 @@ async function settleSlip(slipDoc) {
         pickValue = sel.pick.replace("goals_", "");
       }
     }
-    // Support legacy slips that still have winner/goals fields
+
     if (!pickCategory) {
       pickCategory = "winner";
       pickValue = sel.winner;
     }
 
     if (pickCategory === "winner") {
-      const correctWinner = getScoreWinner(result.homeScore, result.awayScore);
+      const correctWinner = getScoreWinner(homeScore, awayScore);
       if (pickValue === correctWinner) correctCount++;
     } else if (pickCategory === "goals") {
-      const total = result.homeScore + result.awayScore;
+      const total = homeScore + awayScore;
       const correctGoals = total > 2.5 ? "over2.5" : "under2.5";
       if (pickValue === correctGoals) correctCount++;
     }
   }
 
-  // Only settle if at least some matches have finished
   if (settledCount === 0) return;
 
   const scoreStr = `${correctCount}/${settledCount}`;
@@ -557,9 +527,10 @@ async function settleAllPendingSlips() {
       limit(50)
     );
     const snap = await getDocs(q);
+    const fixtures = await getLiveFixtures();
     let settledCount = 0;
     for (const docSnap of snap.docs) {
-      const result = await settleSlip(docSnap);
+      const result = await settleSlip(docSnap, fixtures);
       if (result) settledCount++;
     }
     if (settledCount > 0) {
@@ -695,50 +666,23 @@ function toggleSlipExpand(targetId) {
   }
 }
 
-// ===== 2. FETCH FIXTURES (API-first with static fallback) =====
 let pollIntervalId = null;
+let fixtureSubscription = null;
 
-async function loadFixturesForDate(dateStr) {
-    if (fixtureFetchInProgress[dateStr]) return;
-    fixtureFetchInProgress[dateStr] = true;
+async function loadFixturesForDate() {
+    if (fixtureFetchInProgress.current) return;
+    fixtureFetchInProgress.current = true;
 
     try {
-        let fixtures;
-
-        const apiFixtures = await fetchFixturesFromAPI(dateStr);
-        
-        if (apiFixtures && Array.isArray(apiFixtures) && apiFixtures.length > 0) {
-            fixtures = apiFixtures.map((m, i) => ({
-                id: m.id || `api_fixture_${dateStr}_${i}`,
-                league: m.league || "FOOTBALL",
-                homeTeam: m.homeTeam || "Home Team",
-                awayTeam: m.awayTeam || "Away Team",
-                time: m.time || "15:00",
-                status: m.status || "notstarted"
-            }));
-        } else {
-            fixtures = generateFixturesForDate(dateStr);
-        }
-
-        fixtureCache[dateStr] = fixtures;
-        
-        // Use your original renderFixtures function name
+        const fixtures = await fetchFixturesFromAPI();
+        fixtureCache.current = fixtures;
         renderFixtures(fixtures);
-
     } catch (err) {
-        console.error("Error loading fixtures for date:", dateStr, err);
-        renderFixtures(generateFixturesForDate(dateStr));
+        console.error("Error loading fixtures:", err);
+        renderFixtures([]);
     } finally {
-        fixtureFetchInProgress[dateStr] = false;
+        fixtureFetchInProgress.current = false;
     }
-}
-// Fallback function for generating fixtures if API fails
-function generateFixturesForDate(dateStr) {
-    return [
-        { id: 101, homeTeam: "Valencia", awayTeam: "Sevilla", league: "LA LIGA", time: "11:00 AM" },
-        { id: 102, homeTeam: "Bayern Munich", awayTeam: "Borussia M'gladbach", league: "BUNDESLIGA", time: "12:15 PM" },
-        { id: 103, homeTeam: "Nice", awayTeam: "Marseille", league: "LIGUE 1", time: "12:45 PM" }
-    ];
 }
 // ===== FEATURE 2: VIEW WINNING SLIP MODAL =====
 /**
@@ -957,6 +901,28 @@ async function loadUserProfile() {
   }
 }
 
+function wireFixtureSubscription() {
+  if (fixtureSubscription) return;
+  fixtureSubscription = subscribeToFixtureUpdates((fixtures) => {
+    fixtureCache.current = fixtures;
+    renderFixtures(fixtures.map((fixture) => ({
+      fixture_id: fixture.fixture_id,
+      league: fixture.league_name,
+      league_logo: fixture.league_logo,
+      homeTeam: fixture.home_team_name,
+      homeTeamLogo: fixture.home_team_logo,
+      awayTeam: fixture.away_team_name,
+      awayTeamLogo: fixture.away_team_logo,
+      date: fixture.kickoff_time,
+      kickoff: fixture.kickoff_time,
+      status: fixture.status,
+      minute: fixture.minute,
+      homeScore: fixture.home_score,
+      awayScore: fixture.away_score
+    })));
+  });
+}
+
 // ===== AUTH STATE =====
 onAuthStateChanged(auth, async (user) => {
   currentUser = user;
@@ -989,9 +955,9 @@ onAuthStateChanged(auth, async (user) => {
     }
   }
 
-  // Always build calendar + load initial fixtures + leaderboard
   buildCalendar();
-  if (selectedDateStr) loadFixturesForDate(selectedDateStr);
+  wireFixtureSubscription();
+  await loadFixturesForDate();
   await loadLeaderboard();
   updateSlipBanner();
 });
@@ -1009,7 +975,8 @@ document.addEventListener("DOMContentLoaded", () => {
 window.addEventListener("load", () => {
   if (fixturesContainer && fixturesContainer.innerHTML.includes("Loading")) {
     buildCalendar();
-    if (selectedDateStr) loadFixturesForDate(selectedDateStr);
+    wireFixtureSubscription();
+    loadFixturesForDate();
     loadLeaderboard();
   }
   updateSlipBanner();
@@ -1018,13 +985,10 @@ window.addEventListener("load", () => {
 
 // ===== AUTO-REFRESH POLLING (every 45 seconds) =====
 function startPolling() {
-    stopPolling(); // clear any existing interval
+    stopPolling();
     pollIntervalId = setInterval(() => {
-        if (selectedDateStr) {
-            console.log(`[Poll] Refreshing fixtures for ${selectedDateStr}...`);
-            loadFixturesForDate(selectedDateStr);
-        }
-    }, 45000); // 45 seconds
+        loadFixturesForDate();
+    }, 45000);
 }
 
 function stopPolling() {
