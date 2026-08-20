@@ -976,6 +976,7 @@ function renderPostCard(post) {
 
   // Build profile link
   const profileLink = `profile.html?uid=${encodeURIComponent(post.authorId || "")}`;
+  const isOwner = !!currentUser && (post.authorId === currentUser.uid);
 
   // Resolve author avatar (photoURL or initials)
   const authorPhotoURL = userPhotoCache[post.authorId] || post.authorPhotoURL || "";
@@ -1003,7 +1004,10 @@ function renderPostCard(post) {
         <div class="fb-post-time">${timeAgo(post.createdAt)} · ${post.interest || "General"}</div>
         <div class="post-hp-badge-placeholder" data-author-id="${post.authorId || ""}"></div>
       </div>
-      <div class="fb-post-options">•••</div>
+      <div class="fb-post-options" style="display:flex;align-items:center;gap:8px;">
+        <span aria-hidden="true">•••</span>
+        ${isOwner ? '<button class="fb-delete-post-btn" type="button" aria-label="Delete post" title="Delete post" style="background:rgba(239,68,68,0.12);color:#fca5a5;border:1px solid rgba(239,68,68,0.35);border-radius:999px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;">Delete</button>' : ''}
+      </div>
     </div>
     <div class="fb-post-text">${displayText}</div>
     ${taggedBadge}
@@ -1139,6 +1143,21 @@ function renderPostCard(post) {
       e.stopPropagation();
       openProfileModal(el.dataset.userid, el.dataset.username, el.dataset.useremoji);
     });
+  });
+
+  const deleteBtn = card.querySelector('.fb-delete-post-btn');
+  deleteBtn?.addEventListener('click', async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!currentUser || post.authorId !== currentUser.uid) return;
+    const confirmed = window.confirm('Delete this post? This cannot be undone.');
+    if (!confirmed) return;
+    try {
+      await deleteDoc(doc(db, 'posts', post.id));
+    } catch (err) {
+      console.error('Delete post failed:', err);
+      alert('Unable to delete this post right now.');
+    }
   });
 
   // Like handler

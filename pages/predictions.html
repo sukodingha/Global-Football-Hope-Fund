@@ -84,6 +84,19 @@
       <!-- 5-day calendar selector -->
       <div id="dateCalendar" style="max-width:1200px;margin:0 auto 20px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center;"></div>
 
+      <div style="max-width:1200px;margin:0 auto 20px;display:flex;gap:12px;flex-wrap:wrap;align-items:end;justify-content:center;">
+        <div style="display:flex;flex-direction:column;gap:8px;min-width:220px;">
+          <label for="predictionCountryFilter" style="font-size:12px;color:rgba(255,255,255,0.75);font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">Country / League</label>
+          <select id="predictionCountryFilter" style="padding:12px 14px;border-radius:12px;border:1px solid rgba(255,255,255,0.14);background:rgba(15,23,42,0.8);color:#fff;min-width:220px;">
+            <option value="Top Leagues">Top Leagues</option>
+          </select>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;flex:1;min-width:260px;max-width:440px;">
+          <label for="predictionSearchInput" style="font-size:12px;color:rgba(255,255,255,0.75);font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">Search matches</label>
+          <input id="predictionSearchInput" type="text" placeholder="Search by club, league, or country" style="padding:12px 14px;border-radius:12px;border:1px solid rgba(255,255,255,0.14);background:rgba(15,23,42,0.8);color:#fff;">
+        </div>
+      </div>
+
       <!-- Fixtures -->
       <h3 style="color:#fff;margin-bottom:16px;">📅 Fixtures</h3>
       <div class="odds-grid" id="predictionFixtures">

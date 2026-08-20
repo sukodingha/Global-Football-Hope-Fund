@@ -62,6 +62,7 @@ function normalizeFixture(item) {
     fixture_id: String(fixture?.id ?? item?.fixture_id ?? ""),
     league_id: league?.id ?? null,
     league_name: league?.name || "League",
+    country_name: league?.country || "Global",
     league_logo: league?.logo || "",
     home_team_id: teams?.home?.id ?? null,
     home_team_name: teams?.home?.name || "Home",
@@ -185,4 +186,51 @@ export function subscribeToFixtureUpdates(listener) {
 /** Synchronously read whatever live fixtures are currently cached (may be stale/empty). */
 export function getCachedLiveFixtures() {
   return getCacheEntry("live", LIVE_CACHE_TTL_MS)?.fixtures || [];
+}
+
+const TOP_LEAGUE_TOKEN_SET = new Set([
+  "premier league",
+  "la liga",
+  "serie a",
+  "bundesliga",
+  "ligue 1",
+  "uefa champions league",
+  "champions league",
+  "world cup",
+  "europa league",
+  "coppa italia",
+  "fa cup",
+  "copa del rey",
+  "dfb-pokal",
+  "ligue des champions",
+  "afcon",
+  "africa cup of nations",
+  "copa america",
+  "gold cup"
+]);
+
+export function getRandomTopMatches(fixtures = [], limit = 20) {
+  const roster = Array.isArray(fixtures) ? fixtures.filter((fixture) => {
+    if (!fixture) return false;
+    const leagueName = String(fixture.league_name || "").toLowerCase();
+    const countryName = String(fixture.country_name || "").toLowerCase();
+    return TOP_LEAGUE_TOKEN_SET.has(leagueName) || TOP_LEAGUE_TOKEN_SET.has(countryName) || /england|spain|italy|germany|france|europe|world/i.test(leagueName + " " + countryName);
+  }) : [];
+
+  const pool = roster.length ? roster : Array.isArray(fixtures) ? fixtures : [];
+  const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), pool.length || 1);
+  const shuffled = [...pool];
+
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+
+  return shuffled.slice(0, safeLimit);
+}
+
+export async function getRandomTopMatchesForDate(dateStr, { limit = 20, forceRefresh = false } = {}) {
+  if (!dateStr) return [];
+  const fixtures = await getFixturesByDate(dateStr, { forceRefresh });
+  return getRandomTopMatches(fixtures, limit);
 }

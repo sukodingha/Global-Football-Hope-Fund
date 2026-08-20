@@ -19,7 +19,7 @@ import {
   updateDoc, increment, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
-  getFixturesByDate, getFixturesByIds, subscribeToFixtureUpdates
+  getFixturesByDate, getFixturesByIds, getRandomTopMatches, subscribeToFixtureUpdates
 } from "../services/fixturesService.js";
 
 // ===== DOM REFS (with existence checks) =====
@@ -31,6 +31,8 @@ const leaderboardContainer = getEl("predictionLeaderboard");
 const userStatus = getEl("predictionUserStatus");
 const globalMsg = getEl("predictionGlobalMsg");
 const historyContainer = getEl("predictionHistory");
+const countryFilterEl = getEl("predictionCountryFilter");
+const predictionSearchInput = getEl("predictionSearchInput");
 
 // ===== STATE =====
 let currentUser = null;
@@ -38,7 +40,10 @@ let currentUserName = "Guest";
 let currentUserUniqueId = "";
 
 let selectedDateStr = "";
+let selectedCountryFilter = "Top Leagues";
+let searchTerm = "";
 let latestFixtures = [];
+let allAvailableFixtures = [];
 let hasLoadedFixturesOnce = false;
 /** @type {Map<string, object>} fixture_id -> the signed-in user's prediction doc */
 let userPredictions = new Map();
@@ -52,6 +57,8 @@ let fixtureUnsubscribe = null;
 const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const PICK_LABELS = { home: "Home Win", draw: "Draw", away: "Away Win" };
 const PREDICTION_CORRECT_HP = 0.2; // Hope Points awarded for each correct prediction
+const PREDICTION_BATCH_SIZE = 7;
+const MAX_PREDICTIONS_PER_DAY = PREDICTION_BATCH_SIZE * 3;
 
 // ===== HELPER FUNCTIONS =====
 function escapeHtml(text) {
@@ -90,6 +97,47 @@ function toDateStr(date) {
 
 function getTodayStr() {
   return toDateStr(new Date());
+}
+
+function getDailyLimitDocId(uid, dateStr = getTodayStr()) {
+  return `${uid || "guest"}_${dateStr}`;
+}
+
+async function getDailyPredictionSummary(uid, dateStr = getTodayStr()) {
+  if (!uid) return { totalPredictions: 0, batchCount: 0, currentBatchCount: 0 };
+  try {
+    const snap = await getDoc(doc(db, "predictionDailyLimits", getDailyLimitDocId(uid, dateStr)));
+    if (!snap.exists()) return { totalPredictions: 0, batchCount: 0, currentBatchCount: 0 };
+    const data = snap.data() || {};
+    const totalPredictions = Number(data.totalPredictions || 0);
+    return {
+      totalPredictions,
+      batchCount: Number(data.batchCount || 0),
+      currentBatchCount: Number(data.currentBatchCount || 0)
+    };
+  } catch (err) {
+    console.warn("Daily limit lookup failed:", err);
+    return { totalPredictions: 0, batchCount: 0, currentBatchCount: 0 };
+  }
+}
+
+async function updateDailyPredictionSummary(uid, delta = 1, dateStr = getTodayStr()) {
+  if (!uid) return;
+  const ref = doc(db, "predictionDailyLimits", getDailyLimitDocId(uid, dateStr));
+  const snap = await getDoc(ref);
+  const data = snap.exists() ? snap.data() || {} : {};
+  const totalPredictions = Math.max(0, Number(data.totalPredictions || 0) + delta);
+  const batchCount = Math.min(3, Math.ceil(totalPredictions / PREDICTION_BATCH_SIZE));
+  const currentBatchCount = totalPredictions % PREDICTION_BATCH_SIZE || (totalPredictions === 0 ? 0 : PREDICTION_BATCH_SIZE);
+
+  await setDoc(ref, {
+    uid,
+    date: dateStr,
+    totalPredictions,
+    batchCount,
+    currentBatchCount,
+    updatedAt: serverTimestamp()
+  }, { merge: true });
 }
 
 function isMatchLocked(status) {
@@ -178,6 +226,62 @@ function renderFixtures(fixtures) {
   fixturesContainer.innerHTML = latestFixtures.map(renderFixtureCard).join("");
   attachPickHandlers();
   startLiveTick();
+}
+
+function getMatchFilterValue(match) {
+  const country = String(match?.country_name || match?.league_name || "");
+  const league = String(match?.league_name || "");
+  const home = String(match?.home_team_name || "");
+  const away = String(match?.away_team_name || "");
+  return `${country} ${league} ${home} ${away}`.toLowerCase();
+}
+
+function getFilteredFixtures(fixtures) {
+  const source = Array.isArray(fixtures) ? fixtures : [];
+  const query = (searchTerm || "").trim().toLowerCase();
+  const selectedCountry = selectedCountryFilter || "Top Leagues";
+
+  let matched = source;
+  if (selectedCountry !== "Top Leagues" && selectedCountry !== "All") {
+    matched = source.filter((match) => {
+      const candidate = `${match?.country_name || ""} ${match?.league_name || ""}`.toLowerCase();
+      return candidate.includes(selectedCountry.toLowerCase());
+    });
+  }
+
+  if (selectedCountry === "Top Leagues") {
+    matched = getRandomTopMatches(source, 20);
+  }
+
+  if (!query) return matched;
+
+  return matched.filter((match) => getMatchFilterValue(match).includes(query));
+}
+
+function populateCountryFilterOptions(fixtures) {
+  if (!countryFilterEl) return;
+  const options = ["Top Leagues"];
+  const seen = new Set();
+
+  for (const match of fixtures || []) {
+    const name = String(match?.country_name || match?.league_name || "").trim();
+    if (!name || seen.has(name)) continue;
+    options.push(name);
+    seen.add(name);
+  }
+
+  const currentValue = options.includes(selectedCountryFilter) ? selectedCountryFilter : "Top Leagues";
+  countryFilterEl.innerHTML = options.map((option) => `<option value="${option}">${option}</option>`).join("");
+  selectedCountryFilter = currentValue;
+  countryFilterEl.value = currentValue;
+}
+
+function applyPredictionFilter() {
+  if (!allAvailableFixtures.length) {
+    renderFixtures([]);
+    return;
+  }
+  renderFixtures(getFilteredFixtures(allAvailableFixtures));
 }
 
 function renderStatusBadge(match) {
@@ -310,6 +414,13 @@ async function submitPrediction(btn) {
     return;
   }
 
+  const todaySubmittedCount = [...userPredictions.values()].filter((p) => p.dateSubmitted === getTodayStr()).length;
+  const projectedTotal = todaySubmittedCount + 1;
+  if (projectedTotal > MAX_PREDICTIONS_PER_DAY) {
+    showGlobalMsg(`⚠️ Daily limit reached: you can make up to ${MAX_PREDICTIONS_PER_DAY} predictions today (3 batches of ${PREDICTION_BATCH_SIZE}).`, "error");
+    return;
+  }
+
   const card = btn.closest(".odds-card");
   if (card) card.querySelectorAll(".pick-btn").forEach((b) => { b.disabled = true; });
 
@@ -317,8 +428,6 @@ async function submitPrediction(btn) {
   const docRef = doc(db, "predictions", docId);
 
   try {
-    // Re-check right before writing to guard against duplicate submissions
-    // from another tab/session for the same user + fixture.
     const existing = await getDoc(docRef);
     if (existing.exists()) {
       userPredictions.set(fixtureId, { id: docId, ...existing.data() });
@@ -343,6 +452,7 @@ async function submitPrediction(btn) {
     };
 
     await setDoc(docRef, data);
+    await updateDailyPredictionSummary(currentUser.uid, 1, data.dateSubmitted);
     userPredictions.set(fixtureId, { id: docId, ...data });
 
     showGlobalMsg(`✅ Prediction saved: ${PICK_LABELS[pick]}`, "success");
@@ -364,6 +474,7 @@ async function settlePendingPredictions() {
 
   try {
     const fixtures = await getFixturesByIds(pending.map((p) => p.fixtureId));
+    const groupedByDate = new Map();
     let settledCount = 0;
 
     for (const prediction of pending) {
@@ -388,7 +499,26 @@ async function settlePendingPredictions() {
         });
       }
 
+      const key = prediction.dateSubmitted || getTodayStr();
+      if (!groupedByDate.has(key)) groupedByDate.set(key, { date: key, correct: 0, total: 0 });
+      groupedByDate.get(key).total += 1;
+      if (correct) groupedByDate.get(key).correct += 1;
+
       settledCount++;
+    }
+
+    for (const [dateStr, summary] of groupedByDate.entries()) {
+      if (summary.total === 0 || summary.correct < 7) continue;
+      await updateDoc(doc(db, "users", currentUser.uid), {
+        rewardPoints: increment(10),
+        totalRewardsEarned: increment(10)
+      });
+      await setDoc(doc(db, "predictionDailyLimits", getDailyLimitDocId(currentUser.uid, dateStr)), {
+        uid: currentUser.uid,
+        date: dateStr,
+        batchBonusAwarded: true,
+        bonusHP: increment(10)
+      }, { merge: true });
     }
 
     if (settledCount > 0) {
@@ -550,13 +680,16 @@ async function loadFixturesForDate() {
 
   try {
     const fixtures = await getFixturesByDate(selectedDateStr);
+    allAvailableFixtures = fixtures || [];
+    populateCountryFilterOptions(allAvailableFixtures);
     await loadUserPredictions();
-    renderFixtures(fixtures);
+    applyPredictionFilter();
     hasLoadedFixturesOnce = true;
     await settlePendingPredictions();
   } catch (err) {
     console.error("Error loading fixtures:", err);
-    renderFixtures([]);
+    allAvailableFixtures = [];
+    applyPredictionFilter();
     hasLoadedFixturesOnce = true;
   } finally {
     fixtureFetchInProgress = false;
@@ -566,9 +699,10 @@ async function loadFixturesForDate() {
 function wireFixtureSubscription() {
   if (fixtureUnsubscribe) return;
   fixtureUnsubscribe = subscribeToFixtureUpdates((fixtures, cacheKey) => {
-    // Only re-render if the update matches the calendar day currently on screen.
     if (cacheKey === `date:${selectedDateStr}`) {
-      renderFixtures(fixtures);
+      allAvailableFixtures = fixtures || [];
+      populateCountryFilterOptions(allAvailableFixtures);
+      applyPredictionFilter();
     }
   });
 }
@@ -586,6 +720,20 @@ function stopPolling() {
     clearInterval(pollIntervalId);
     pollIntervalId = null;
   }
+}
+
+if (countryFilterEl) {
+  countryFilterEl.addEventListener("change", () => {
+    selectedCountryFilter = countryFilterEl.value || "Top Leagues";
+    applyPredictionFilter();
+  });
+}
+
+if (predictionSearchInput) {
+  predictionSearchInput.addEventListener("input", (event) => {
+    searchTerm = event.target.value || "";
+    applyPredictionFilter();
+  });
 }
 
 // ===== AUTH STATE =====
