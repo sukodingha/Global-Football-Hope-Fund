@@ -1,17 +1,26 @@
 /**
  * GFHF Prediction League Module
- * Renders prediction cards from the shared live fixture service used by the competition page.
- * No local fixture generation or mock results are used.
+ * ------------------------------
+ * Renders match cards from the shared fixtures service
+ * (services/fixturesService.js) — the exact same single source of truth used
+ * by the Competition page. No local/mock fixture generation is used here.
+ *
+ * Each card lets a signed-in user submit ONE prediction — Home Win, Draw, or
+ * Away Win. Buttons automatically lock as soon as the match goes LIVE, and
+ * every prediction is written to Firestore as its own document
+ * (`predictions/{fixtureId}_{uid}`), which makes duplicate submissions for
+ * the same user + fixture impossible by construction.
  */
 
 import { auth, db } from "./firebase.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  doc, getDoc, getDocs, addDoc, collection, query, where, updateDoc, increment, serverTimestamp, limit, deleteDoc
+  doc, getDoc, setDoc, getDocs, collection, query, where, limit,
+  updateDoc, increment, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { getHPBadgeHTML, getUserHP, formatHP } from "./rewards.js";
-import { getLiveFixtures, subscribeToFixtureUpdates } from "./fixturesService.js";
-
+import {
+  getFixturesByDate, getFixturesByIds, subscribeToFixtureUpdates
+} from "../services/fixturesService.js";
 
 // ===== DOM REFS (with existence checks) =====
 function getEl(id) { return document.getElementById(id); }
@@ -21,39 +30,33 @@ const fixturesContainer = getEl("predictionFixtures");
 const leaderboardContainer = getEl("predictionLeaderboard");
 const userStatus = getEl("predictionUserStatus");
 const globalMsg = getEl("predictionGlobalMsg");
-const slipBanner = getEl("slipBanner");
-const slipCount = getEl("slipCount");
-const slipProgress = getEl("slipProgress");
-const slipSubmitBtn = getEl("slipSubmitBtn");
-const slipHistoryContainer = getEl("slipHistory");
-const dailyLimitCounter = getEl("dailyLimitCounter");
-const winningSlipModal = getEl("winningSlipModal");
-const winningSlipModalBody = getEl("winningSlipModalBody");
-const winningSlipModalOverlay = getEl("winningSlipModalOverlay");
-const winningSlipModalClose = getEl("winningSlipModalClose");
+const historyContainer = getEl("predictionHistory");
 
 // ===== STATE =====
 let currentUser = null;
 let currentUserName = "Guest";
 let currentUserUniqueId = "";
 
-/** @type {{ matchId: string, pick: string, homeTeam: string, awayTeam: string, league: string, kickoff: string }[]} */
-let userSlip = [];
-
-let isSubmitting = false;
-let todaySlipCount = 0;
 let selectedDateStr = "";
+let latestFixtures = [];
+let hasLoadedFixturesOnce = false;
+/** @type {Map<string, object>} fixture_id -> the signed-in user's prediction doc */
+let userPredictions = new Map();
+let fixtureFetchInProgress = false;
 
-let fixtureCache = { current: [] };
-let fixtureFetchInProgress = { current: false };
+let pollIntervalId = null;
+let liveTickIntervalId = null;
+let fixtureUnsubscribe = null;
 
 // ===== CONSTANTS =====
-const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const PICK_LABELS = { home: "Home Win", draw: "Draw", away: "Away Win" };
+const PREDICTION_CORRECT_HP = 0.2; // Hope Points awarded for each correct prediction
 
 // ===== HELPER FUNCTIONS =====
 function escapeHtml(text) {
   const d = document.createElement("div");
-  d.textContent = text;
+  d.textContent = text ?? "";
   return d.innerHTML;
 }
 
@@ -74,7 +77,7 @@ function formatDateShort(dateStr) {
 function formatKickoff(isoStr) {
   if (!isoStr) return "";
   const d = new Date(isoStr);
-  if (isNaN(d.getTime())) return isoStr;
+  if (isNaN(d.getTime())) return "";
   return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
 }
 
@@ -85,58 +88,20 @@ function toDateStr(date) {
   return `${y}-${m}-${d}`;
 }
 
-function isToday(dateStr) {
-  return dateStr === toDateStr(new Date());
-}
-
 function getTodayStr() {
   return toDateStr(new Date());
 }
 
-function formatPick(pick) {
-  if (!pick) return "—";
-  if (pick.startsWith("winner_")) {
-    const val = pick.replace("winner_", "");
-    if (val === "1") return "Winner: 1 (Home)";
-    if (val === "2") return "Winner: 2 (Away)";
-    if (val === "X") return "Winner: X (Draw)";
-    return `Winner: ${val}`;
-  }
-  if (pick.startsWith("goals_")) {
-    const val = pick.replace("goals_", "");
-    if (val === "over2.5") return "Total Goals: Over 2.5";
-    if (val === "under2.5") return "Total Goals: Under 2.5";
-    return `Goals: ${val}`;
-  }
-  return pick;
+function isMatchLocked(status) {
+  return status === "live" || status === "half_time" || status === "finished";
 }
 
-function generateSlipDisplayId() {
-  return 'slip_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6);
+function getMatchOutcome(homeScore, awayScore) {
+  if (homeScore > awayScore) return "home";
+  if (homeScore < awayScore) return "away";
+  return "draw";
 }
 
-function normalizePredictionFixture(fixture) {
-  return {
-    fixture_id: fixture?.fixture_id ?? fixture?.id,
-    league: fixture?.league_name ?? fixture?.league,
-    league_logo: fixture?.league_logo ?? fixture?.leagueLogo ?? "",
-    homeTeam: fixture?.home_team_name ?? fixture?.homeTeam?.name ?? fixture?.homeTeam ?? "Home",
-    homeTeamLogo: fixture?.home_team_logo ?? fixture?.homeTeamLogo ?? "",
-    awayTeam: fixture?.away_team_name ?? fixture?.awayTeam?.name ?? fixture?.awayTeam ?? "Away",
-    awayTeamLogo: fixture?.away_team_logo ?? fixture?.awayTeamLogo ?? "",
-    date: fixture?.kickoff_time ?? fixture?.date ?? fixture?.kickoff ?? null,
-    kickoff: fixture?.kickoff_time ?? fixture?.date ?? fixture?.kickoff ?? null,
-    status: fixture?.status ?? "scheduled",
-    minute: fixture?.minute ?? "",
-    homeScore: fixture?.home_score ?? fixture?.homeScore?.current ?? fixture?.homeScore ?? 0,
-    awayScore: fixture?.away_score ?? fixture?.awayScore?.current ?? fixture?.awayScore ?? 0
-  };
-}
-
-async function fetchFixturesFromAPI() {
-  const fixtures = await getLiveFixtures();
-  return fixtures.map(normalizePredictionFixture);
-}
 // ===== 1. 5-DAY ROLLING CALENDAR =====
 function buildCalendar() {
   if (!calendarEl) return;
@@ -182,80 +147,141 @@ function buildCalendar() {
   }
 }
 
-// ===== 3. RENDER FIXTURES WITH SELECTION UI =====
-function renderFixtures(fixturesList) {
+// ===== 2. LOAD THE SIGNED-IN USER'S PREDICTIONS =====
+async function loadUserPredictions() {
+  userPredictions = new Map();
+  if (!currentUser) return;
+
+  try {
+    const q = query(collection(db, "predictions"), where("userId", "==", currentUser.uid));
+    const snap = await getDocs(q);
+    snap.docs.forEach((docSnap) => {
+      const data = docSnap.data();
+      userPredictions.set(String(data.fixtureId), { id: docSnap.id, ...data });
+    });
+  } catch (err) {
+    console.warn("Could not load user predictions:", err);
+  }
+}
+
+// ===== 3. RENDER MATCH CARDS =====
+function renderFixtures(fixtures) {
+  latestFixtures = fixtures || [];
   if (!fixturesContainer) return;
 
-  if (!fixturesList || fixturesList.length === 0) {
-    fixturesContainer.innerHTML = '<div class="card" style="grid-column:1/-1;text-align:center;background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.7);"><p style="padding:40px 0;">No live fixtures available right now.</p></div>';
+  if (latestFixtures.length === 0) {
+    fixturesContainer.innerHTML = '<div class="card" style="grid-column:1/-1;text-align:center;background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.7);"><p style="padding:40px 0;">No fixtures available for this date.</p></div>';
+    stopLiveTick();
     return;
   }
 
-  let html = "";
-  fixturesList.forEach((match) => {
-    const matchId = match.fixture_id || match.id;
-    const slipEntry = userSlip.find(s => s.matchId === matchId);
-    const selectedClass = slipEntry ? " odds-card-selected" : "";
-    const selectedPick = slipEntry ? slipEntry.pick : null;
-    const kickoffLabel = formatKickoff(match.date || match.kickoff);
-    const matchStatus = match.status || "scheduled";
-    const isLocked = matchStatus === "live" || matchStatus === "half_time" || matchStatus === "finished";
-    const leagueLogo = match.league_logo || match.leagueLogo || "";
-    const homeLogo = match.homeTeamLogo || match.home_logo || "";
-    const awayLogo = match.awayTeamLogo || match.away_logo || "";
+  fixturesContainer.innerHTML = latestFixtures.map(renderFixtureCard).join("");
+  attachPickHandlers();
+  startLiveTick();
+}
 
-    html += `
-      <div class="odds-card${selectedClass}" data-match-id="${matchId}">
-        <div class="odds-header">
-          <span class="league-pill">${leagueLogo ? `<img src="${escapeHtml(leagueLogo)}" alt="" style="width:18px;height:18px;object-fit:contain;display:inline-block;vertical-align:middle;margin-right:6px;">` : "⚽"} ${escapeHtml(match.league || "League")}</span>
-          <span class="odds-time">⏰ ${escapeHtml(kickoffLabel || "TBD")}</span>
+function renderStatusBadge(match) {
+  const status = match.status || "scheduled";
+  if (status === "live") {
+    return `<span class="match-status-badge live">LIVE</span>`;
+  }
+  if (status === "half_time") {
+    return `<span class="match-status-badge ht">HT</span>`;
+  }
+  if (status === "finished") {
+    return `<span class="match-status-badge ft">FT</span>`;
+  }
+  if (status === "postponed") {
+    return `<span class="match-status-badge ft">POSTPONED</span>`;
+  }
+  return `<span class="match-status-badge" style="background:#f5a623;color:#1a1a1a;">Upcoming</span>`;
+}
+
+function renderLiveTimer(match) {
+  const status = match.status || "scheduled";
+  if (status !== "live" && status !== "half_time") return "";
+  const minute = Number(match.minute) || 0;
+  return `<span class="match-live-timer" data-status="${status}" data-minute="${minute}" data-tick="0">⏱ ${status === "half_time" ? "HT" : `${minute}'`}</span>`;
+}
+
+function renderFixtureCard(match) {
+  const fixtureId = match.fixture_id;
+  const prediction = userPredictions.get(String(fixtureId));
+  const status = match.status || "scheduled";
+  const locked = !!prediction || isMatchLocked(status);
+  const kickoffLabel = formatKickoff(match.kickoff_time);
+  const leagueLogo = match.league_logo || "";
+  const homeLogo = match.home_team_logo || "";
+  const awayLogo = match.away_team_logo || "";
+
+  const buttons = ["home", "draw", "away"].map((pick) => {
+    const isSelected = prediction?.pick === pick;
+    const label = pick === "home" ? "1" : pick === "draw" ? "X" : "2";
+    const team = pick === "home" ? match.home_team_name : pick === "away" ? match.away_team_name : "Draw";
+    return `
+      <button class="pred-btn pick-btn${isSelected ? " selected-btn" : ""}" data-fixture="${fixtureId}" data-pick="${pick}" ${locked ? "disabled" : ""}>
+        <span class="pred-btn-label">${label}</span>
+        <span class="pred-btn-team">${escapeHtml(team)}</span>
+      </button>
+    `;
+  }).join("");
+
+  return `
+    <div class="odds-card${prediction ? " odds-card-selected" : ""}" data-fixture-id="${fixtureId}">
+      <div class="odds-header">
+        <span class="league-pill">${leagueLogo ? `<img src="${escapeHtml(leagueLogo)}" alt="" style="width:18px;height:18px;object-fit:contain;display:inline-block;vertical-align:middle;margin-right:6px;">` : "⚽"} ${escapeHtml(match.league_name || "League")}</span>
+        <span class="odds-time">⏰ ${escapeHtml(kickoffLabel || "TBD")}</span>
+      </div>
+      <div class="odds-teams" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+        <div class="odds-team" style="display:flex;flex-direction:column;align-items:center;gap:8px;flex:1;">
+          ${homeLogo ? `<img src="${escapeHtml(homeLogo)}" alt="" style="width:32px;height:32px;object-fit:contain;">` : ""}
+          <span>${escapeHtml(match.home_team_name)}</span>
         </div>
-        <div class="odds-teams" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
-          <div class="odds-team" style="display:flex;flex-direction:column;align-items:center;gap:8px;flex:1;">
-            ${homeLogo ? `<img src="${escapeHtml(homeLogo)}" alt="" style="width:32px;height:32px;object-fit:contain;">` : ""}
-            <span>${escapeHtml(match.homeTeam)}</span>
-          </div>
-          <div class="odds-vs">vs</div>
-          <div class="odds-team" style="display:flex;flex-direction:column;align-items:center;gap:8px;flex:1;">
-            ${awayLogo ? `<img src="${escapeHtml(awayLogo)}" alt="" style="width:32px;height:32px;object-fit:contain;">` : ""}
-            <span>${escapeHtml(match.awayTeam)}</span>
-          </div>
-        </div>
-        <div class="prediction-section" style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;font-size:12px;color:rgba(255,255,255,0.75);">
-          <span>📊 ${escapeHtml(matchStatus === "live" ? `Live ${match.minute ? `${match.minute}'` : ""}` : matchStatus === "finished" ? "Finished" : "Scheduled")}</span>
-          <span>⚽ ${match.homeScore ?? 0} - ${match.awayScore ?? 0}</span>
-        </div>
-        <div class="prediction-section">
-          <div class="prediction-section-label">🎯 Pick Winner</div>
-          <div class="winner-buttons">
-            <button class="pred-btn pick-btn${selectedPick === "winner_1" ? " selected-btn" : ""}" data-match="${matchId}" data-pick="winner_1" ${isLocked ? "disabled" : ""}>
-              <span class="pred-btn-label">1</span>
-              <span class="pred-btn-team">${escapeHtml(match.homeTeam)}</span>
-            </button>
-            <button class="pred-btn pick-btn${selectedPick === "winner_X" ? " selected-btn" : ""}" data-match="${matchId}" data-pick="winner_X" ${isLocked ? "disabled" : ""}>
-              <span class="pred-btn-label">X</span>
-              <span class="pred-btn-team">Draw</span>
-            </button>
-            <button class="pred-btn pick-btn${selectedPick === "winner_2" ? " selected-btn" : ""}" data-match="${matchId}" data-pick="winner_2" ${isLocked ? "disabled" : ""}>
-              <span class="pred-btn-label">2</span>
-              <span class="pred-btn-team">${escapeHtml(match.awayTeam)}</span>
-            </button>
-          </div>
-        </div>
-        <div class="prediction-section">
-          <div class="prediction-section-label">⚽ Pick Total Goals</div>
-          <div class="goals-buttons">
-            <button class="pred-btn pick-btn${selectedPick === "goals_over2.5" ? " selected-btn" : ""}" data-match="${matchId}" data-pick="goals_over2.5" ${isLocked ? "disabled" : ""}>Over 2.5</button>
-            <button class="pred-btn pick-btn${selectedPick === "goals_under2.5" ? " selected-btn" : ""}" data-match="${matchId}" data-pick="goals_under2.5" ${isLocked ? "disabled" : ""}>Under 2.5</button>
-          </div>
+        <div class="odds-vs">vs</div>
+        <div class="odds-team" style="display:flex;flex-direction:column;align-items:center;gap:8px;flex:1;">
+          ${awayLogo ? `<img src="${escapeHtml(awayLogo)}" alt="" style="width:32px;height:32px;object-fit:contain;">` : ""}
+          <span>${escapeHtml(match.away_team_name)}</span>
         </div>
       </div>
-    `;
-  });
+      <div class="prediction-section" style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;font-size:12px;color:rgba(255,255,255,0.75);">
+        <span style="display:flex;align-items:center;gap:8px;">${renderStatusBadge(match)} ${renderLiveTimer(match)}</span>
+        <span>⚽ ${match.home_score ?? 0} - ${match.away_score ?? 0}</span>
+      </div>
+      <div class="prediction-section">
+        <div class="prediction-section-label">🎯 ${prediction ? "Your Prediction" : "Pick the Result"}</div>
+        <div class="winner-buttons">
+          ${buttons}
+        </div>
+        ${locked && !prediction ? '<div style="font-size:11px;color:rgba(255,255,255,0.5);margin-top:6px;">🔒 Predictions are locked once the match kicks off.</div>' : ""}
+      </div>
+    </div>
+  `;
+}
 
-  fixturesContainer.innerHTML = html;
+// ===== 4. LIVE TIMER TICK (cosmetic seconds ticking between polls) =====
+function startLiveTick() {
+  stopLiveTick();
+  liveTickIntervalId = setInterval(() => {
+    document.querySelectorAll('.match-live-timer[data-status="live"]').forEach((el) => {
+      const minute = Number(el.dataset.minute) || 0;
+      const tick = (Number(el.dataset.tick) || 0) + 1;
+      el.dataset.tick = String(tick);
+      const extraMinutes = Math.floor(tick / 60);
+      el.textContent = `⏱ ${minute + extraMinutes}'`;
+    });
+  }, 1000);
+}
 
-  fixturesContainer.querySelectorAll(".pick-btn").forEach(btn => {
+function stopLiveTick() {
+  if (liveTickIntervalId) {
+    clearInterval(liveTickIntervalId);
+    liveTickIntervalId = null;
+  }
+}
+
+// ===== 5. PICK HANDLER — SUBMIT INDIVIDUAL PREDICTION IMMEDIATELY =====
+function attachPickHandlers() {
+  fixturesContainer.querySelectorAll(".pick-btn").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
       if (!currentUser) {
@@ -263,574 +289,210 @@ function renderFixtures(fixturesList) {
         if (authModal) authModal.classList.add("auth-modal--open");
         return;
       }
-      handlePick(btn);
+      submitPrediction(btn);
     });
   });
 }
 
-// ===== 4. PICK HANDLER — 1 PICK PER MATCH (toggle on/off) =====
-function handlePick(btn) {
-  const matchId = btn.dataset.match;
-  const pick = btn.dataset.pick; // e.g. "winner_1" or "goals_over2.5"
+async function submitPrediction(btn) {
+  const fixtureId = String(btn.dataset.fixture);
+  const pick = btn.dataset.pick; // 'home' | 'draw' | 'away'
+  const match = latestFixtures.find((f) => String(f.fixture_id) === fixtureId);
+  if (!match) return;
 
-  // Find match data from rendered fixtures
+  if (isMatchLocked(match.status)) {
+    showGlobalMsg("This match has already kicked off — predictions are locked.", "error");
+    return;
+  }
+
+  if (userPredictions.has(fixtureId)) {
+    showGlobalMsg("You've already submitted a prediction for this match.", "error");
+    return;
+  }
+
   const card = btn.closest(".odds-card");
-  if (!card) return;
-  const teamEls = card.querySelectorAll(".odds-team");
-  const leagueEl = card.querySelector(".league-pill");
-  const homeTeam = teamEls[0]?.textContent || "Home";
-  const awayTeam = teamEls[1]?.textContent || "Away";
-  const league = leagueEl?.textContent?.replace("⚽ ", "") || "";
-  const kickoff = "";
+  if (card) card.querySelectorAll(".pick-btn").forEach((b) => { b.disabled = true; });
 
-  // Find existing entry for this match in the slip
-  const existingIdx = userSlip.findIndex(s => s.matchId === matchId);
-
-  if (existingIdx !== -1 && userSlip[existingIdx].pick === pick) {
-    // Same pick clicked again → DESELECT (remove from slip)
-    userSlip.splice(existingIdx, 1);
-  } else if (existingIdx !== -1) {
-    // Different pick clicked on same match → SWAP the pick value
-    userSlip[existingIdx].pick = pick;
-  } else {
-    // No existing entry — create one with the single pick field
-    userSlip.push({
-      matchId,
-      pick,
-      homeTeam,
-      awayTeam,
-      league,
-      kickoff
-    });
-  }
-
-  // Update all visual states for this match
-  updateCardVisuals(matchId);
-  updateSlipBanner();
-}
-
-function updateCardVisuals(matchId) {
-  const card = document.querySelector(`.odds-card[data-match-id="${matchId}"]`);
-  if (!card) return;
-
-  const entry = userSlip.find(s => s.matchId === matchId);
-
-  // Update ALL pick buttons in this card: only the selected pick gets .selected-btn
-  card.querySelectorAll(".pick-btn").forEach(b => {
-    b.classList.toggle("selected-btn", entry ? entry.pick === b.dataset.pick : false);
-  });
-
-  // Card highlight
-  card.classList.toggle("odds-card-selected", !!entry);
-}
-
-// ===== 5. SLIP BANNER =====
-function updateSlipBanner() {
-  if (!slipCount || !slipProgress || !slipSubmitBtn) return;
-
-  const count = userSlip.length;
-  slipCount.textContent = `${count} / 7`;
-
-  const pct = Math.min(100, Math.round((count / 7) * 100));
-  slipProgress.style.width = `${pct}%`;
-  slipProgress.textContent = `${pct}%`;
-
-  const ready = count === 7;
-  slipSubmitBtn.disabled = !ready || isSubmitting;
-
-  if (isSubmitting) {
-    slipSubmitBtn.textContent = "⏳ Submitting...";
-    slipSubmitBtn.style.background = "linear-gradient(90deg, #64748b, #475569)";
-  } else if (ready) {
-    slipSubmitBtn.textContent = "📋 Submit Predictions";
-    slipSubmitBtn.style.background = "linear-gradient(90deg, #00c853, #00b34a)";
-  } else {
-    slipSubmitBtn.textContent = `📋 Select ${7 - count} more matches`;
-    slipSubmitBtn.style.background = "linear-gradient(90deg, #64748b, #475569)";
-  }
-}
-
-// ===== 4b. UPDATE DAILY LIMIT COUNTER =====
-async function updateDailyLimitCounter() {
-  if (!dailyLimitCounter || !currentUser) {
-    if (dailyLimitCounter) dailyLimitCounter.textContent = "";
-    return 0;
-  }
+  const docId = `${fixtureId}_${currentUser.uid}`;
+  const docRef = doc(db, "predictions", docId);
 
   try {
-    const todayStr = getTodayStr();
-    const q = query(
-      collection(db, "user_predictions"),
-      where("userId", "==", currentUser.uid),
-      where("dateSubmitted", "==", todayStr)
-    );
-    const snap = await getDocs(q);
-    const count = snap.docs.length;
-    const limitReached = count >= 3;
+    // Re-check right before writing to guard against duplicate submissions
+    // from another tab/session for the same user + fixture.
+    const existing = await getDoc(docRef);
+    if (existing.exists()) {
+      userPredictions.set(fixtureId, { id: docId, ...existing.data() });
+      showGlobalMsg("You've already submitted a prediction for this match.", "error");
+      renderFixtures(latestFixtures);
+      return;
+    }
 
-    dailyLimitCounter.textContent = `Today's Submissions: ${count} / 3${limitReached ? " (Limit Reached)" : ""}`;
-    dailyLimitCounter.className = `daily-limit-counter${limitReached ? " limit-reached" : ""}`;
-
-    return count;
-  } catch (err) {
-    console.warn("Could not check daily limit:", err);
-    return 0;
-  }
-}
-
-// ===== 6. SUBMISSION ENGINE =====
-async function submitSlip() {
-  if (!currentUser) { showGlobalMsg("Please sign in first.", "error"); return; }
-  if (isSubmitting) return;
-  if (userSlip.length !== 7) { showGlobalMsg("You must select exactly 7 matches.", "error"); return; }
-
-  // Validate all entries have a pick selected
-  const invalid = userSlip.some(s => !s.pick);
-  if (invalid) {
-    showGlobalMsg("Each match needs a pick selected.", "error");
-    return;
-  }
-
-  // ===== Daily 3-Slip Limit Check =====
-  const todayCount = await updateDailyLimitCounter();
-  if (todayCount >= 3) {
-    showGlobalMsg("You have reached your limit of 3 prediction slips for today! Please return tomorrow.", "error");
-    return;
-  }
-
-  isSubmitting = true;
-  slipSubmitBtn.disabled = true;
-  slipSubmitBtn.textContent = "⏳ Submitting...";
-
-  try {
-    await addDoc(collection(db, "user_predictions"), {
+    const data = {
       userId: currentUser.uid,
-      userName: currentUser.displayName || "Anonymous",
-      slip: userSlip,
+      userName: currentUserName,
+      fixtureId,
+      pick,
+      league: match.league_name || "",
+      homeTeam: match.home_team_name || "",
+      awayTeam: match.away_team_name || "",
+      kickoff: match.kickoff_time || null,
       status: "pending",
-      dateSubmitted: new Date().toISOString().split('T')[0],
+      pointsAwarded: 0,
+      dateSubmitted: getTodayStr(),
       createdAt: serverTimestamp()
-    });
+    };
 
-    showGlobalMsg("✅ Prediction Slip Submitted Successfully!", "success");
+    await setDoc(docRef, data);
+    userPredictions.set(fixtureId, { id: docId, ...data });
 
-    // Clear slip
-    userSlip = [];
-    updateSlipBanner();
-    await updateDailyLimitCounter();
-
-    await loadFixturesForDate();
-
-    // Refresh history
-    loadSlipHistory();
+    showGlobalMsg(`✅ Prediction saved: ${PICK_LABELS[pick]}`, "success");
+    renderFixtures(latestFixtures);
+    loadPredictionHistory();
   } catch (err) {
-    console.error("Submit error:", err);
-    showGlobalMsg("❌ Failed to submit slip. Please try again.", "error");
-  } finally {
-    isSubmitting = false;
-    updateSlipBanner();
+    console.error("Prediction submit error:", err);
+    showGlobalMsg("❌ Failed to save your prediction. Please try again.", "error");
+    renderFixtures(latestFixtures);
   }
 }
 
-// ===== 7. SETTLEMENT ENGINE =====
-function getScoreWinner(home, away) {
-  if (home > away) return "1";
-  if (home < away) return "2";
-  return "X";
-}
+// ===== 6. SETTLEMENT — mark finished matches correct/incorrect & award HP =====
+async function settlePendingPredictions() {
+  if (!currentUser) return;
 
-async function settleSlip(slipDoc, fixtures = []) {
-  const data = slipDoc.data();
-  const slipId = slipDoc.id;
-
-  if (data.status !== "pending") return;
-
-  let correctCount = 0;
-  let settledCount = 0;
-
-  for (const sel of data.slip || []) {
-    const fixture = fixtures.find((item) => String(item.fixture_id) === String(sel.matchId));
-    if (!fixture) continue;
-
-    const status = String(fixture.status || "").toLowerCase();
-    if (!["finished", "ft", "ended"].includes(status)) continue;
-
-    const homeScore = Number(fixture.home_score ?? fixture.homeScore?.current ?? 0);
-    const awayScore = Number(fixture.away_score ?? fixture.awayScore?.current ?? 0);
-    if (!Number.isFinite(homeScore) || !Number.isFinite(awayScore)) continue;
-
-    settledCount++;
-
-    let pickCategory = null, pickValue = null;
-    if (sel.pick) {
-      if (sel.pick.startsWith("winner_")) {
-        pickCategory = "winner";
-        pickValue = sel.pick.replace("winner_", "");
-      } else if (sel.pick.startsWith("goals_")) {
-        pickCategory = "goals";
-        pickValue = sel.pick.replace("goals_", "");
-      }
-    }
-
-    if (!pickCategory) {
-      pickCategory = "winner";
-      pickValue = sel.winner;
-    }
-
-    if (pickCategory === "winner") {
-      const correctWinner = getScoreWinner(homeScore, awayScore);
-      if (pickValue === correctWinner) correctCount++;
-    } else if (pickCategory === "goals") {
-      const total = homeScore + awayScore;
-      const correctGoals = total > 2.5 ? "over2.5" : "under2.5";
-      if (pickValue === correctGoals) correctCount++;
-    }
-  }
-
-  if (settledCount === 0) return;
-
-  const scoreStr = `${correctCount}/${settledCount}`;
+  const pending = [...userPredictions.values()].filter((p) => p.status === "pending");
+  if (pending.length === 0) return;
 
   try {
-    if (correctCount >= 6) {
-      // Award 2 HP
-      const userRef = doc(db, "users", data.userId);
-      await updateDoc(userRef, {
-        hpBalance: increment(2),
-        totalRewardsEarned: increment(2)
-      });
-
-      await updateDoc(doc(db, "user_predictions", slipId), {
-        status: "won",
-        pointsAwarded: 2,
-        score: scoreStr
-      });
-    } else {
-      await updateDoc(doc(db, "user_predictions", slipId), {
-        status: "lost",
-        pointsAwarded: 0,
-        score: scoreStr
-      });
-    }
-
-    return { slipId, correctCount, rewarded: correctCount >= 6, settledCount };
-  } catch (err) {
-    console.error("Settlement error:", err);
-  }
-}
-
-async function settleAllPendingSlips() {
-  try {
-    const q = query(
-      collection(db, "user_predictions"),
-      where("status", "==", "pending"),
-      limit(50)
-    );
-    const snap = await getDocs(q);
-    const fixtures = await getLiveFixtures();
+    const fixtures = await getFixturesByIds(pending.map((p) => p.fixtureId));
     let settledCount = 0;
-    for (const docSnap of snap.docs) {
-      const result = await settleSlip(docSnap, fixtures);
-      if (result) settledCount++;
+
+    for (const prediction of pending) {
+      const fixture = fixtures.find((f) => String(f.fixture_id) === String(prediction.fixtureId));
+      if (!fixture || fixture.status !== "finished") continue;
+
+      const homeScore = Number(fixture.home_score) || 0;
+      const awayScore = Number(fixture.away_score) || 0;
+      const outcome = getMatchOutcome(homeScore, awayScore);
+      const correct = outcome === prediction.pick;
+
+      await updateDoc(doc(db, "predictions", prediction.id), {
+        status: correct ? "correct" : "incorrect",
+        pointsAwarded: correct ? PREDICTION_CORRECT_HP : 0,
+        finalScore: `${homeScore}-${awayScore}`
+      });
+
+      if (correct) {
+        await updateDoc(doc(db, "users", currentUser.uid), {
+          rewardPoints: increment(PREDICTION_CORRECT_HP),
+          totalRewardsEarned: increment(PREDICTION_CORRECT_HP)
+        });
+      }
+
+      settledCount++;
     }
+
     if (settledCount > 0) {
-      showGlobalMsg(`🏆 ${settledCount} slip(s) settled!`, "success");
-      loadSlipHistory();
-      loadLeaderboard();
+      showGlobalMsg(`🏆 ${settledCount} prediction(s) settled!`, "success");
+      await loadUserPredictions();
+      await loadPredictionHistory();
+      await loadLeaderboard();
     }
   } catch (err) {
     console.warn("Settlement check error:", err);
   }
 }
 
-// ===== 8. LOAD SLIP HISTORY (with expandable picks) =====
-async function loadSlipHistory() {
-  if (!slipHistoryContainer) return;
+// ===== 7. PREDICTION HISTORY =====
+async function loadPredictionHistory() {
+  if (!historyContainer) return;
 
   if (!currentUser) {
-    slipHistoryContainer.innerHTML = '<p class="helper-text" style="text-align:center;color:rgba(255,255,255,0.7);">Sign in to see your prediction history.</p>';
+    historyContainer.innerHTML = '<p class="helper-text" style="text-align:center;color:rgba(255,255,255,0.7);">Sign in to see your prediction history.</p>';
     return;
   }
 
   try {
     const q = query(
-      collection(db, "user_predictions"),
-      where("userId", "==", currentUser.uid)
+      collection(db, "predictions"),
+      where("userId", "==", currentUser.uid),
+      limit(100)
     );
     const snap = await getDocs(q);
 
     if (snap.empty) {
-      slipHistoryContainer.innerHTML = '<p class="helper-text" style="text-align:center;color:rgba(255,255,255,0.7);">No prediction slips yet. Select 7 matches and submit!</p>';
+      historyContainer.innerHTML = '<p class="helper-text" style="text-align:center;color:rgba(255,255,255,0.7);">No predictions yet. Pick a result above to get started!</p>';
       return;
     }
 
-    // Process documents into a usable array
-    const filteredDocs = snap.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+    const docsSorted = snap.docs.slice().sort((a, b) => {
+      const aMs = a.data().createdAt?.toMillis?.() || 0;
+      const bMs = b.data().createdAt?.toMillis?.() || 0;
+      return bMs - aMs;
+    }).slice(0, 30);
 
-    if (filteredDocs.length === 0) {
-      slipHistoryContainer.innerHTML = '<p class="helper-text" style="text-align:center;color:rgba(255,255,255,0.7);">No prediction slips yet. Select 7 matches and submit!</p>';
-      return;
-    }
-
-    let html = "";
-    filteredDocs.forEach((slip, index) => {
-      const dateStr = slip.dateSubmitted || "—";
-      const displayId = generateSlipDisplayId();
-
+    historyContainer.innerHTML = docsSorted.map((docSnap) => {
+      const p = docSnap.data();
       let statusText, statusClass;
-      if (slip.status === "won") {
-        statusText = `✅ Won (${slip.score || "?"}) +2 HP 🏆`;
+      if (p.status === "correct") {
+        statusText = `✅ Correct +${PREDICTION_CORRECT_HP} HP`;
         statusClass = "won";
-      } else if (slip.status === "lost") {
-        statusText = `❌ Lost (${slip.score || "?"})`;
+      } else if (p.status === "incorrect") {
+        statusText = "❌ Incorrect";
         statusClass = "lost";
       } else {
         statusText = "⏳ Pending";
         statusClass = "pending";
       }
 
-      // Build expandable picks HTML
-      let picksHtml = "";
-      if (slip.slip && slip.slip.length > 0) {
-        picksHtml = slip.slip.map(pick => {
-          const homeTeam = pick.homeTeam || "Home";
-          const awayTeam = pick.awayTeam || "Away";
-          return `
-            <div class="slip-pick-row">
-              <div class="slip-pick-team home">${escapeHtml(homeTeam)}</div>
-              <div class="slip-pick-vs">vs</div>
-              <div class="slip-pick-team away">${escapeHtml(awayTeam)}</div>
-              <div class="slip-pick-detail">
-                <span class="slip-pick-label">🎯 Pick</span>
-                <span class="slip-pick-value">${escapeHtml(formatPick(pick.pick))}</span>
-              </div>
-            </div>
-          `;
-        }).join("");
-      } else {
-        picksHtml = '<div style="font-size:12px;color:rgba(255,255,255,0.5);padding:8px;">No picks data available</div>';
-      }
-
-      html += `
+      return `
         <div class="slip-history-item ${statusClass}">
-          <div class="slip-history-header" data-target="${displayId}">
+          <div class="slip-history-header" style="cursor:default;">
             <div class="slip-history-header-left">
-              <span><strong>${dateStr}</strong></span>
+              <span><strong>${escapeHtml(p.homeTeam)} vs ${escapeHtml(p.awayTeam)}</strong></span>
               <span class="slip-history-status ${statusClass}">${statusText}</span>
             </div>
-            <span style="font-size:12px;color:rgba(255,255,255,0.5);">${slip.slip?.length || 0} picks</span>
-            <button class="slip-toggle-btn" data-target="${displayId}">🔽 View Picks</button>
-          </div>
-          <div id="${displayId}" class="slip-expanded-content" style="display:none;">
-            ${picksHtml}
+            <span style="font-size:12px;color:rgba(255,255,255,0.5);">${PICK_LABELS[p.pick] || p.pick}${p.finalScore ? ` · ${p.finalScore}` : ""}</span>
           </div>
         </div>
       `;
-    });
-
-    slipHistoryContainer.innerHTML = html;
-
-    // Attach toggle click handlers
-    slipHistoryContainer.querySelectorAll('.slip-toggle-btn, .slip-history-header').forEach(el => {
-      el.addEventListener('click', (e) => {
-        if (e.target.classList.contains('slip-toggle-btn')) return;
-        const targetId = el.dataset.target;
-        if (targetId) toggleSlipExpand(targetId);
-      });
-    });
-
-    slipHistoryContainer.querySelectorAll('.slip-toggle-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const targetId = btn.dataset.target;
-        if (targetId) toggleSlipExpand(targetId);
-      });
-    });
+    }).join("");
   } catch (err) {
     console.warn("Load history error:", err);
-    slipHistoryContainer.innerHTML = '<p class="helper-text" style="text-align:center;color:rgba(255,255,255,0.7);">Could not load history.</p>';
+    historyContainer.innerHTML = '<p class="helper-text" style="text-align:center;color:rgba(255,255,255,0.7);">Could not load history.</p>';
   }
 }
 
-/** Toggle expand/collapse for a slip history item */
-function toggleSlipExpand(targetId) {
-  const content = document.getElementById(targetId);
-  if (!content) return;
-  const isHidden = content.style.display === 'none';
-  content.style.display = isHidden ? 'grid' : 'none';
-
-  // Update toggle button text
-  const btn = document.querySelector(`.slip-toggle-btn[data-target="${targetId}"]`);
-  if (btn) {
-    btn.textContent = isHidden ? '🔼 Hide Picks' : '🔽 View Picks';
-  }
-}
-
-let pollIntervalId = null;
-let fixtureSubscription = null;
-
-async function loadFixturesForDate() {
-    if (fixtureFetchInProgress.current) return;
-    fixtureFetchInProgress.current = true;
-
-    try {
-        const fixtures = await fetchFixturesFromAPI();
-        fixtureCache.current = fixtures;
-        renderFixtures(fixtures);
-    } catch (err) {
-        console.error("Error loading fixtures:", err);
-        renderFixtures([]);
-    } finally {
-        fixtureFetchInProgress.current = false;
-    }
-}
-// ===== FEATURE 2: VIEW WINNING SLIP MODAL =====
-/**
- * Open a modal showing a user's winning slip details.
- */
-async function openWinningSlipModal(userName, slipId) {
-  // Remove any existing modal first
-  const oldModal = document.getElementById('winningSlipModal');
-  if (oldModal) oldModal.remove();
-
-  const modal = document.createElement('div');
-  modal.id = 'winningSlipModal';
-  modal.className = 'fb-modal';
-  modal.style.display = 'flex';
-  modal.innerHTML = `
-    <div class="fb-modal-overlay" id="winningSlipModalOverlay"></div>
-    <div class="fb-modal-card" style="max-width:500px;">
-      <div class="fb-modal-header">
-        <h3>🏆 Winning Prediction Slip</h3>
-        <button class="fb-modal-close" id="winningSlipModalClose">&times;</button>
-      </div>
-      <div class="winning-slip-modal-body">
-        <div style="text-align:center;padding:30px 0;color:#64748b;">⏳ Loading slip details...</div>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(modal);
-
-  // Close handlers
-  const closeBtn = document.getElementById('winningSlipModalClose');
-  const overlay = document.getElementById('winningSlipModalOverlay');
-  if (closeBtn) closeBtn.addEventListener('click', () => modal.remove());
-  if (overlay) overlay.addEventListener('click', () => modal.remove());
-
-  // Fetch the slip data
-  try {
-    const slipSnap = await getDoc(doc(db, "user_predictions", slipId));
-    if (!slipSnap.exists()) {
-      const body = modal.querySelector('.winning-slip-modal-body');
-      if (body) body.innerHTML = '<div style="text-align:center;padding:20px;color:#ef4444;">Slip not found.</div>';
-      return;
-    }
-    const slip = slipSnap.data();
-
-    const dateStr = slip.dateSubmitted || "—";
-    const scoreStr = slip.score || "?";
-    const picksCount = slip.slip?.length || 0;
-
-    let picksHtml = "";
-    if (slip.slip && slip.slip.length > 0) {
-      picksHtml = slip.slip.map(pick => {
-        const homeTeam = pick.homeTeam || "Home";
-        const awayTeam = pick.awayTeam || "Away";
-        return `
-          <div class="winning-slip-pick">
-            <div class="winning-slip-pick-team home">${escapeHtml(homeTeam)}</div>
-            <div class="winning-slip-pick-vs">vs</div>
-            <div class="winning-slip-pick-team away">${escapeHtml(awayTeam)}</div>
-            <div class="winning-slip-pick-detail">
-              <span class="winning-slip-pick-label">🎯 Pick</span>
-              <span class="winning-slip-pick-value">${escapeHtml(formatPick(pick.pick))}</span>
-            </div>
-          </div>
-        `;
-      }).join("");
-    } else {
-      picksHtml = '<div style="text-align:center;padding:12px;color:#94a3b8;">No picks data available</div>';
-    }
-
-    const body = modal.querySelector('.winning-slip-modal-body');
-    if (body) {
-      body.innerHTML = `
-        <div class="winning-slip-user">
-          <div class="winning-slip-avatar">🏆</div>
-          <div>
-            <div class="winning-slip-name">${escapeHtml(userName)}</div>
-            <div class="winning-slip-date">Submitted: ${dateStr} · Score: ${scoreStr}</div>
-          </div>
-        </div>
-        <div class="winning-slip-ticket">
-          <div class="winning-slip-ticket-header">
-            <span>🎯 Winning Ticket (${picksCount} picks)</span>
-            <span>✅ ${scoreStr} correct</span>
-          </div>
-          ${picksHtml}
-        </div>
-        <div class="winning-slip-badge">
-          🏆 +2 HP Awarded for 6+ correct predictions!
-        </div>
-      `;
-    }
-  } catch (err) {
-    console.error("Winning slip fetch error:", err);
-    const body = modal.querySelector('.winning-slip-modal-body');
-    if (body) body.innerHTML = '<div style="text-align:center;padding:20px;color:#ef4444;">Failed to load slip details.</div>';
-  }
-}
-
-// ===== 10. LEADERBOARD =====
+// ===== 8. LEADERBOARD =====
 async function loadLeaderboard() {
   if (!leaderboardContainer) return;
 
   try {
-    const q = query(
-      collection(db, "user_predictions"),
-      where("status", "==", "won"),
-      limit(100)
-    );
+    const q = query(collection(db, "predictions"), where("status", "==", "correct"), limit(500));
     const snap = await getDocs(q);
 
-    // Build user aggregates AND store winning slip IDs
-    const userRewards = {};
-    snap.docs.forEach(docSnap => {
-      const slip = docSnap.data();
-      if (!slip.userId) return;
-      if (!userRewards[slip.userId]) {
-        userRewards[slip.userId] = {
-          userId: slip.userId,
-          userName: slip.userName || "Anonymous",
-          totalSlips: 0,
-          hpEarned: 0,
-          winningSlipIds: []
-        };
+    const userStats = {};
+    snap.docs.forEach((docSnap) => {
+      const p = docSnap.data();
+      if (!p.userId) return;
+      if (!userStats[p.userId]) {
+        userStats[p.userId] = { userId: p.userId, userName: p.userName || "Anonymous", correct: 0, hpEarned: 0 };
       }
-      userRewards[slip.userId].totalSlips++;
-      userRewards[slip.userId].hpEarned += 2;
-      userRewards[slip.userId].winningSlipIds.push(docSnap.id);
+      userStats[p.userId].correct++;
+      userStats[p.userId].hpEarned += Number(p.pointsAwarded) || PREDICTION_CORRECT_HP;
     });
 
-    const sorted = Object.values(userRewards).sort((a, b) => b.hpEarned - a.hpEarned);
-
+    const sorted = Object.values(userStats).sort((a, b) => b.hpEarned - a.hpEarned);
     const currentUserId = currentUser?.uid;
 
     if (sorted.length === 0) {
       leaderboardContainer.innerHTML = `
         <div class="leaderboard-table">
           <div class="leaderboard-header">
-            <span>#</span>
-            <span>Player</span>
-            <span>HP 🏆</span>
-            <span>Slips</span>
+            <span>#</span><span>Player</span><span>HP 🏆</span><span>Correct</span>
           </div>
           <div class="leaderboard-row" style="grid-column:1/-1;text-align:center;color:rgba(255,255,255,0.5);padding:30px 0;">
-            <span>No winners yet. Be the first to get 6/7 correct! 🏆</span>
+            <span>No correct predictions yet. Be the first! 🏆</span>
           </div>
-        </div>
-        <div class="leaderboard-legend">
-          <p>🏆 Get <strong>6/7</strong> correct predictions to earn <strong>2 HP</strong> per slip!</p>
         </div>
       `;
       return;
@@ -839,47 +501,27 @@ async function loadLeaderboard() {
     leaderboardContainer.innerHTML = `
       <div class="leaderboard-table">
         <div class="leaderboard-header">
-          <span>#</span>
-          <span>Player</span>
-          <span>HP 🏆</span>
-          <span>Slips</span>
-          <span></span>
+          <span>#</span><span>Player</span><span>HP 🏆</span><span>Correct</span>
         </div>
-        ${sorted.map((u, i) => {
+        ${sorted.slice(0, 50).map((u, i) => {
           const isYou = u.userId === currentUserId;
           const rank = i + 1;
           const rankDisplay = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : `#${rank}`;
           const displayName = isYou ? `${u.userName} (You)` : u.userName;
-          const firstWinningSlipId = u.winningSlipIds[0] || null;
           return `
             <div class="leaderboard-row ${isYou ? "leaderboard-you" : ""}">
               <span class="leaderboard-rank">${rankDisplay}</span>
               <span class="leaderboard-name"><strong>${escapeHtml(displayName)}</strong></span>
-              <span class="leaderboard-pts"><strong>${formatHP(u.hpEarned)} HP</strong></span>
-              <span class="leaderboard-exact">${u.totalSlips}</span>
-              <span class="leaderboard-exact">
-                ${firstWinningSlipId ? `<button class="leaderboard-view-btn" data-user="${escapeHtml(u.userName)}" data-slip="${firstWinningSlipId}">🏆 View</button>` : ''}
-              </span>
+              <span class="leaderboard-pts"><strong>${u.hpEarned.toFixed(1)} HP</strong></span>
+              <span class="leaderboard-exact">${u.correct}</span>
             </div>
           `;
         }).join("")}
       </div>
       <div class="leaderboard-legend">
-        <p>🏆 Get <strong>6/7</strong> correct predictions to earn <strong>2 HP</strong> per slip!</p>
+        <p>🏆 Earn <strong>${PREDICTION_CORRECT_HP} HP</strong> for every correct prediction!</p>
       </div>
     `;
-
-    // Attach click handlers for View Winning Slip buttons
-    leaderboardContainer.querySelectorAll('.leaderboard-view-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const userName = btn.dataset.user;
-        const slipId = btn.dataset.slip;
-        if (slipId) {
-          openWinningSlipModal(userName, slipId);
-        }
-      });
-    });
   } catch (err) {
     console.error("Leaderboard error:", err);
     leaderboardContainer.innerHTML = '<div class="admin-error">Failed to load leaderboard.</div>';
@@ -901,26 +543,49 @@ async function loadUserProfile() {
   }
 }
 
+// ===== FIXTURE LOADING FOR THE SELECTED CALENDAR DAY =====
+async function loadFixturesForDate() {
+  if (fixtureFetchInProgress || !selectedDateStr) return;
+  fixtureFetchInProgress = true;
+
+  try {
+    const fixtures = await getFixturesByDate(selectedDateStr);
+    await loadUserPredictions();
+    renderFixtures(fixtures);
+    hasLoadedFixturesOnce = true;
+    await settlePendingPredictions();
+  } catch (err) {
+    console.error("Error loading fixtures:", err);
+    renderFixtures([]);
+    hasLoadedFixturesOnce = true;
+  } finally {
+    fixtureFetchInProgress = false;
+  }
+}
+
 function wireFixtureSubscription() {
-  if (fixtureSubscription) return;
-  fixtureSubscription = subscribeToFixtureUpdates((fixtures) => {
-    fixtureCache.current = fixtures;
-    renderFixtures(fixtures.map((fixture) => ({
-      fixture_id: fixture.fixture_id,
-      league: fixture.league_name,
-      league_logo: fixture.league_logo,
-      homeTeam: fixture.home_team_name,
-      homeTeamLogo: fixture.home_team_logo,
-      awayTeam: fixture.away_team_name,
-      awayTeamLogo: fixture.away_team_logo,
-      date: fixture.kickoff_time,
-      kickoff: fixture.kickoff_time,
-      status: fixture.status,
-      minute: fixture.minute,
-      homeScore: fixture.home_score,
-      awayScore: fixture.away_score
-    })));
+  if (fixtureUnsubscribe) return;
+  fixtureUnsubscribe = subscribeToFixtureUpdates((fixtures, cacheKey) => {
+    // Only re-render if the update matches the calendar day currently on screen.
+    if (cacheKey === `date:${selectedDateStr}`) {
+      renderFixtures(fixtures);
+    }
   });
+}
+
+// ===== AUTO-REFRESH POLLING (every 30 seconds) =====
+function startPolling() {
+  stopPolling();
+  pollIntervalId = setInterval(() => {
+    loadFixturesForDate();
+  }, 30000);
+}
+
+function stopPolling() {
+  if (pollIntervalId) {
+    clearInterval(pollIntervalId);
+    pollIntervalId = null;
+  }
 }
 
 // ===== AUTH STATE =====
@@ -936,64 +601,32 @@ onAuthStateChanged(auth, async (user) => {
       userStatus.classList.add("active");
     }
 
-    await loadSlipHistory();
-    await settleAllPendingSlips();
-    await updateDailyLimitCounter();
+    await loadUserPredictions();
+    await loadPredictionHistory();
   } else {
     currentUserUniqueId = "";
     currentUserName = "Guest";
-    todaySlipCount = 0;
+    userPredictions = new Map();
     if (userStatus) {
       userStatus.textContent = "Sign in to make predictions!";
       userStatus.classList.remove("active");
     }
-    if (dailyLimitCounter) {
-      dailyLimitCounter.textContent = "";
-    }
-    if (slipHistoryContainer) {
-      slipHistoryContainer.innerHTML = '<p class="helper-text" style="text-align:center;color:rgba(255,255,255,0.7);">Sign in to see your prediction history.</p>';
+    if (historyContainer) {
+      historyContainer.innerHTML = '<p class="helper-text" style="text-align:center;color:rgba(255,255,255,0.7);">Sign in to see your prediction history.</p>';
     }
   }
 
-  buildCalendar();
-  wireFixtureSubscription();
-  await loadFixturesForDate();
+  if (hasLoadedFixturesOnce) {
+    renderFixtures(latestFixtures);
+  }
   await loadLeaderboard();
-  updateSlipBanner();
 });
-
-// ===== SUBMIT BUTTON =====
-if (slipSubmitBtn) {
-  slipSubmitBtn.addEventListener("click", submitSlip);
-}
 
 // ===== INIT =====
-document.addEventListener("DOMContentLoaded", () => {
-  updateSlipBanner();
-});
-
 window.addEventListener("load", () => {
-  if (fixturesContainer && fixturesContainer.innerHTML.includes("Loading")) {
-    buildCalendar();
-    wireFixtureSubscription();
-    loadFixturesForDate();
-    loadLeaderboard();
-  }
-  updateSlipBanner();
+  buildCalendar();
+  wireFixtureSubscription();
+  loadFixturesForDate();
+  loadLeaderboard();
   startPolling();
 });
-
-// ===== AUTO-REFRESH POLLING (every 45 seconds) =====
-function startPolling() {
-    stopPolling();
-    pollIntervalId = setInterval(() => {
-        loadFixturesForDate();
-    }, 45000);
-}
-
-function stopPolling() {
-    if (pollIntervalId) {
-        clearInterval(pollIntervalId);
-        pollIntervalId = null;
-    }
-}

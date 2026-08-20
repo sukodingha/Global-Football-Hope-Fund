@@ -1187,6 +1187,14 @@ footer {
     color: #1a1a1a;
 }
 
+/* Ticking live match timer shown next to the status badge on prediction cards */
+.match-live-timer {
+    font-family: "Courier New", monospace;
+    font-weight: 700;
+    color: #ff5c4d;
+    font-size: 12px;
+}
+
 .match-teams {
     display: flex;
     align-items: center;

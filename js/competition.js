@@ -1,4 +1,4 @@
-import { getLiveFixtures } from "./fixturesService.js";
+import { getLiveFixtures } from "../services/fixturesService.js";
 
 function renderMatchesFromAPI(fixtures) {
     if (!fixtures || fixtures.length === 0) {

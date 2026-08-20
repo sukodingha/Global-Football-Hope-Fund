@@ -67,9 +67,9 @@
     <section class="section odds-section">
       <div class="section-heading">
         <h2>🎯 Match Prediction League</h2>
-        <p>Predict match outcomes (Winner + Total Goals) &amp; win <strong>2 Hope Points (HP)</strong> for 6+ correct predictions!</p>
+        <p>Predict the result of any match &mdash; <strong>Home Win, Draw, or Away Win</strong> &mdash; and earn <strong>Hope Points (HP)</strong> for every correct call!</p>
         <div style="font-size:13px;color:rgba(255,255,255,0.7);margin-top:8px;">
-          📋 Select at least <strong>7 matches</strong> to submit a prediction slip &nbsp;|&nbsp; 🎯 Pick Winner (1/X/2) + Total Goals per match &nbsp;|&nbsp; 🏆 Earn <strong>2 HP</strong> for 6+ correct
+          🎯 One prediction per match &nbsp;|&nbsp; 🔒 Locks automatically once the match kicks off &nbsp;|&nbsp; 🏆 Earn HP for correct predictions
         </div>
       </div>
 
@@ -84,25 +84,8 @@
       <!-- 5-day calendar selector -->
       <div id="dateCalendar" style="max-width:1200px;margin:0 auto 20px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center;"></div>
 
-      <!-- Selection slip banner -->
-      <div id="slipBanner" style="max-width:1200px;margin:0 auto 20px;background:linear-gradient(135deg,rgba(0,200,83,0.12),rgba(0,200,83,0.05));border:1px solid rgba(0,200,83,0.25);border-radius:14px;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-        <div style="display:flex;align-items:center;gap:12px;flex:1;min-width:200px;">
-          <span style="font-size:22px;">📋</span>
-          <div style="flex:1;">
-            <div style="font-size:14px;font-weight:700;color:#fff;">Selected: <span id="slipCount">0 / 7</span> matches</div>
-            <div style="width:100%;height:8px;background:rgba(255,255,255,0.12);border-radius:999px;margin-top:6px;overflow:hidden;">
-              <div id="slipProgress" style="height:100%;background:linear-gradient(90deg,#00c853,#34d399);border-radius:999px;transition:width 0.3s ease;width:0%;text-align:center;font-size:9px;font-weight:700;color:#fff;line-height:8px;"></div>
-            </div>
-          </div>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-          <span id="dailyLimitCounter" class="daily-limit-counter"></span>
-          <button id="slipSubmitBtn" disabled style="padding:10px 22px;border:none;border-radius:999px;background:linear-gradient(90deg,#64748b,#475569);color:white;font-weight:700;font-size:14px;cursor:pointer;transition:all 0.2s ease;white-space:nowrap;">📋 Select 7 matches</button>
-        </div>
-      </div>
-
-      <!-- Upcoming fixtures -->
-      <h3 style="color:#fff;margin-bottom:16px;">📅 Upcoming Fixtures</h3>
+      <!-- Fixtures -->
+      <h3 style="color:#fff;margin-bottom:16px;">📅 Fixtures</h3>
       <div class="odds-grid" id="predictionFixtures">
         <div class="card" style="grid-column:1/-1;text-align:center;background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.7);">
           <p style="padding:40px 0;">⏳ Loading fixtures...</p>
@@ -112,36 +95,22 @@
       <!-- Leaderboard -->
       <div class="section-heading" style="margin-top:60px;">
         <h3>🏆 Community Leaderboard</h3>
-        <p>Top predictors ranked by points. Predictions scored: +3 pts exact score, +1 pt correct outcome.</p>
+        <p>Top predictors ranked by Hope Points earned from correct predictions.</p>
       </div>
       <div id="predictionLeaderboard" class="leaderboard-container">
         <!-- Leaderboard injected by JS -->
       </div>
 
-      <!-- Slip history -->
+      <!-- Prediction history -->
       <div class="section-heading" style="margin-top:60px;">
         <h3>📜 Your Prediction History</h3>
-        <p>Track your submitted slips and settlement results.</p>
+        <p>Track every match you've predicted and its result.</p>
       </div>
-      <div id="slipHistory" style="max-width:700px;margin:0 auto;display:grid;gap:8px;">
+      <div id="predictionHistory" style="max-width:700px;margin:0 auto;display:grid;gap:8px;">
         <p class="helper-text" style="text-align:center;color:rgba(255,255,255,0.7);">Loading history...</p>
       </div>
     </section>
   </main>
-
-  <!-- ===== WINNING SLIP MODAL ===== -->
-  <div id="winningSlipModal" class="fb-modal" hidden>
-    <div class="fb-modal-overlay" id="winningSlipModalOverlay"></div>
-    <div class="fb-modal-card" style="max-width:500px;">
-      <div class="fb-modal-header">
-        <h3>🏆 Winning Prediction Slip</h3>
-        <button class="fb-modal-close" id="winningSlipModalClose">&times;</button>
-      </div>
-      <div id="winningSlipModalBody" class="winning-slip-modal-body">
-        <!-- Injected by JS -->
-      </div>
-    </div>
-  </div>
 
   <!-- ===== AUTH MODAL ===== -->
   <div id="authModal" class="auth-modal">
