@@ -5,8 +5,9 @@
 
 import { auth, db } from "./firebase.js";
 import { onAuthStateChanged, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { doc, getDoc, setDoc, addDoc, collection, query, where, orderBy, onSnapshot, getDocs, increment, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { doc, getDoc, setDoc, updateDoc, addDoc, collection, query, where, orderBy, onSnapshot, getDocs, increment, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { updateHeaderAvatar } from "./auth.js";
+import { normalizePrivacy } from "./privacy.js";
 
 // Import rewards system
 import {
@@ -57,6 +58,10 @@ const editFavTeam = document.getElementById("editFavTeam");
 const saveProfileBtn = document.getElementById("saveProfileBtn");
 const editProfileToggleBtn = document.getElementById("editProfileToggleBtn");
 const profileEditSection = document.getElementById("profileEditSection");
+const privacySettingsToggleBtn = document.getElementById("privacySettingsToggleBtn");
+const privacySettingsPanel = document.getElementById("privacySettingsPanel");
+const savePrivacySettingsBtn = document.getElementById("savePrivacySettingsBtn");
+const privacySettingsMsg = document.getElementById("privacySettingsMsg");
 
 const WALL_POSTS_KEY = "gfhf_wall_posts";
 
@@ -70,6 +75,58 @@ function showWallMessage(text, type = "success") {
   if (!wallMessage) return;
   wallMessage.textContent = text;
   wallMessage.className = `message ${type}`;
+}
+
+// ===== PRIVACY SETTINGS (Dashboard) =====
+// Maps each <select> element id to the Firestore field it controls on the
+// user's users/{uid} document.
+const PRIVACY_SELECT_FIELDS = {
+  accountTypeSelect: "accountType",
+  postsPrivacySelect: "posts",
+  photosPrivacySelect: "photos",
+  videosPrivacySelect: "videos",
+  predictionPrivacySelect: "predictionHistory",
+  onlinePrivacySelect: "onlineStatus",
+  lastActivePrivacySelect: "lastActive",
+  profilePrivacySelect: "profile"
+};
+
+function showPrivacySettingsMessage(text, type = "success") {
+  if (!privacySettingsMsg) return;
+  privacySettingsMsg.textContent = text;
+  privacySettingsMsg.className = `message ${type}`;
+  privacySettingsMsg.style.display = "block";
+  if (type === "success") {
+    setTimeout(() => { privacySettingsMsg.style.display = "none"; }, 3500);
+  }
+}
+
+function populatePrivacySettingsForm(profile = {}) {
+  Object.entries(PRIVACY_SELECT_FIELDS).forEach(([selectId, field]) => {
+    const el = document.getElementById(selectId);
+    if (!el) return;
+    el.value = field === "accountType"
+      ? (profile.accountType === "private" ? "private" : "public")
+      : normalizePrivacy(profile[field]);
+  });
+}
+
+async function savePrivacySettings(userId) {
+  if (!userId) return;
+  const updates = {};
+  Object.entries(PRIVACY_SELECT_FIELDS).forEach(([selectId, field]) => {
+    const el = document.getElementById(selectId);
+    if (!el) return;
+    updates[field] = field === "accountType" ? el.value : normalizePrivacy(el.value);
+  });
+
+  try {
+    await updateDoc(doc(db, "users", userId), updates);
+    showPrivacySettingsMessage("✅ Privacy settings saved successfully!", "success");
+  } catch (err) {
+    console.error("Could not save privacy settings:", err);
+    showPrivacySettingsMessage("❌ Failed to save privacy settings. Please try again.", "error");
+  }
 }
 
 function getWallPosts() {
@@ -582,6 +639,22 @@ if (saveProfileBtn) {
   });
 }
 
+// Wire up the Privacy Settings toggle button
+if (privacySettingsToggleBtn && privacySettingsPanel) {
+  privacySettingsToggleBtn.addEventListener("click", () => {
+    const isHidden = privacySettingsPanel.style.display === "none" || privacySettingsPanel.style.display === "";
+    privacySettingsPanel.style.display = isHidden ? "block" : "none";
+    privacySettingsToggleBtn.textContent = isHidden ? "🙈 Hide Privacy Settings" : "🔒 Privacy Settings";
+  });
+}
+
+// Wire up the Save Privacy Settings button
+if (savePrivacySettingsBtn) {
+  savePrivacySettingsBtn.addEventListener("click", () => {
+    savePrivacySettings(auth.currentUser?.uid);
+  });
+}
+
 onAuthStateChanged(auth, async (user) => {
   if (!user) {
     showMessage("Please sign in to access your dashboard.", "error");
@@ -651,6 +724,9 @@ onAuthStateChanged(auth, async (user) => {
 
   // ===== Load editable profile fields =====
   loadEditableProfile(user);
+
+  // ===== Privacy Settings: prefill from the already-loaded profile doc =====
+  populatePrivacySettingsForm(profile);
 
   // Render photo gallery
   renderPhotoGallery(user.uid);

@@ -95,7 +95,6 @@ const liveVideoStatus = document.getElementById("liveVideoStatus");
 const liveVideoBadge = document.getElementById("liveVideoBadge");
 const liveViewerCount = document.getElementById("liveViewerCount");
 const liveVideoTimer = document.getElementById("liveVideoTimer");
-const privacySettingsPanel = document.getElementById("privacySettingsPanel");
 
 // Profile Modal
 const profileModal = document.getElementById("profileModal");
@@ -606,39 +605,9 @@ if (liveVideoClose) liveVideoClose.addEventListener("click", closeLiveVideoModal
 if (liveVideoStartBtn) liveVideoStartBtn.addEventListener("click", startLiveVideo);
 if (liveVideoEndBtn) liveVideoEndBtn.addEventListener("click", endLiveVideo);
 
-function renderPrivacySettings() {
-  if (!privacySettingsPanel) return;
-  privacySettingsPanel.innerHTML = `
-    <div class="privacy-settings-card-inner">
-      <h4>Privacy Settings</h4>
-      <div class="privacy-row"><label>Account Type</label><select id="accountTypeSelect"><option value="public" ${privacySettings.accountType === 'public' ? 'selected' : ''}>Public Account</option><option value="private" ${privacySettings.accountType === 'private' ? 'selected' : ''}>Private Account</option></select></div>
-      <div class="privacy-row"><label>Posts</label><select id="postsPrivacySelect"><option value="everyone" ${privacySettings.posts === 'everyone' ? 'selected' : ''}>Everyone</option><option value="teammates" ${privacySettings.posts === 'teammates' ? 'selected' : ''}>Teammates Only</option><option value="me" ${privacySettings.posts === 'me' ? 'selected' : ''}>Only Me</option></select></div>
-      <div class="privacy-row"><label>Photos</label><select id="photosPrivacySelect"><option value="everyone" ${privacySettings.photos === 'everyone' ? 'selected' : ''}>Everyone</option><option value="teammates" ${privacySettings.photos === 'teammates' ? 'selected' : ''}>Teammates Only</option><option value="me" ${privacySettings.photos === 'me' ? 'selected' : ''}>Only Me</option></select></div>
-      <div class="privacy-row"><label>Videos</label><select id="videosPrivacySelect"><option value="everyone" ${privacySettings.videos === 'everyone' ? 'selected' : ''}>Everyone</option><option value="teammates" ${privacySettings.videos === 'teammates' ? 'selected' : ''}>Teammates Only</option><option value="me" ${privacySettings.videos === 'me' ? 'selected' : ''}>Only Me</option></select></div>
-      <div class="privacy-row"><label>Prediction History</label><select id="predictionPrivacySelect"><option value="everyone" ${privacySettings.predictionHistory === 'everyone' ? 'selected' : ''}>Everyone</option><option value="teammates" ${privacySettings.predictionHistory === 'teammates' ? 'selected' : ''}>Teammates Only</option><option value="me" ${privacySettings.predictionHistory === 'me' ? 'selected' : ''}>Only Me</option></select></div>
-      <div class="privacy-row"><label>Online Status</label><select id="onlinePrivacySelect"><option value="everyone" ${privacySettings.onlineStatus === 'everyone' ? 'selected' : ''}>Everyone</option><option value="teammates" ${privacySettings.onlineStatus === 'teammates' ? 'selected' : ''}>Teammates Only</option><option value="me" ${privacySettings.onlineStatus === 'me' ? 'selected' : ''}>Only Me</option></select></div>
-      <div class="privacy-row"><label>Last Active</label><select id="lastActivePrivacySelect"><option value="everyone" ${privacySettings.lastActive === 'everyone' ? 'selected' : ''}>Everyone</option><option value="teammates" ${privacySettings.lastActive === 'teammates' ? 'selected' : ''}>Teammates Only</option><option value="me" ${privacySettings.lastActive === 'me' ? 'selected' : ''}>Only Me</option></select></div>
-      <div class="privacy-row"><label>Profile</label><select id="profilePrivacySelect"><option value="everyone" ${privacySettings.profile === 'everyone' ? 'selected' : ''}>Everyone</option><option value="teammates" ${privacySettings.profile === 'teammates' ? 'selected' : ''}>Teammates Only</option><option value="me" ${privacySettings.profile === 'me' ? 'selected' : ''}>Only Me</option></select></div>
-    </div>
-  `;
-}
-
-async function savePrivacySettings() {
-  if (!currentUser?.uid) return;
-  try {
-    privacySettings.posts = normalizePrivacy(privacySettings.posts || 'everyone');
-    privacySettings.photos = normalizePrivacy(privacySettings.photos || 'everyone');
-    privacySettings.videos = normalizePrivacy(privacySettings.videos || 'everyone');
-    privacySettings.predictionHistory = normalizePrivacy(privacySettings.predictionHistory || 'everyone');
-    privacySettings.onlineStatus = normalizePrivacy(privacySettings.onlineStatus || 'everyone');
-    privacySettings.lastActive = normalizePrivacy(privacySettings.lastActive || 'everyone');
-    privacySettings.profile = normalizePrivacy(privacySettings.profile || 'everyone');
-    await updateDoc(doc(db, 'users', currentUser.uid), privacySettings);
-  } catch (err) {
-    console.warn('Could not save privacy settings:', err);
-  }
-}
-
+// Read-only fetch of the user's saved default post-privacy preference
+// (used to prefill the per-post privacy selector in the Create Post modal).
+// The full Privacy Settings UI now lives on the Dashboard page.
 async function loadPrivacySettings() {
   if (!currentUser?.uid) return;
   try {
@@ -647,40 +616,11 @@ async function loadPrivacySettings() {
       const data = snap.data();
       privacySettings = { ...privacySettings, ...data };
       privacySettings.posts = normalizePrivacy(privacySettings.posts || 'everyone');
-      privacySettings.photos = normalizePrivacy(privacySettings.photos || 'everyone');
-      privacySettings.videos = normalizePrivacy(privacySettings.videos || 'everyone');
-      privacySettings.predictionHistory = normalizePrivacy(privacySettings.predictionHistory || 'everyone');
-      privacySettings.onlineStatus = normalizePrivacy(privacySettings.onlineStatus || 'everyone');
-      privacySettings.lastActive = normalizePrivacy(privacySettings.lastActive || 'everyone');
-      privacySettings.profile = normalizePrivacy(privacySettings.profile || 'everyone');
       if (postPrivacySelect) postPrivacySelect.value = privacySettings.posts || 'everyone';
-      renderPrivacySettings();
     }
   } catch (err) {
     console.warn('Could not load privacy settings:', err);
   }
-}
-
-function bindPrivacySettings() {
-  if (!privacySettingsPanel) return;
-  renderPrivacySettings();
-  const selects = ['accountTypeSelect','postsPrivacySelect','photosPrivacySelect','videosPrivacySelect','predictionPrivacySelect','onlinePrivacySelect','lastActivePrivacySelect','profilePrivacySelect'];
-  selects.forEach((id) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.addEventListener('change', async () => {
-      if (id === 'accountTypeSelect') privacySettings.accountType = el.value;
-      if (id === 'postsPrivacySelect') privacySettings.posts = el.value;
-      if (id === 'photosPrivacySelect') privacySettings.photos = el.value;
-      if (id === 'videosPrivacySelect') privacySettings.videos = el.value;
-      if (id === 'predictionPrivacySelect') privacySettings.predictionHistory = el.value;
-      if (id === 'onlinePrivacySelect') privacySettings.onlineStatus = el.value;
-      if (id === 'lastActivePrivacySelect') privacySettings.lastActive = el.value;
-      if (id === 'profilePrivacySelect') privacySettings.profile = el.value;
-      if (postPrivacySelect && id === 'postsPrivacySelect') postPrivacySelect.value = privacySettings.posts || 'everyone';
-      await savePrivacySettings();
-    });
-  });
 }
 
 // ===== FEED FILTER =====
@@ -2026,7 +1966,6 @@ loadFeed();
 listenToChat();
 renderMembers();
 renderFriendRequests();
-bindPrivacySettings();
 loadUserDirectory(); // Load @mention directory
 
 // Initialize the Fund Wallet modal (must be called after modal HTML is in DOM)
