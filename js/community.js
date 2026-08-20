@@ -37,6 +37,10 @@ let currentUserAvatar = "👤";
 let unsubscribeFeed = null;
 let activeInterest = "All";
 let activeDMUserId = null;
+const chatPanelState = {
+  community: false,
+  teammates: false
+};
 let pendingFiles = [];
 let pendingMediaType = "image";
 let userDirectory = {}; // uniqueId -> { displayName, uid }
@@ -117,6 +121,56 @@ const dmChatForm = document.getElementById("dmChatForm");
 const dmMessageInput = document.getElementById("dmMessageInput");
 const communityChatList = document.getElementById("communityChatList");
 const communityChatForm = document.getElementById("communityChatForm");
+
+function setChatPanelState(panelKey, minimized) {
+  const panel = panelKey === "community"
+    ? document.getElementById("community-chat-box")
+    : document.getElementById("teammate-chat-box");
+
+  if (!panel) return;
+
+  const btn = panel.querySelector(".chat-panel-toggle");
+  const content = panel.querySelector(".chat-panel-content");
+  const label = panelKey === "community" ? "Community Chat" : "Teammates chat";
+
+  panel.classList.toggle("is-minimized", minimized);
+  panel.dataset.minimized = String(minimized);
+  panel.setAttribute("aria-expanded", String(!minimized));
+
+  if (content) {
+    content.hidden = minimized;
+  }
+
+  if (btn) {
+    btn.setAttribute("aria-label", minimized ? `Expand ${label}` : `Minimize ${label}`);
+    btn.innerHTML = minimized
+      ? '<i class="fa-solid fa-chevron-up"></i>'
+      : '<i class="fa-solid fa-chevron-down"></i>';
+  }
+
+  chatPanelState[panelKey] = minimized;
+}
+
+function toggleChatPanel(panelKey) {
+  const panel = panelKey === "community"
+    ? document.getElementById("community-chat-box")
+    : document.getElementById("teammate-chat-box");
+
+  if (!panel) return;
+  setChatPanelState(panelKey, !panel.classList.contains("is-minimized"));
+}
+
+document.querySelectorAll(".chat-panel-toggle").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const panelKey = btn.dataset.panel;
+    if (panelKey === "community" || panelKey === "teammates") {
+      toggleChatPanel(panelKey);
+    }
+  });
+});
+
+setChatPanelState("community", false);
+setChatPanelState("teammates", false);
 
 // Teammates
 const teammatesList = document.getElementById("teammatesList");
@@ -2223,18 +2277,17 @@ if (sidebarToggleBtn && floatingSidebar) {
 
 // ===== WALLET: ADD FUND WALLET BUTTON TO SIDEBAR =====
 (function initCommunityWallet() {
-  // Inject "Fund Wallet" button into the teammate-chat-box header area
+  // Inject "Fund Wallet" button into the teammate-chat-box header actions
   const teammateChatBox = document.getElementById("teammate-chat-box");
   if (teammateChatBox) {
-    const header = teammateChatBox.querySelector("h4");
-    if (header) {
-      // Add Fund Wallet button next to the header
+    const actions = teammateChatBox.querySelector(".chat-panel-actions");
+    if (actions) {
       const walletBtn = document.createElement("button");
       walletBtn.className = "mini-btn fund-wallet-trigger-btn";
       walletBtn.type = "button";
       walletBtn.textContent = "💰 Fund Wallet";
-      walletBtn.style.cssText = "margin-left:8px;padding:4px 12px;font-size:11px;background:#00c853;color:white;border:none;border-radius:999px;font-weight:700;cursor:pointer;";
-      header.appendChild(walletBtn);
+      walletBtn.style.cssText = "padding:4px 12px;font-size:11px;background:#00c853;color:white;border:none;border-radius:999px;font-weight:700;cursor:pointer;";
+      actions.appendChild(walletBtn);
     }
   }
 

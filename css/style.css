@@ -4041,7 +4041,7 @@ footer {
     z-index: 1000;
 }
 
-#community-chat-box {
+.chat-panel {
     height: 280px;
     display: flex;
     flex-direction: column;
@@ -4050,16 +4050,76 @@ footer {
     box-shadow: 0 4px 12px rgba(0,0,0,0.1);
     padding: 14px 16px;
     gap: 8px;
+    transition: height 0.25s ease, box-shadow 0.2s ease, transform 0.2s ease;
+    overflow: hidden;
 }
 
-#community-chat-box h4 {
+.chat-panel.is-minimized {
+    height: 54px;
+    box-shadow: 0 4px 12px rgba(11,45,77,0.12);
+}
+
+.chat-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #eef2f6;
+    flex-shrink: 0;
+}
+
+.chat-panel.is-minimized .chat-panel-header {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.chat-panel-header h4 {
     margin: 0;
     font-size: 15px;
     font-weight: 700;
     color: #0b2d4d;
-    padding-bottom: 6px;
-    border-bottom: 1px solid #eef2f6;
+    flex: 1;
+    min-width: 0;
+}
+
+.chat-panel-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     flex-shrink: 0;
+}
+
+.chat-panel-toggle {
+    width: 28px;
+    height: 28px;
+    border: 1px solid #dfe7f0;
+    background: #f8fafc;
+    color: #0b2d4d;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.2s ease;
+    padding: 0;
+}
+
+.chat-panel-toggle:hover {
+    background: #edf4fb;
+    transform: translateY(-1px);
+}
+
+.chat-panel-content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 0;
+    flex: 1;
+}
+
+.chat-panel.is-minimized .chat-panel-content {
+    display: none;
 }
 
 #community-chat-box .comment-form {
@@ -4092,27 +4152,6 @@ footer {
     font-size: 13px !important;
     margin-top: 0 !important;
     white-space: nowrap;
-}
-
-#teammate-chat-box {
-    height: 280px;
-    display: flex;
-    flex-direction: column;
-    background: #ffffff;
-    border-radius: 10px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-    padding: 14px 16px;
-    gap: 8px;
-}
-
-#teammate-chat-box h4 {
-    margin: 0;
-    font-size: 15px;
-    font-weight: 700;
-    color: #0b2d4d;
-    padding-bottom: 6px;
-    border-bottom: 1px solid #eef2f6;
-    flex-shrink: 0;
 }
 
 /* Internal scrolling for messages and teammates list */
@@ -4166,10 +4205,14 @@ footer {
         box-sizing: border-box;
     }
 
-    #community-chat-box,
-    #teammate-chat-box {
+    .chat-panel {
         height: auto;
         min-height: 200px;
+    }
+
+    .chat-panel.is-minimized {
+        height: 54px;
+        min-height: 54px;
     }
 
     .sidebar-toggle-btn {

@@ -186,29 +186,47 @@
   <!-- ===== FLOATING CHAT SIDEBAR (fixed on right edge) ===== -->
   <div id="floating-chat-sidebar">
     <!-- TOP BOX: Community Chat -->
-    <div id="community-chat-box">
-      <h4>💬 Community Chat</h4>
-      <div class="chat-messages-container" id="communityChatList"></div>
-      <form id="communityChatForm" class="comment-form">
-        <input id="chatMessage" name="chatMessage" type="text" placeholder="Write a message..." required>
-        <button class="btn" type="submit">Send</button>
-      </form>
+    <div id="community-chat-box" class="chat-panel" data-panel-key="community">
+      <div class="chat-panel-header">
+        <h4>💬 Community Chat</h4>
+        <div class="chat-panel-actions">
+          <button class="chat-panel-toggle" type="button" data-panel="community" aria-label="Minimize Community Chat">
+            <i class="fa-solid fa-chevron-down"></i>
+          </button>
+        </div>
+      </div>
+      <div class="chat-panel-content">
+        <div class="chat-messages-container" id="communityChatList"></div>
+        <form id="communityChatForm" class="comment-form">
+          <input id="chatMessage" name="chatMessage" type="text" placeholder="Write a message..." required>
+          <button class="btn" type="submit">Send</button>
+        </form>
+      </div>
     </div>
 
     <!-- BOTTOM BOX: My Teammates and Chat Box -->
-    <div id="teammate-chat-box">
-      <h4>👥 My Teammates and Chat Box</h4>
-      <div class="teammates-list-container" id="teammatesList">
-        <p class="helper-text" style="font-size:13px;">Loading teammates...</p>
+    <div id="teammate-chat-box" class="chat-panel" data-panel-key="teammates">
+      <div class="chat-panel-header">
+        <h4>👥 My Teammates and Chat Box</h4>
+        <div class="chat-panel-actions">
+          <button class="chat-panel-toggle" type="button" data-panel="teammates" aria-label="Minimize teammates chat">
+            <i class="fa-solid fa-chevron-down"></i>
+          </button>
+        </div>
       </div>
-      <div id="dmChatPanel" class="dm-chat-inner-panel" hidden>
-        <div class="dm-chat-divider"></div>
-        <h4 id="dmChatWith" class="dm-chat-header">💬 Direct Message</h4>
-        <div id="dmChatMessages" class="chat-list"></div>
-        <form id="dmChatForm" class="comment-form">
-          <input id="dmMessageInput" type="text" placeholder="Type a message..." required>
-          <button class="btn" type="submit">Send</button>
-        </form>
+      <div class="chat-panel-content">
+        <div class="teammates-list-container" id="teammatesList">
+          <p class="helper-text" style="font-size:13px;">Loading teammates...</p>
+        </div>
+        <div id="dmChatPanel" class="dm-chat-inner-panel" hidden>
+          <div class="dm-chat-divider"></div>
+          <h4 id="dmChatWith" class="dm-chat-header">💬 Direct Message</h4>
+          <div id="dmChatMessages" class="chat-list"></div>
+          <form id="dmChatForm" class="comment-form">
+            <input id="dmMessageInput" type="text" placeholder="Type a message..." required>
+            <button class="btn" type="submit">Send</button>
+          </form>
+        </div>
       </div>
     </div>
   </div>
