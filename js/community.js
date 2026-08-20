@@ -28,6 +28,7 @@ import {
 const CLOUDINARY_CLOUD_NAME = "d8obkydb";
 const CLOUDINARY_UPLOAD_PRESET = "chat_uploads";
 const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/upload`;
+const MAX_CLIP_SECONDS = 30; // Hard cap for live recordings + device video uploads
 
 // ===== STATE =====
 let currentUser = null;
@@ -45,6 +46,9 @@ let liveStreamStartTime = null;
 let liveStreamActive = false;
 let currentLiveStreamId = null;
 let cameraStream = null;
+let liveCameraStream = null;
+let liveRecorder = null;
+let liveRecordedChunks = [];
 let capturedPhotoDataUrl = null;
 let privacySettings = {
   accountType: "public",
@@ -264,6 +268,15 @@ function closePostModal() {
   postModal.hidden = true;
 }
 
+/** Sets the Create Post status box text/style, clearing any inline "tip" styling. */
+function setPostModalStatus(text, type = "info") {
+  if (!postModalStatus) return;
+  postModalStatus.className = type === "info" ? "message" : `message ${type}`;
+  postModalStatus.style.background = "";
+  postModalStatus.style.color = "";
+  postModalStatus.textContent = text;
+}
+
 if (createPostInput) createPostInput.addEventListener("click", openPostModal);
 if (openPhotoBtn) openPhotoBtn.addEventListener("click", (e) => { e.preventDefault(); openPostModal(); postModalFile?.click(); });
 if (postModalOverlay) postModalOverlay.addEventListener("click", closePostModal);
@@ -309,16 +322,149 @@ function showMediaPreview(file) {
   reader.readAsDataURL(file);
 }
 
-if (postModalFile) {
-  postModalFile.addEventListener("change", (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    if (file.size > 10 * 1024 * 1024 * 60) {
-      postModalStatus.className = "message error";
-      postModalStatus.textContent = "Video must be 10 minutes or less.";
+// ===== 30-SECOND VIDEO CAP (device uploads + recorded clips) =====
+/** Read a video File's duration (in seconds) without fully decoding it. */
+function getVideoDuration(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const probe = document.createElement('video');
+    probe.preload = 'metadata';
+    probe.src = url;
+    probe.onloadedmetadata = () => {
+      const duration = probe.duration;
+      URL.revokeObjectURL(url);
+      resolve(duration);
+    };
+    probe.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Could not read video file.'));
+    };
+  });
+}
+
+/**
+ * Re-encode a video File down to only its first MAX_CLIP_SECONDS seconds using
+ * <video>.captureStream() + MediaRecorder (no server-side transcoding needed).
+ */
+function trimVideoTo30Seconds(file, onProgress) {
+  return new Promise((resolve, reject) => {
+    if (!window.MediaRecorder) {
+      reject(new Error("Your browser can't auto-trim video. Please choose a clip 30 seconds or shorter."));
       return;
     }
-    showMediaPreview(file);
+
+    const url = URL.createObjectURL(file);
+    const videoEl = document.createElement('video');
+    videoEl.src = url;
+    videoEl.muted = true; // avoids autoplay-policy issues; captured stream still includes audio
+    videoEl.playsInline = true;
+    videoEl.style.cssText = "position:fixed;left:-9999px;width:1px;height:1px;";
+    document.body.appendChild(videoEl);
+
+    const cleanup = () => {
+      videoEl.pause();
+      videoEl.remove();
+      URL.revokeObjectURL(url);
+    };
+
+    videoEl.onloadedmetadata = async () => {
+      try {
+        const captureFn = videoEl.captureStream?.bind(videoEl) || videoEl.mozCaptureStream?.bind(videoEl);
+        if (!captureFn) {
+          cleanup();
+          reject(new Error("Your browser can't auto-trim video. Please choose a clip 30 seconds or shorter."));
+          return;
+        }
+
+        const stream = captureFn();
+        const mimeType = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
+          .find((type) => MediaRecorder.isTypeSupported?.(type)) || '';
+        const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+        const chunks = [];
+        recorder.ondataavailable = (ev) => { if (ev.data.size > 0) chunks.push(ev.data); };
+        recorder.onerror = () => {
+          cleanup();
+          reject(new Error('Video trimming failed.'));
+        };
+        recorder.onstop = () => {
+          cleanup();
+          const blob = new Blob(chunks, { type: mimeType || 'video/webm' });
+          resolve(new File([blob], `trimmed-${Date.now()}.webm`, { type: blob.type }));
+        };
+
+        onProgress?.(`✂️ Trimming to the first ${MAX_CLIP_SECONDS} seconds...`);
+        recorder.start();
+        await videoEl.play();
+
+        const stopAt = Math.min(MAX_CLIP_SECONDS, videoEl.duration || MAX_CLIP_SECONDS);
+        const checkProgress = () => {
+          if (recorder.state === 'inactive') return;
+          if (videoEl.currentTime >= stopAt) {
+            recorder.stop();
+            return;
+          }
+          requestAnimationFrame(checkProgress);
+        };
+        checkProgress();
+
+        // Safety net in case the rAF loop stalls (e.g. backgrounded tab).
+        setTimeout(() => {
+          if (recorder.state !== 'inactive') recorder.stop();
+        }, (stopAt + 2) * 1000);
+      } catch (err) {
+        cleanup();
+        reject(err);
+      }
+    };
+
+    videoEl.onerror = () => {
+      cleanup();
+      reject(new Error('Could not read video file.'));
+    };
+  });
+}
+
+/** Returns the file unchanged if it's already <=30s, otherwise trims it down. */
+async function ensureVideoWithin30Seconds(file, onProgress) {
+  const duration = await getVideoDuration(file);
+  if (!duration || !isFinite(duration) || duration <= MAX_CLIP_SECONDS + 0.25) {
+    return file;
+  }
+  onProgress?.(`✂️ This video is ${Math.round(duration)}s long — trimming to the first ${MAX_CLIP_SECONDS} seconds...`);
+  return trimVideoTo30Seconds(file, onProgress);
+}
+
+if (postModalFile) {
+  postModalFile.addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('video/')) {
+      if (file.size > 15 * 1024 * 1024) {
+        setPostModalStatus("Image must be 15MB or less.", "error");
+        return;
+      }
+      showMediaPreview(file);
+      return;
+    }
+
+    if (file.size > 300 * 1024 * 1024) {
+      setPostModalStatus("Video file is too large.", "error");
+      return;
+    }
+
+    setPostModalStatus("⏳ Checking video length...");
+    postModalSubmit.disabled = true;
+    try {
+      const finalFile = await ensureVideoWithin30Seconds(file, (msg) => setPostModalStatus(msg));
+      setPostModalStatus("");
+      showMediaPreview(finalFile);
+    } catch (err) {
+      console.error("Video trim error:", err);
+      setPostModalStatus(err.message || "This video could not be processed.", "error");
+    } finally {
+      postModalSubmit.disabled = false;
+    }
   });
 }
 
@@ -545,15 +691,61 @@ function dataURLToFile(dataUrl, filename) {
 
 function openLiveVideoModal() {
   if (!liveVideoModal) return;
+  if (!currentUser) {
+    document.getElementById("authModal")?.classList.add("auth-modal--open");
+    return;
+  }
   liveVideoModal.hidden = false;
-  liveVideoStatus.textContent = "Start a live broadcast for up to 5 minutes.";
+  liveVideoStatus.textContent = `Record a short clip — up to ${MAX_CLIP_SECONDS} seconds.`;
   liveVideoBadge.hidden = true;
-  liveViewerCount.textContent = "👁 0 viewers";
+  if (liveViewerCount) liveViewerCount.textContent = "";
   liveVideoTimer.textContent = "⏱ 00:00";
   liveVideoEndBtn.hidden = true;
+  liveVideoStartBtn.hidden = false;
+  liveVideoStartBtn.disabled = true;
+  liveVideoStartBtn.textContent = "Starting camera...";
+  requestLiveCamera();
+}
+
+async function requestLiveCamera() {
+  try {
+    liveCameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: true });
+    liveVideoPreview.srcObject = liveCameraStream;
+    liveVideoStartBtn.disabled = false;
+    liveVideoStartBtn.textContent = "🔴 Start Recording";
+  } catch (err) {
+    liveVideoStatus.className = "message error";
+    liveVideoStatus.textContent = "Camera/microphone access was denied or unavailable.";
+    liveVideoStartBtn.disabled = true;
+    liveVideoStartBtn.textContent = "🔴 Start Recording";
+  }
+}
+
+function stopLiveCameraStream() {
+  if (liveCameraStream) {
+    liveCameraStream.getTracks().forEach((track) => track.stop());
+    liveCameraStream = null;
+  }
+  if (liveVideoPreview) liveVideoPreview.srcObject = null;
 }
 
 function closeLiveVideoModal() {
+  if (liveStreamActive) {
+    // Stop recording without posting if the user closes the modal mid-recording.
+    if (liveRecorder && liveRecorder.state !== 'inactive') {
+      liveRecorder.onstop = null;
+      liveRecorder.stop();
+    }
+    clearInterval(liveStreamTimer);
+    liveStreamTimer = null;
+    liveStreamActive = false;
+    if (currentLiveStreamId) {
+      endLiveStream(currentLiveStreamId);
+      currentLiveStreamId = null;
+    }
+  }
+  liveRecorder = null;
+  stopLiveCameraStream();
   if (liveVideoModal) liveVideoModal.hidden = true;
 }
 
@@ -563,24 +755,33 @@ function updateLiveTimer() {
   const seconds = elapsed % 60;
   const minutes = Math.floor(elapsed / 60);
   liveVideoTimer.textContent = `⏱ ${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-  if (elapsed >= 300) {
+  if (elapsed >= MAX_CLIP_SECONDS) {
     endLiveVideo();
   }
 }
 
 async function startLiveVideo() {
-  if (liveStreamActive) return;
+  if (liveStreamActive || !liveCameraStream) return;
   liveStreamActive = true;
   liveStreamStartTime = Date.now();
   liveVideoBadge.hidden = false;
-  liveVideoStatus.textContent = "Live now. Your stream is running.";
+  liveVideoStatus.className = "message";
+  liveVideoStatus.textContent = `🔴 Recording... stops automatically at ${MAX_CLIP_SECONDS} seconds.`;
+  liveVideoStartBtn.hidden = true;
   liveVideoEndBtn.hidden = false;
   liveStreamTimer = setInterval(updateLiveTimer, 1000);
+
+  liveRecordedChunks = [];
+  const mimeType = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
+    .find((type) => window.MediaRecorder?.isTypeSupported?.(type)) || '';
+  liveRecorder = new MediaRecorder(liveCameraStream, mimeType ? { mimeType } : undefined);
+  liveRecorder.ondataavailable = (ev) => { if (ev.data.size > 0) liveRecordedChunks.push(ev.data); };
+  liveRecorder.start();
+
   currentLiveStreamId = await startLiveStream(currentUser?.uid || "", {
-    title: "Community livestream",
+    title: "Community live clip",
     privacy: normalizePrivacy(privacySettings.videos || "everyone")
   });
-  updateLiveTimer();
 }
 
 async function endLiveVideo() {
@@ -589,14 +790,51 @@ async function endLiveVideo() {
   clearInterval(liveStreamTimer);
   liveStreamTimer = null;
   liveStreamStartTime = null;
+  liveVideoBadge.hidden = true;
+  liveVideoTimer.textContent = "⏱ 00:00";
+  liveVideoEndBtn.hidden = true;
+  liveVideoStartBtn.hidden = false;
+  liveVideoStatus.textContent = "⏳ Preparing your clip...";
+
   if (currentLiveStreamId) {
     await endLiveStream(currentLiveStreamId);
     currentLiveStreamId = null;
   }
-  liveVideoBadge.hidden = true;
-  liveVideoTimer.textContent = "⏱ 00:00";
-  liveVideoStatus.textContent = "Live stream ended automatically after 5 minutes.";
-  liveVideoEndBtn.hidden = true;
+
+  const recorder = liveRecorder;
+  liveRecorder = null;
+  stopLiveCameraStream();
+
+  if (!recorder) {
+    closeLiveVideoModal();
+    return;
+  }
+
+  const clipFile = await new Promise((resolve) => {
+    recorder.onstop = () => {
+      const blob = new Blob(liveRecordedChunks, { type: recorder.mimeType || 'video/webm' });
+      resolve(new File([blob], `live-clip-${Date.now()}.webm`, { type: blob.type }));
+    };
+    if (recorder.state !== 'inactive') {
+      recorder.stop();
+    } else {
+      resolve(null);
+    }
+  });
+
+  if (!clipFile) {
+    liveVideoStatus.className = "message error";
+    liveVideoStatus.textContent = "Recording could not be saved.";
+    return;
+  }
+
+  if (liveVideoModal) liveVideoModal.hidden = true;
+
+  // Hand the recorded clip straight to the Create Post flow, exactly like a
+  // device gallery upload — same preview, caption, and posting pipeline.
+  openPostModal();
+  showMediaPreview(clipFile);
+  setPostModalStatus(`🎬 Your ${MAX_CLIP_SECONDS}-second clip is ready — add a caption and post!`, "success");
 }
 
 if (openVideoBtn) openVideoBtn.addEventListener("click", openLiveVideoModal);
@@ -917,7 +1155,7 @@ function renderPostCard(post) {
         await updateDoc(ref, { likes: arrayUnion(currentUser.uid) });
         // Send notification to post author if the liker is not the author
         if (post.authorId && post.authorId !== currentUser.uid) {
-          createNotification(post.authorId, 'like', `${currentUserName} liked your post`);
+          createNotification(post.authorId, 'like', `${currentUserName} liked your post`, { postId: post.id });
         }
       }
     } catch (err) { console.error(err); }
@@ -991,7 +1229,7 @@ function renderPostCard(post) {
       input.value = "";
       // Send notification to post author if the commenter is not the author
       if (post.authorId && post.authorId !== currentUser.uid) {
-        createNotification(post.authorId, 'comment', `${currentUserName} commented on your post: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
+        createNotification(post.authorId, 'comment', `${currentUserName} commented on your post: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`, { postId: post.id });
       }
     } catch (err) { console.error(err); }
   });
@@ -1480,6 +1718,51 @@ if (dmChatForm) {
   });
 }
 
+// ===== NOTIFICATION DEEP LINKS (?post=, ?chat=) =====
+/**
+ * When a user arrives here from a clicked notification (community.html?post=ID
+ * or ?chat=UID), scroll to that post / open that chat thread automatically.
+ */
+function handleNotificationDeepLink() {
+  const params = new URLSearchParams(window.location.search);
+  const postId = params.get("post");
+  const chatPartnerId = params.get("chat");
+
+  if (postId) {
+    let attempts = 0;
+    const tryScrollToPost = () => {
+      const card = document.querySelector(`.fb-post-card[data-post-id="${postId}"]`);
+      if (card) {
+        card.scrollIntoView({ behavior: "smooth", block: "center" });
+        card.classList.add("fb-post-card-highlight");
+        setTimeout(() => card.classList.remove("fb-post-card-highlight"), 2500);
+      } else if (attempts < 15) {
+        attempts++;
+        setTimeout(tryScrollToPost, 300);
+      }
+    };
+    tryScrollToPost();
+  }
+
+  if (chatPartnerId) {
+    openChatFromDeepLink(chatPartnerId);
+  }
+}
+
+async function openChatFromDeepLink(partnerId) {
+  if (!partnerId) return;
+  let partnerName = "Teammate";
+  try {
+    const snap = await getDoc(doc(db, "users", partnerId));
+    if (snap.exists()) {
+      partnerName = snap.data().displayName || snap.data().firstName || "Teammate";
+    }
+  } catch (err) {
+    console.warn("Could not resolve chat partner name:", err);
+  }
+  openFloatingChat(partnerId, partnerName);
+}
+
 // ===== CLOUDINARY CHAT IMAGE UPLOAD =====
 /**
  * Reusable function: upload an image to Cloudinary, then save a chat message
@@ -1629,7 +1912,11 @@ function listenToChat() {
         imageHtml = `<img src="${m.imageUrl}" crossorigin="anonymous" class="chat-shared-image" style="max-width:200px; max-height:200px; border-radius:8px; display:block; margin-top:5px; cursor:pointer;" onclick="window.open('${m.imageUrl}', '_blank')" />`;
       }
       const textHtml = m.text ? `<div class="chat-text">${m.text}</div>` : '';
-      item.innerHTML = `<div class="chat-author">${authorAvatar} ${authorName}<div class="chat-hp-placeholder" data-author-id="${authorId}"></div></div>${imageHtml}${textHtml}<div class="chat-time">${timeDisplay}</div>`;
+      const authorProfileLink = `profile.html?uid=${encodeURIComponent(authorId)}`;
+      const authorLinkHtml = authorId
+        ? `<a href="${authorProfileLink}" style="text-decoration:none;color:inherit;">${escapeHtml(authorAvatar)} ${escapeHtml(authorName)}</a>`
+        : `${escapeHtml(authorAvatar)} ${escapeHtml(authorName)}`;
+      item.innerHTML = `<div class="chat-author">${authorLinkHtml}<div class="chat-hp-placeholder" data-author-id="${authorId}"></div></div>${imageHtml}${textHtml}<div class="chat-time">${timeDisplay}</div>`;
       communityChatList.appendChild(item);
     });
     // Resolve HP badges for chat messages
@@ -1735,9 +2022,18 @@ function openFloatingChat(partnerId, partnerName) {
     }
     snapshot.docs.forEach((docSnap) => {
       const msg = docSnap.data();
-      const isOwn = (msg.authorId || msg.userId) === currentUser?.uid;
+      const authorId = msg.authorId || msg.userId || "";
+      const isOwn = authorId === currentUser?.uid;
       const bubble = document.createElement("div");
       bubble.style.cssText = `padding:8px 12px;margin:4px 8px;border-radius:${isOwn ? '16px 4px 16px 16px' : '4px 16px 16px 16px'};background:${isOwn ? '#0b2d4d' : '#eef4f8'};color:${isOwn ? 'white' : '#0b2d4d'};max-width:80%;align-self:${isOwn ? 'flex-end' : 'flex-start'};font-size:14px;display:flex;flex-direction:column;gap:4px;`;
+      // Clickable sender name/avatar — mirrors the profile link on the main feed
+      if (!isOwn && authorId) {
+        const nameLink = document.createElement("a");
+        nameLink.href = `profile.html?uid=${encodeURIComponent(authorId)}`;
+        nameLink.style.cssText = "font-weight:700;font-size:12px;text-decoration:none;color:inherit;opacity:0.85;";
+        nameLink.textContent = msg.authorName || activeFloatingChatPartnerName || "Teammate";
+        bubble.appendChild(nameLink);
+      }
       // Add text content if present
       if (msg.text) {
         const textEl = document.createElement('span');
@@ -1837,7 +2133,7 @@ if (floatingChatForm) {
 
       // Send notification to the recipient about the new message
       if (activeFloatingChatPartnerId !== currentUser.uid) {
-        createNotification(activeFloatingChatPartnerId, 'message', `${currentUserName} sent you a message: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
+        createNotification(activeFloatingChatPartnerId, 'message', `${currentUserName} sent you a message: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`, { senderId: currentUser.uid });
       }
     } catch (err) {
       console.error("Floating chat send error:", err);
@@ -1873,6 +2169,7 @@ onAuthStateChanged(auth, async (user) => {
   renderFriendRequests();
   loadTeammates(); // Load teammates on auth change
   await loadPrivacySettings();
+  handleNotificationDeepLink();
 });
 
 window.addEventListener("load", hideAppSplash);

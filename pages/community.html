@@ -134,6 +134,7 @@
               </select>
             </div>
           </div>
+          <p style="font-size:11px;color:#94a3b8;margin:4px 0 0;">🎬 Videos longer than 30 seconds are automatically trimmed to the first 30 seconds.</p>
           <div id="postModalStatus" class="message"></div>
           <button class="create-post-submit" id="postModalSubmit">Post</button>
         </div>
@@ -144,21 +145,21 @@
       <div class="fb-modal-overlay" id="liveVideoOverlay"></div>
       <div class="fb-modal-card live-video-modal-card">
         <div class="fb-modal-header">
-          <h3>📹 Live Video</h3>
+          <h3>📹 Record a Clip</h3>
           <button class="fb-modal-close" id="liveVideoClose">&times;</button>
         </div>
         <div class="live-video-preview-container">
           <video id="liveVideoPreview" class="live-video-preview" autoplay playsinline muted></video>
           <div class="live-video-overlay" id="liveVideoStatusOverlay">
-            <span class="live-badge" id="liveVideoBadge" hidden>● LIVE</span>
-            <span class="live-stat" id="liveViewerCount">👁 0 viewers</span>
+            <span class="live-badge" id="liveVideoBadge" hidden>● REC</span>
+            <span class="live-stat" id="liveViewerCount"></span>
             <span class="live-stat" id="liveVideoTimer">⏱ 00:00</span>
           </div>
         </div>
-        <div id="liveVideoStatus" class="message">Start a live broadcast for up to 5 minutes.</div>
+        <div id="liveVideoStatus" class="message">Record a short clip — up to 30 seconds.</div>
         <div class="create-post-modal-actions" style="margin-top:12px;justify-content:flex-end;">
-          <button type="button" id="liveVideoStartBtn" class="create-post-submit" style="width:auto;padding:10px 16px;">Start Live</button>
-          <button type="button" id="liveVideoEndBtn" class="btn" style="width:auto;padding:10px 16px;background:#ef4444;color:white;" hidden>End Live</button>
+          <button type="button" id="liveVideoStartBtn" class="create-post-submit" style="width:auto;padding:10px 16px;" disabled>Starting camera...</button>
+          <button type="button" id="liveVideoEndBtn" class="btn" style="width:auto;padding:10px 16px;background:#ef4444;color:white;" hidden>⏹ Stop &amp; Use Clip</button>
         </div>
       </div>
     </div>

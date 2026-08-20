@@ -43,9 +43,21 @@ function createMessageBubble(message, isOwn) {
   const bubble = document.createElement("div");
   bubble.className = "chat-bubble";
 
-  const nameEl = document.createElement("div");
-  nameEl.className = "chat-bubble-author";
-  nameEl.textContent = isOwn ? "You" : (message.authorName || "Anonymous");
+  // Clickable sender name — same profile.html?uid=... link used on the main
+  // Community feed, so tapping a name/avatar opens that user's profile.
+  let nameEl;
+  if (isOwn) {
+    nameEl = document.createElement("div");
+    nameEl.className = "chat-bubble-author";
+    nameEl.textContent = "You";
+  } else {
+    nameEl = document.createElement("a");
+    nameEl.className = "chat-bubble-author";
+    nameEl.style.textDecoration = "none";
+    nameEl.style.color = "inherit";
+    nameEl.href = message.authorId ? `profile.html?uid=${encodeURIComponent(message.authorId)}` : "#";
+    nameEl.textContent = message.authorName || "Anonymous";
+  }
 
   const textEl = document.createElement("div");
   textEl.className = "chat-bubble-text";

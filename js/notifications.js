@@ -283,6 +283,37 @@ async function handleRejectTeammate(notifId, senderId, senderName) {
 /**
  * Render the notification list in the dropdown
  */
+function getPagesBasePath() {
+  // The bell is injected on both root-level pages (index.html) and pages
+  // inside /pages/, so compute the right relative prefix to community.html.
+  return window.location.pathname.includes("/pages/") ? "" : "pages/";
+}
+
+/**
+ * Resolve the deep-link URL for a notification, based on the context stored
+ * on it at creation time (postId / senderId / fixtureId).
+ */
+function buildNotificationLink(notif) {
+  const base = getPagesBasePath();
+  switch (notif.type) {
+    case "like":
+    case "comment":
+    case "mention":
+    case "tag":
+      return notif.postId ? `${base}community.html?post=${encodeURIComponent(notif.postId)}` : null;
+    case "message":
+      return notif.senderId ? `${base}community.html?chat=${encodeURIComponent(notif.senderId)}` : null;
+    case "teammate_request":
+    case "teammate_accepted":
+    case "teammate_declined":
+      return `${base}community.html?teammates=1`;
+    case "prediction":
+      return notif.fixtureId ? `${base}predictions.html?fixture=${encodeURIComponent(notif.fixtureId)}` : `${base}predictions.html`;
+    default:
+      return null;
+  }
+}
+
 function renderNotifications(notifications) {
   const list = document.getElementById("notificationList");
   if (!list) return;
@@ -337,6 +368,8 @@ function renderNotifications(notifications) {
     `;
   }).join("");
 
+  const notifById = new Map(notifications.map((n) => [n.id, n]));
+
   // Attach teammate Accept button handlers
   list.querySelectorAll(".teammate-accept-btn").forEach((btn) => {
     btn.addEventListener("click", async (e) => {
@@ -359,15 +392,19 @@ function renderNotifications(notifications) {
     });
   });
 
-  // Add click handler to mark individual as read and close dropdown
+  // Clicking a notification item marks it read, closes the dropdown, and
+  // routes straight to whatever it's about (a post, a chat thread, etc.)
   const dropdown = document.getElementById("notificationDropdown");
-  list.querySelectorAll(".notification-item.unread").forEach((item) => {
+  list.querySelectorAll(".notification-item").forEach((item) => {
     item.addEventListener("click", async (e) => {
-      // Don't mark as read if clicking on action buttons
+      // Don't navigate/mark-read if clicking on the accept/reject buttons.
       if (e.target.closest(".teammate-accept-btn") || e.target.closest(".teammate-reject-btn")) return;
       e.stopPropagation();
+
       const notifId = item.dataset.id;
-      if (currentUser && notifId) {
+      const notif = notifById.get(notifId);
+
+      if (currentUser && notifId && item.classList.contains("unread")) {
         try {
           await updateDoc(doc(db, "notifications", currentUser.uid, "items", notifId), {
             read: true
@@ -376,16 +413,13 @@ function renderNotifications(notifications) {
           console.warn("Could not mark notification as read:", err);
         }
       }
-      // Close dropdown after clicking a notification
-      if (dropdown) dropdown.hidden = true;
-    });
-  });
 
-  // Also close dropdown on already-read notification click
-  list.querySelectorAll(".notification-item.read").forEach((item) => {
-    item.addEventListener("click", (e) => {
-      e.stopPropagation();
       if (dropdown) dropdown.hidden = true;
+
+      const link = notif ? buildNotificationLink(notif) : null;
+      if (link) {
+        window.location.href = link;
+      }
     });
   });
 }
@@ -410,10 +444,13 @@ function getTimeAgo(timestamp) {
 /**
  * Create a notification for a user (to be called from other modules)
  * @param {string} targetUid - The user to notify
- * @param {string} type - 'like' | 'comment' | 'mention' | 'tag'
+ * @param {string} type - 'like' | 'comment' | 'mention' | 'tag' | 'message'
  * @param {string} message - The notification message
+ * @param {{postId?: string, senderId?: string, fixtureId?: string}} meta - Deep-link
+ *   context so the notification can route straight to its target (a post, a
+ *   chat thread, a prediction, etc.) when clicked.
  */
-export async function createNotification(targetUid, type, message) {
+export async function createNotification(targetUid, type, message, meta = {}) {
   if (!targetUid || !type || !message) return;
 
   try {
@@ -422,7 +459,8 @@ export async function createNotification(targetUid, type, message) {
       type,
       message,
       read: false,
-      createdAt: serverTimestamp()
+      createdAt: serverTimestamp(),
+      ...meta
     });
     playNotificationSound(type);
   } catch (err) {

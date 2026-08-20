@@ -3794,6 +3794,13 @@ footer {
     box-shadow: 0 2px 12px rgba(0,0,0,0.06);
     border: 1px solid #e2e8f0;
     overflow: hidden;
+    transition: box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+/* Momentary highlight when a notification deep-links to a specific post */
+.fb-post-card-highlight {
+    border-color: #00c853;
+    box-shadow: 0 0 0 3px rgba(0,200,83,0.3), 0 2px 12px rgba(0,0,0,0.06);
 }
 
 .fb-post-header {
