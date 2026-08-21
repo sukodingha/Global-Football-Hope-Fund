@@ -479,6 +479,7 @@ async function submitPrediction(btn) {
       awayTeam: match.away_team_name || "",
       kickoff: match.kickoff_time || null,
       status: "pending",
+      ticketStatus: "pending",
       pointsAwarded: 0,
       dateSubmitted: getTodayStr(),
       batchId,
@@ -509,8 +510,14 @@ async function settlePendingPredictions() {
 
   try {
     const fixtures = await getFixturesByIds(pending.map((p) => p.fixtureId));
-    const groupedByDate = new Map();
-    let settledCount = 0;
+    const groupedByTicket = new Map();
+    const resolvedPredictions = [];
+
+    pending.forEach((prediction) => {
+      const ticketKey = prediction.batchId || `${prediction.dateSubmitted || getTodayStr()}_${prediction.fixtureId}`;
+      if (!groupedByTicket.has(ticketKey)) groupedByTicket.set(ticketKey, []);
+      groupedByTicket.get(ticketKey).push(prediction);
+    });
 
     for (const prediction of pending) {
       const fixture = fixtures.find((f) => String(f.fixture_id) === String(prediction.fixtureId));
@@ -520,6 +527,14 @@ async function settlePendingPredictions() {
       const awayScore = Number(fixture.away_score) || 0;
       const outcome = getMatchOutcome(homeScore, awayScore);
       const correct = outcome === prediction.pick;
+
+      resolvedPredictions.push({
+        prediction,
+        correct,
+        homeScore,
+        awayScore,
+        finalScore: `${homeScore}-${awayScore}`
+      });
 
       await updateDoc(doc(db, "predictions", prediction.id), {
         status: correct ? "correct" : "incorrect",
@@ -533,13 +548,44 @@ async function settlePendingPredictions() {
           totalRewardsEarned: increment(PREDICTION_CORRECT_HP)
         });
       }
+    }
 
-      const key = prediction.dateSubmitted || getTodayStr();
+    const groupedByDate = new Map();
+    let settledCount = 0;
+
+    for (const [ticketKey, ticketPredictions] of groupedByTicket.entries()) {
+      const evaluatedTicket = resolvedPredictions.filter((entry) =>
+        (entry.prediction.batchId || `${entry.prediction.dateSubmitted || getTodayStr()}_${entry.prediction.fixtureId}`) === ticketKey
+      );
+
+      if (!evaluatedTicket.length) continue;
+
+      const correctCount = evaluatedTicket.filter((entry) => entry.correct).length;
+      const ticketStatus = correctCount === evaluatedTicket.length ? "won" : "lost";
+      const ticketReward = correctCount === evaluatedTicket.length ? 10 + (correctCount * PREDICTION_CORRECT_HP) : correctCount * PREDICTION_CORRECT_HP;
+
+      for (const entry of evaluatedTicket) {
+        const docRef = doc(db, "predictions", entry.prediction.id);
+        await updateDoc(docRef, {
+          ticketStatus,
+          ticketReward,
+          ticketCorrectCount: correctCount,
+          ticketMatchCount: evaluatedTicket.length
+        });
+      }
+
+      if (ticketStatus === "won") {
+        await updateDoc(doc(db, "users", currentUser.uid), {
+          rewardPoints: increment(ticketReward),
+          totalRewardsEarned: increment(ticketReward)
+        });
+      }
+
+      const key = evaluatedTicket[0].prediction.dateSubmitted || getTodayStr();
       if (!groupedByDate.has(key)) groupedByDate.set(key, { date: key, correct: 0, total: 0 });
-      groupedByDate.get(key).total += 1;
-      if (correct) groupedByDate.get(key).correct += 1;
-
-      settledCount++;
+      groupedByDate.get(key).total += evaluatedTicket.length;
+      groupedByDate.get(key).correct += correctCount;
+      settledCount += evaluatedTicket.length;
     }
 
     for (const [dateStr, summary] of groupedByDate.entries()) {
@@ -595,6 +641,12 @@ function getPredictionBatchKey(prediction, index) {
 
 function getTicketStatus(ticketPredictions = []) {
   if (!ticketPredictions.length) return "Pending";
+
+  const explicitTicketStatus = ticketPredictions.find((p) => p.ticketStatus)?.ticketStatus;
+  if (explicitTicketStatus === "won" || explicitTicketStatus === "lost") {
+    return explicitTicketStatus === "won" ? "Won" : "Lost";
+  }
+
   if (ticketPredictions.some((p) => p.status === "pending")) return "Pending";
   return ticketPredictions.every((p) => p.status === "correct") ? "Won" : "Lost";
 }
@@ -890,8 +942,11 @@ function wireFixtureSubscription() {
 // ===== AUTO-REFRESH POLLING (every 30 seconds) =====
 function startPolling() {
   stopPolling();
-  pollIntervalId = setInterval(() => {
-    loadFixturesForDate();
+  pollIntervalId = setInterval(async () => {
+    if (currentUser) {
+      await settlePendingPredictions();
+    }
+    await loadFixturesForDate();
   }, 30000);
 }
 
@@ -930,6 +985,7 @@ onAuthStateChanged(auth, async (user) => {
     }
 
     await loadUserPredictions();
+    await settlePendingPredictions();
     await renderActivePredictedMatches();
     await loadPredictionHistory();
   } else {
