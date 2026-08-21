@@ -1,6 +1,8 @@
-import { db } from "./firebase.js";
-import { collection, doc, getDoc, getDocs, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { auth, db } from "./firebase.js";
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { collection, doc, getDoc, getDocs, query, orderBy, limit, where } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getHPBadgeHTML, formatHP } from "./rewards.js";
+import { getFixturesByIds } from "../services/fixturesService.js";
 
 const memberCount = document.getElementById("memberCount");
 const donationCount = document.getElementById("donationCount");
@@ -106,5 +108,68 @@ async function loadTopEarnersLeaderboard() {
   }
 }
 
+async function loadUserActivePredictions() {
+  const container = document.getElementById('userActivePredictionsList');
+  if (!container) return;
+
+  if (!auth || !db) {
+    container.innerHTML = '<p style="text-align:center;color:rgba(255,255,255,0.5);padding:20px 0;">Prediction data is unavailable right now.</p>';
+    return;
+  }
+
+  const user = auth.currentUser;
+  if (!user) {
+    container.innerHTML = '<p style="text-align:center;color:rgba(255,255,255,0.5);padding:20px 0;">Sign in to see your live predicted matches.</p>';
+    return;
+  }
+
+  try {
+    const q = query(collection(db, 'predictions'), where('userId', '==', user.uid));
+    const snap = await getDocs(q);
+    const predictions = snap.docs
+      .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }))
+      .filter((prediction) => prediction.fixtureId && prediction.status !== 'correct' && prediction.status !== 'incorrect');
+
+    if (!predictions.length) {
+      container.innerHTML = '<p style="text-align:center;color:rgba(255,255,255,0.5);padding:20px 0;">No active predictions right now.</p>';
+      return;
+    }
+
+    const fixtures = await getFixturesByIds(predictions.map((prediction) => prediction.fixtureId));
+    const liveMatches = predictions
+      .map((prediction) => {
+        const match = fixtures.find((fixture) => String(fixture.fixture_id) === String(prediction.fixtureId));
+        if (!match) return null;
+        const status = String(match.status || '').toLowerCase();
+        if (!['live', 'half_time'].includes(status)) return null;
+        return { prediction, match };
+      })
+      .filter(Boolean);
+
+    if (!liveMatches.length) {
+      container.innerHTML = '<p style="text-align:center;color:rgba(255,255,255,0.5);padding:20px 0;">No matches are currently live for your predictions.</p>';
+      return;
+    }
+
+    container.innerHTML = liveMatches.map(({ prediction, match }) => `
+      <div class="leaderboard-item" style="grid-template-columns: 1fr auto auto;">
+        <span class="leaderboard-name"><strong>${match.home_team_name || 'Home'} vs ${match.away_team_name || 'Away'}</strong></span>
+        <span class="leaderboard-hp" style="color:#fbbf24;">LIVE</span>
+        <span class="leaderboard-hp">${prediction.pick === 'home' ? 'Home Win' : prediction.pick === 'draw' ? 'Draw' : 'Away Win'}</span>
+      </div>
+    `).join('');
+  } catch (error) {
+    console.error('Error loading active predicted matches:', error);
+    container.innerHTML = '<p style="text-align:center;color:rgba(255,255,255,0.5);padding:20px 0;">Unable to load your live predicted matches.</p>';
+  }
+}
+
+onAuthStateChanged(auth, () => {
+  loadUserActivePredictions();
+});
+
 // Load leaderboard on DOMContentLoaded (works even when not signed in)
-document.addEventListener('DOMContentLoaded', loadTopEarnersLeaderboard);
+document.addEventListener('DOMContentLoaded', () => {
+  loadTopEarnersLeaderboard();
+  loadUserActivePredictions();
+});

@@ -58,7 +58,7 @@ const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "S
 const PICK_LABELS = { home: "Home Win", draw: "Draw", away: "Away Win" };
 const PREDICTION_CORRECT_HP = 0.2; // Hope Points awarded for each correct prediction
 const PREDICTION_BATCH_SIZE = 7;
-const MAX_PREDICTIONS_PER_DAY = PREDICTION_BATCH_SIZE * 3;
+const MAX_PREDICTIONS_PER_DAY = 7;
 
 // ===== HELPER FUNCTIONS =====
 function escapeHtml(text) {
@@ -142,6 +142,12 @@ async function updateDailyPredictionSummary(uid, delta = 1, dateStr = getTodaySt
 
 function isMatchLocked(status) {
   return status === "live" || status === "half_time" || status === "finished";
+}
+
+function isUpcomingFixture(match) {
+  if (!match || !match.fixture_id) return false;
+  const status = String(match.status || match.status_text || "").trim().toLowerCase();
+  return status === "scheduled" || status === "ns" || status === "not started" || status === "not_started" || status === "";
 }
 
 function getMatchOutcome(homeScore, awayScore) {
@@ -237,7 +243,7 @@ function getMatchFilterValue(match) {
 }
 
 function getFilteredFixtures(fixtures) {
-  const source = Array.isArray(fixtures) ? fixtures : [];
+  const source = Array.isArray(fixtures) ? fixtures.filter(isUpcomingFixture) : [];
   const query = (searchTerm || "").trim().toLowerCase();
   const selectedCountry = selectedCountryFilter || "Top Leagues";
 
@@ -264,6 +270,7 @@ function populateCountryFilterOptions(fixtures) {
   const seen = new Set();
 
   for (const match of fixtures || []) {
+    if (!isUpcomingFixture(match)) continue;
     const name = String(match?.country_name || match?.league_name || "").trim();
     if (!name || seen.has(name)) continue;
     options.push(name);
@@ -417,7 +424,7 @@ async function submitPrediction(btn) {
   const todaySubmittedCount = [...userPredictions.values()].filter((p) => p.dateSubmitted === getTodayStr()).length;
   const projectedTotal = todaySubmittedCount + 1;
   if (projectedTotal > MAX_PREDICTIONS_PER_DAY) {
-    showGlobalMsg(`⚠️ Daily limit reached: you can make up to ${MAX_PREDICTIONS_PER_DAY} predictions today (3 batches of ${PREDICTION_BATCH_SIZE}).`, "error");
+    showGlobalMsg(`⚠️ Selection limit reached: you can make up to ${MAX_PREDICTIONS_PER_DAY} predictions in this ticket window.`, "error");
     return;
   }
 
@@ -549,12 +556,19 @@ async function loadPredictionHistory() {
     );
     const snap = await getDocs(q);
 
-    if (snap.empty) {
-      historyContainer.innerHTML = '<p class="helper-text" style="text-align:center;color:rgba(255,255,255,0.7);">No predictions yet. Pick a result above to get started!</p>';
+    const cutoffMs = Date.now() - (48 * 60 * 60 * 1000);
+    const recentDocs = snap.docs.filter((docSnap) => {
+      const createdAt = docSnap.data().createdAt;
+      const createdMs = createdAt?.toMillis?.() ?? new Date(createdAt || 0).getTime();
+      return Number.isFinite(createdMs) && createdMs >= cutoffMs;
+    });
+
+    if (recentDocs.length === 0) {
+      historyContainer.innerHTML = '<p class="helper-text" style="text-align:center;color:rgba(255,255,255,0.7);">No predictions in the last 48 hours. Pick a result above to get started!</p>';
       return;
     }
 
-    const docsSorted = snap.docs.slice().sort((a, b) => {
+    const docsSorted = recentDocs.slice().sort((a, b) => {
       const aMs = a.data().createdAt?.toMillis?.() || 0;
       const bMs = b.data().createdAt?.toMillis?.() || 0;
       return bMs - aMs;
@@ -658,6 +672,71 @@ async function loadLeaderboard() {
   }
 }
 
+async function renderActivePredictedMatches() {
+  const container = document.getElementById("predictionActiveMatches");
+  if (!container) return;
+
+  if (!currentUser) {
+    container.innerHTML = '<div class="helper-text" style="color:rgba(255,255,255,0.7);padding:12px 0;">Sign in to see your active predicted matches.</div>';
+    return;
+  }
+
+  try {
+    const q = query(collection(db, "predictions"), where("userId", "==", currentUser.uid));
+    const snap = await getDocs(q);
+
+    const predictions = snap.docs
+      .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }))
+      .filter((prediction) => prediction.fixtureId && prediction.status !== "correct" && prediction.status !== "incorrect");
+
+    if (!predictions.length) {
+      container.innerHTML = '<div class="helper-text" style="color:rgba(255,255,255,0.7);padding:12px 0;">No live predicted matches right now.</div>';
+      return;
+    }
+
+    const fixtures = await getFixturesByIds(predictions.map((prediction) => prediction.fixtureId));
+    const livePredictions = predictions
+      .map((prediction) => {
+        const match = fixtures.find((fixture) => String(fixture.fixture_id) === String(prediction.fixtureId));
+        if (!match) return null;
+        const status = String(match.status || "").toLowerCase();
+        if (!['live', 'half_time'].includes(status)) return null;
+        return { prediction, match };
+      })
+      .filter(Boolean);
+
+    if (!livePredictions.length) {
+      container.innerHTML = '<div class="helper-text" style="color:rgba(255,255,255,0.7);padding:12px 0;">None of your current predictions are live yet.</div>';
+      return;
+    }
+
+    container.innerHTML = livePredictions.map(({ prediction, match }) => `
+      <div class="odds-card odds-card-selected" style="max-width:1200px;margin:0 auto;">
+        <div class="odds-header">
+          <span class="league-pill">⚽ ${escapeHtml(match.league_name || "League")}</span>
+          <span class="match-status-badge live">LIVE</span>
+        </div>
+        <div class="odds-teams" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+          <div class="odds-team" style="display:flex;flex-direction:column;align-items:center;gap:8px;flex:1;">
+            <span>${escapeHtml(match.home_team_name || "Home")}</span>
+          </div>
+          <div class="odds-vs">vs</div>
+          <div class="odds-team" style="display:flex;flex-direction:column;align-items:center;gap:8px;flex:1;">
+            <span>${escapeHtml(match.away_team_name || "Away")}</span>
+          </div>
+        </div>
+        <div class="prediction-section" style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;">
+          <span style="color:rgba(255,255,255,0.8);">Your pick: ${PICK_LABELS[prediction.pick] || prediction.pick}</span>
+          <span style="color:#fbbf24;font-weight:700;">${match.minute ? `${match.minute}'` : "LIVE"}</span>
+        </div>
+      </div>
+    `).join("");
+  } catch (err) {
+    console.warn("Could not load active predicted matches:", err);
+    container.innerHTML = '<div class="helper-text" style="color:rgba(255,255,255,0.7);padding:12px 0;">Unable to load live predicted matches.</div>';
+  }
+}
+
 // ===== LOAD USER PROFILE =====
 async function loadUserProfile() {
   if (!currentUser) return;
@@ -680,9 +759,10 @@ async function loadFixturesForDate() {
 
   try {
     const fixtures = await getFixturesByDate(selectedDateStr);
-    allAvailableFixtures = fixtures || [];
+    allAvailableFixtures = (fixtures || []).filter(isUpcomingFixture);
     populateCountryFilterOptions(allAvailableFixtures);
     await loadUserPredictions();
+    await renderActivePredictedMatches();
     applyPredictionFilter();
     hasLoadedFixturesOnce = true;
     await settlePendingPredictions();
@@ -750,6 +830,7 @@ onAuthStateChanged(auth, async (user) => {
     }
 
     await loadUserPredictions();
+    await renderActivePredictedMatches();
     await loadPredictionHistory();
   } else {
     currentUserUniqueId = "";
@@ -761,6 +842,10 @@ onAuthStateChanged(auth, async (user) => {
     }
     if (historyContainer) {
       historyContainer.innerHTML = '<p class="helper-text" style="text-align:center;color:rgba(255,255,255,0.7);">Sign in to see your prediction history.</p>';
+    }
+    const activeContainer = document.getElementById("predictionActiveMatches");
+    if (activeContainer) {
+      activeContainer.innerHTML = '<div class="helper-text" style="color:rgba(255,255,255,0.7);padding:12px 0;">Sign in to see your active predicted matches.</div>';
     }
   }
 
