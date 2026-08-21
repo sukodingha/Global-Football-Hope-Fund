@@ -4328,24 +4328,29 @@ footer {
 /* ===== POWERED BY KINESIS BADGE ===== */
 /* ===== EXPANDABLE PREDICTION SLIPS ===== */
 .slip-history-item {
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 14px;
+    background: linear-gradient(180deg, rgba(17, 24, 39, 0.92), rgba(15, 23, 42, 0.82));
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: 18px;
     overflow: hidden;
-    transition: all 0.2s ease;
+    box-shadow: 0 16px 32px rgba(2, 6, 23, 0.35);
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .slip-history-item:hover {
-    background: rgba(255, 255, 255, 0.12);
+    transform: translateY(-1px);
+    border-color: rgba(250, 204, 21, 0.42);
+    box-shadow: 0 18px 36px rgba(2, 6, 23, 0.42);
 }
 
 .slip-history-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 12px 16px;
+    padding: 14px 16px 12px;
     cursor: pointer;
-    gap: 8px;
+    gap: 10px;
+    background: linear-gradient(90deg, rgba(15, 118, 110, 0.18), rgba(30, 41, 59, 0.14));
+    border-bottom: 1px solid rgba(148, 163, 184, 0.14);
 }
 
 .slip-history-header-left {
@@ -4353,6 +4358,31 @@ footer {
     align-items: center;
     gap: 10px;
     flex: 1;
+}
+
+.ticket-header-left {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+}
+
+.ticket-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: rgba(59, 130, 246, 0.2);
+    border: 1px solid rgba(96, 165, 250, 0.35);
+    border-radius: 999px;
+    color: #e0f2fe;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.ticket-submeta {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.68);
 }
 
 .slip-toggle-btn {
@@ -4374,13 +4404,51 @@ footer {
 }
 
 .slip-history-status {
-    font-size: 13px;
-    font-weight: 700;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
 }
 
-.slip-history-status.won { color: #00c853; }
-.slip-history-status.lost { color: #ef4444; }
-.slip-history-status.pending { color: #f59e0b; }
+.slip-history-status.won { color: #7ef0b6; }
+.slip-history-status.lost { color: #fca5a5; }
+.slip-history-status.pending { color: #fbbf24; }
+
+.ticket-match-list {
+    padding: 10px 12px 14px;
+    display: grid;
+    gap: 8px;
+}
+
+.ticket-match-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 12px;
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.7), rgba(30, 41, 59, 0.48));
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: 12px;
+}
+
+.ticket-match-row:nth-child(odd) {
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.8), rgba(30, 41, 59, 0.45));
+}
+
+.ticket-match-teams {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.ticket-match-teams span {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
 
 .slip-expanded-content {
     padding: 0 16px 12px;
