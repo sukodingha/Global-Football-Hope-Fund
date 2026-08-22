@@ -109,6 +109,20 @@ function getTicketBatchNumber(totalPredictions) {
   return Math.min(Math.max(1, Math.floor(totalPredictions / MAX_PREDICTIONS_PER_BATCH) + 1), MAX_BATCHES_PER_DAY);
 }
 
+function normalizePredictionStatus(value) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (normalized === "correct" || normalized === "won") return "correct";
+  if (normalized === "incorrect" || normalized === "lost") return "incorrect";
+  return "pending";
+}
+
+function normalizeTicketStatus(value) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (normalized === "won") return "won";
+  if (normalized === "lost") return "lost";
+  return "pending";
+}
+
 async function getDailyPredictionSummary(uid, dateStr = getTodayStr()) {
   if (!uid) return { totalPredictions: 0, batchCount: 0, currentBatchCount: 0 };
   try {
@@ -217,7 +231,14 @@ async function loadUserPredictions() {
     const snap = await getDocs(q);
     snap.docs.forEach((docSnap) => {
       const data = docSnap.data();
-      userPredictions.set(String(data.fixtureId), { id: docSnap.id, ...data });
+      const normalizedStatus = normalizePredictionStatus(data.status);
+      const normalizedTicketStatus = normalizeTicketStatus(data.ticketStatus || data.status);
+      userPredictions.set(String(data.fixtureId), {
+        id: docSnap.id,
+        ...data,
+        status: normalizedStatus,
+        ticketStatus: normalizedTicketStatus
+      });
     });
   } catch (err) {
     console.warn("Could not load user predictions:", err);
@@ -505,10 +526,19 @@ async function submitPrediction(btn) {
 async function settlePendingPredictions() {
   if (!currentUser) return;
 
-  const pending = [...userPredictions.values()].filter((p) => p.status === "pending");
-  if (pending.length === 0) return;
-
   try {
+    const q = query(collection(db, "predictions"), where("userId", "==", currentUser.uid));
+    const snap = await getDocs(q);
+    const pending = snap.docs
+      .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }))
+      .filter((prediction) => {
+        const status = normalizePredictionStatus(prediction.status);
+        const ticketStatus = normalizeTicketStatus(prediction.ticketStatus || prediction.status);
+        return status === "pending" || ticketStatus === "pending";
+      });
+
+    if (pending.length === 0) return;
+
     const fixtures = await getFixturesByIds(pending.map((p) => p.fixtureId));
     const groupedByTicket = new Map();
     const resolvedPredictions = [];
@@ -521,7 +551,10 @@ async function settlePendingPredictions() {
 
     for (const prediction of pending) {
       const fixture = fixtures.find((f) => String(f.fixture_id) === String(prediction.fixtureId));
-      if (!fixture || fixture.status !== "finished") continue;
+      if (!fixture || !["finished", "live", "half_time"].includes(fixture.status)) {
+        const maybeFinished = fixture && fixture.status === "finished";
+        if (!maybeFinished) continue;
+      }
 
       const homeScore = Number(fixture.home_score) || 0;
       const awayScore = Number(fixture.away_score) || 0;
@@ -538,6 +571,7 @@ async function settlePendingPredictions() {
 
       await updateDoc(doc(db, "predictions", prediction.id), {
         status: correct ? "correct" : "incorrect",
+        ticketStatus: correct ? "won" : "lost",
         pointsAwarded: correct ? PREDICTION_CORRECT_HP : 0,
         finalScore: `${homeScore}-${awayScore}`
       });
@@ -667,7 +701,7 @@ async function loadPredictionHistory() {
     );
     const snap = await getDocs(q);
 
-    const cutoffMs = Date.now() - (48 * 60 * 60 * 1000);
+    const cutoffMs = Date.now() - (7 * 24 * 60 * 60 * 1000);
     const recentDocs = snap.docs
       .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }))
       .filter((prediction) => {
@@ -677,7 +711,7 @@ async function loadPredictionHistory() {
       .sort((a, b) => getTimestampMs(b.createdAt) - getTimestampMs(a.createdAt));
 
     if (recentDocs.length === 0) {
-      historyContainer.innerHTML = '<p class="helper-text" style="text-align:center;color:rgba(255,255,255,0.7);">No predictions in the last 48 hours. Pick a result above to get started!</p>';
+      historyContainer.innerHTML = '<p class="helper-text" style="text-align:center;color:rgba(255,255,255,0.7);">No recent predictions in the last 7 days. Pick a result above to get started!</p>';
       return;
     }
 
