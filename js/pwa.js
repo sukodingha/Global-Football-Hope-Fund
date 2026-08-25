@@ -7,10 +7,51 @@
 
 let deferredPrompt = null;
 const CACHE_KEY = 'gfhf-pwa-installed';
+const DISMISS_KEY = 'gfhf-pwa-install-dismissed';
 
 // ===== DOM Refs =====
-const installModal = document.getElementById('pwa-install-modal');
+function ensureInstallModal() {
+  const existingModal = document.getElementById('pwa-install-modal');
+  if (existingModal) return existingModal;
+
+  document.body.insertAdjacentHTML('beforeend', `
+    <div id="pwa-install-modal" class="fb-modal" hidden>
+      <div class="fb-modal-overlay"></div>
+      <div class="fb-modal-card">
+        <h3>Install GFHF?</h3>
+        <p>Install the app on this device for sports updates, community chat, predictions, and donations.</p>
+        <div class="pwa-install-actions">
+          <button id="pwa-install-btn" class="btn" type="button">Yes</button>
+          <button id="pwa-decline-btn" class="btn btn-secondary" type="button">No</button>
+        </div>
+      </div>
+    </div>
+  `);
+
+  return document.getElementById('pwa-install-modal');
+}
+
+const installModal = ensureInstallModal();
 const installBtn = document.getElementById('pwa-install-btn');
+let declineBtn = document.getElementById('pwa-decline-btn');
+
+function addDeclineOption() {
+  if (!installModal || !installBtn || declineBtn) return;
+
+  const actions = document.createElement('div');
+  actions.className = 'pwa-install-actions';
+  installBtn.parentNode.insertBefore(actions, installBtn);
+  actions.appendChild(installBtn);
+
+  declineBtn = document.createElement('button');
+  declineBtn.id = 'pwa-decline-btn';
+  declineBtn.className = 'btn btn-secondary';
+  declineBtn.type = 'button';
+  declineBtn.textContent = 'No';
+  actions.appendChild(declineBtn);
+}
+
+addDeclineOption();
 
 // ===== Check if app is already installed =====
 function isAppInstalled() {
@@ -19,10 +60,14 @@ function isAppInstalled() {
          localStorage.getItem(CACHE_KEY) === 'true';
 }
 
+function wasInstallPromptDismissed() {
+  return localStorage.getItem(DISMISS_KEY) === 'true';
+}
+
 // ===== Show install modal =====
 function showInstallModal() {
   if (!installModal) return;
-  if (isAppInstalled()) return;
+  if (isAppInstalled() || wasInstallPromptDismissed()) return;
   installModal.hidden = false;
 }
 
@@ -101,9 +146,18 @@ if (installBtn) {
       localStorage.setItem(CACHE_KEY, 'true');
     } else {
       console.log('User dismissed the install prompt');
+      localStorage.setItem(DISMISS_KEY, 'true');
     }
 
     // Clear the deferred prompt and hide modal
+    deferredPrompt = null;
+    hideInstallModal();
+  });
+}
+
+if (declineBtn) {
+  declineBtn.addEventListener('click', () => {
+    localStorage.setItem(DISMISS_KEY, 'true');
     deferredPrompt = null;
     hideInstallModal();
   });
@@ -113,6 +167,7 @@ if (installBtn) {
 window.addEventListener('appinstalled', (event) => {
   console.log('GFHF was installed successfully');
   localStorage.setItem(CACHE_KEY, 'true');
+  localStorage.removeItem(DISMISS_KEY);
   hideInstallModal();
   deferredPrompt = null;
 });

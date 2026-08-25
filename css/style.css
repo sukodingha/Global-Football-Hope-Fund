@@ -2948,6 +2948,15 @@ footer {
   width: 100%;
 }
 
+#pwa-install-modal .pwa-install-actions {
+    display: flex;
+    gap: 12px;
+}
+
+#pwa-install-modal .pwa-install-actions .btn {
+    flex: 1;
+}
+
 /* ===== INSTALL APP NAV BUTTON (deprecated - kept for backward compat) ===== */
 .install-nav-btn {
     background: linear-gradient(90deg, #00c853, #00b34a);
