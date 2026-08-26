@@ -14,6 +14,7 @@
 
 import { auth, db } from "./firebase.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
 import {
   doc, getDoc, setDoc, getDocs, collection, query, where, limit,
   updateDoc, increment, serverTimestamp, deleteDoc
@@ -64,6 +65,8 @@ const PREDICTION_BATCH_SIZE = 7;
 const MAX_PREDICTIONS_PER_BATCH = 7;
 const MAX_BATCHES_PER_DAY = 2;
 const MAX_PREDICTIONS_PER_DAY = MAX_PREDICTIONS_PER_BATCH * MAX_BATCHES_PER_DAY;
+const functions = getFunctions();
+const submitTicket = httpsCallable(functions, "submitPredictionTicket");
 
 // ===== HELPER FUNCTIONS =====
 function escapeHtml(text) {
@@ -467,14 +470,6 @@ function toggleTicketSelection(btn) {
 
 async function submitPredictionTicket() {
   if (!currentUser || pendingTicketSelections.size !== MAX_PREDICTIONS_PER_BATCH) return;
-  const dateSubmitted = getTodayStr();
-  const dailySummary = await getDailyPredictionSummary(currentUser.uid, dateSubmitted);
-  const ticketNumber = Number(dailySummary.batchCount || 0) + 1;
-  if (ticketNumber > MAX_BATCHES_PER_DAY) {
-    showGlobalMsg("You have already submitted two tickets today.", "error");
-    return;
-  }
-
   const selectedMatches = [...pendingTicketSelections.entries()].map(([fixtureId, pick]) => ({
     fixtureId,
     pick,
@@ -486,47 +481,19 @@ async function submitPredictionTicket() {
   }
 
   submitTicketBtn.disabled = true;
-  const batchId = `${currentUser.uid}_${dateSubmitted}_ticket_${ticketNumber}`;
   try {
-    for (const { fixtureId, pick, match } of selectedMatches) {
-      const docId = `${fixtureId}_${currentUser.uid}`;
-      const data = {
-        userId: currentUser.uid,
-        userName: currentUserName,
-        fixtureId,
-        pick,
-        league: match.league_name || "",
-        homeTeam: match.home_team_name || "",
-        awayTeam: match.away_team_name || "",
-        kickoff: match.kickoff_time || null,
-        status: "pending",
-        ticketStatus: "pending",
-        pointsAwarded: 0,
-        schemaVersion: 2,
-        dateSubmitted,
-        batchId,
-        batchNumber: ticketNumber,
-        createdAt: serverTimestamp()
-      };
-      await setDoc(doc(db, "predictions", docId), data);
-      userPredictions.set(fixtureId, { id: docId, ...data });
-    }
-    await setDoc(doc(db, "predictionDailyLimits", getDailyLimitDocId(currentUser.uid, dateSubmitted)), {
-      uid: currentUser.uid,
-      date: dateSubmitted,
-      totalPredictions: ticketNumber * MAX_PREDICTIONS_PER_BATCH,
-      batchCount: ticketNumber,
-      currentBatchCount: 0,
-      updatedAt: serverTimestamp()
-    }, { merge: true });
+    const result = await submitTicket({
+      picks: selectedMatches.map(({ fixtureId, pick }) => ({ fixtureId, pick }))
+    });
     pendingTicketSelections.clear();
     updateTicketBuilder();
-    showGlobalMsg(`Ticket ${ticketNumber} submitted with 7 predictions.`, "success");
+    showGlobalMsg(`Ticket ${result.data.ticketNumber} submitted with 7 predictions.`, "success");
+    await loadUserPredictions();
     renderFixtures(latestFixtures);
     loadPredictionHistory();
   } catch (err) {
     console.error("Ticket submission error:", err);
-    showGlobalMsg("Could not submit the ticket. Please try again.", "error");
+    showGlobalMsg(err.message || "Could not submit the ticket. Please try again.", "error");
     updateTicketBuilder();
   }
 }
@@ -535,78 +502,7 @@ submitTicketBtn?.addEventListener("click", submitPredictionTicket);
 
 // ===== 6. SETTLEMENT — mark finished matches correct/incorrect & award HP =====
 async function settlePendingPredictions() {
-  if (!currentUser) return;
-
-  try {
-    const q = query(collection(db, "predictions"), where("userId", "==", currentUser.uid));
-    const snap = await getDocs(q);
-    const allPredictions = snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
-    const pending = allPredictions.filter((prediction) => normalizePredictionStatus(prediction.status) === "pending");
-
-    if (pending.length === 0) return;
-
-    const fixtures = await getFixturesByIds(pending.map((p) => p.fixtureId));
-    const changedTicketKeys = new Set();
-
-    for (const prediction of pending) {
-      const fixture = fixtures.find((f) => String(f.fixture_id) === String(prediction.fixtureId));
-      if (!fixture || fixture.status !== "finished") continue;
-
-      const homeScore = Number(fixture.home_score) || 0;
-      const awayScore = Number(fixture.away_score) || 0;
-      const outcome = getMatchOutcome(homeScore, awayScore);
-      const correct = outcome === prediction.pick;
-
-      await updateDoc(doc(db, "predictions", prediction.id), {
-        status: correct ? "correct" : "incorrect",
-        pointsAwarded: 0,
-        finalScore: `${homeScore}-${awayScore}`
-      });
-      prediction.status = correct ? "correct" : "incorrect";
-      prediction.finalScore = `${homeScore}-${awayScore}`;
-      changedTicketKeys.add(prediction.batchId || `${prediction.dateSubmitted || getTodayStr()}_${prediction.fixtureId}`);
-    }
-
-    for (const ticketKey of changedTicketKeys) {
-      const ticketPredictions = allPredictions.filter((prediction) =>
-        (prediction.batchId || `${prediction.dateSubmitted || getTodayStr()}_${prediction.fixtureId}`) === ticketKey
-      );
-      if (ticketPredictions.length !== MAX_PREDICTIONS_PER_BATCH || ticketPredictions.some((prediction) => prediction.status === "pending")) continue;
-
-      const correctCount = ticketPredictions.filter((prediction) => prediction.status === "correct").length;
-      const ticketStatus = correctCount === MAX_PREDICTIONS_PER_BATCH ? "won" : "lost";
-      const ticketReward = ticketStatus === "won" ? 10 : 0;
-      const lossExpiry = ticketStatus === "lost" ? new Date(Date.now() + 24 * 60 * 60 * 1000) : null;
-
-      for (const prediction of ticketPredictions) {
-        const docRef = doc(db, "predictions", prediction.id);
-        await updateDoc(docRef, {
-          ticketStatus,
-          ticketReward,
-          ticketCorrectCount: correctCount,
-          ticketMatchCount: MAX_PREDICTIONS_PER_BATCH,
-          pointsAwarded: ticketStatus === "won" ? ticketReward / MAX_PREDICTIONS_PER_BATCH : 0,
-          lostExpiresAt: lossExpiry
-        });
-      }
-
-      if (ticketStatus === "won") {
-        await updateDoc(doc(db, "users", currentUser.uid), {
-          rewardPoints: increment(ticketReward),
-          totalRewardsEarned: increment(ticketReward)
-        });
-      }
-    }
-
-    if (changedTicketKeys.size > 0) {
-      showGlobalMsg("Prediction results updated.", "success");
-      await loadUserPredictions();
-      await loadPredictionHistory();
-      await loadLeaderboard();
-    }
-  } catch (err) {
-    console.warn("Settlement check error:", err);
-  }
+  // Settlement runs in the scheduled Firebase Function so the result and 50 HP reward are atomic.
 }
 
 // ===== 7. PREDICTION HISTORY =====
@@ -617,22 +513,11 @@ function getTimestampMs(dateLike) {
 }
 
 async function purgeExpiredLostPredictions(predictions) {
-  const now = Date.now();
-  const expired = predictions.filter((prediction) =>
-    prediction.ticketStatus === "lost" && getTimestampMs(prediction.lostExpiresAt) > 0 && getTimestampMs(prediction.lostExpiresAt) <= now
-  );
-  await Promise.all(expired.map((prediction) => deleteDoc(doc(db, "predictions", prediction.id)).catch((err) => {
-    console.warn("Could not delete expired lost ticket:", err);
-  })));
-  return new Set(expired.map((prediction) => prediction.id));
+  return new Set();
 }
 
 async function purgeLegacyPredictions(predictions) {
-  const legacy = predictions.filter((prediction) => Number(prediction.schemaVersion || 0) < 2);
-  await Promise.all(legacy.map((prediction) => deleteDoc(doc(db, "predictions", prediction.id)).catch((err) => {
-    console.warn("Could not remove legacy prediction:", err);
-  })));
-  return new Set(legacy.map((prediction) => prediction.id));
+  return new Set();
 }
 
 function formatTicketTimestamp(dateLike) {
@@ -686,17 +571,6 @@ async function loadPredictionHistory() {
     const allDocs = snap.docs
       .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }))
     const legacyIds = await purgeLegacyPredictions(allDocs);
-    if (legacyIds.size > 0) {
-      const today = getTodayStr();
-      await setDoc(doc(db, "predictionDailyLimits", getDailyLimitDocId(currentUser.uid, today)), {
-        uid: currentUser.uid,
-        date: today,
-        totalPredictions: 0,
-        batchCount: 0,
-        currentBatchCount: 0,
-        updatedAt: serverTimestamp()
-      }, { merge: true });
-    }
     const activeDocs = allDocs.filter((prediction) => !legacyIds.has(prediction.id));
     const expiredIds = await purgeExpiredLostPredictions(activeDocs);
     const recentDocs = activeDocs
