@@ -2,6 +2,7 @@ const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
+const { initializeUserProfile, convertHopePointsToWallet, isAdminUser } = require("./auth.js");
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -196,4 +197,75 @@ exports.cleanupLegacyPredictions = onSchedule("every 60 minutes", async () => {
     }
     if (candidates.size < 400) return;
   } while (cursor);
+});
+
+/**
+ * Callable: Initialize user profile on first sign-in.
+ * Ensures user document exists with default values.
+ */
+exports.initializeProfile = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Sign in to initialize profile.");
+  
+  try {
+    const result = await initializeUserProfile(
+      request.auth.uid,
+      request.auth.token.email,
+      request.auth.token.name || request.data?.displayName
+    );
+    return { success: true, ...result };
+  } catch (err) {
+    console.error("Profile initialization error:", err);
+    throw new HttpsError("internal", "Failed to initialize profile.");
+  }
+});
+
+/**
+ * Callable: Convert Hope Points to wallet currency.
+ * 1 HP = 0.01 USD equivalent.
+ * User must be authenticated and provide the amount to convert.
+ */
+exports.convertHopePointsToWallet = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Sign in to convert Hope Points.");
+  
+  const { hpAmount, currency = "USD" } = request.data || {};
+  
+  if (!Number.isInteger(hpAmount) || hpAmount <= 0) {
+    throw new HttpsError("invalid-argument", "HP amount must be a positive integer.");
+  }
+  
+  try {
+    const result = await convertHopePointsToWallet(request.auth.uid, hpAmount, currency);
+    return result;
+  } catch (err) {
+    console.error("HP conversion error:", err);
+    if (err instanceof HttpsError) throw err;
+    throw new HttpsError("internal", "Conversion failed. Please try again.");
+  }
+});
+
+/**
+ * Callable: Get user transaction history.
+ * Users can only view their own transactions.
+ */
+exports.getUserTransactions = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Sign in to view transactions.");
+  
+  try {
+    const transactions = await db.collection("transactions")
+      .where("userId", "==", request.auth.uid)
+      .orderBy("createdAt", "desc")
+      .limit(50)
+      .get();
+    
+    return {
+      transactions: transactions.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toMillis?.() || null,
+      })),
+    };
+  } catch (err) {
+    console.error("Transaction retrieval error:", err);
+    throw new HttpsError("internal", "Failed to retrieve transactions.");
+  }
 });

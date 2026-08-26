@@ -6,7 +6,7 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.adminRole == true;
     }
 
     function isOwn(userId) {
@@ -21,10 +21,14 @@ service cloud.firestore {
       return !exists(/databases/$(database)/documents/users/$(request.auth.uid)/blockedUsers/$(targetUid));
     }
 
+    function canModifyUserProfile(userId) {
+      return isOwn(userId) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['rewardPoints', 'totalRewardsEarned', 'walletBalance', 'walletCurrency', 'lastRewardDate']);
+    }
+
     match /users/{userId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.auth.uid == userId;
-      allow update: if isSignedIn() && (isOwn(userId) || isAdmin());
+      allow create: if isSignedIn() && request.auth.uid == userId && !('rewardPoints' in request.resource.data) && !('walletBalance' in request.resource.data);
+      allow update: if isSignedIn() && (canModifyUserProfile(userId) || isAdmin());
       allow delete: if isAdmin();
 
       match /blockedUsers/{targetUid} {
@@ -62,6 +66,16 @@ service cloud.firestore {
 
     match /predictionDailyLimits/{summaryId} {
       allow read: if isSignedIn() && resource.data.uid == request.auth.uid;
+      allow create, update, delete: if false;
+    }
+
+    match /transactions/{transactionId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create, update, delete: if false;
+    }
+
+    match /walletBalance/{userId} {
+      allow read: if isOwn(userId);
       allow create, update, delete: if false;
     }
 

@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'services/firebase_auth_manager.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -192,16 +193,165 @@ class WalletScreen extends StatelessWidget {
   ]);
 }
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, required this.firebaseReady});
   final bool firebaseReady;
+
   @override
-  Widget build(BuildContext context) => ListView(children: [
-    const Header('Profile'), Padding(padding: const EdgeInsets.all(20), child: Card(child: Padding(padding: const EdgeInsets.all(20), child: Column(children: [
-      const CircleAvatar(radius: 34, child: Icon(Icons.person, size: 40)), const SizedBox(height: 12), const Text('Football Fan', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)), const SizedBox(height: 4), Text(firebaseReady ? 'Sign in to sync your profile and Hope Points.' : 'Firebase platform configuration is required to sign in.', textAlign: TextAlign.center), const SizedBox(height: 16),
-      FilledButton.icon(onPressed: firebaseReady ? () async => FirebaseAuth.instance.signInAnonymously() : null, icon: const Icon(Icons.login), label: const Text('Sign In')),
-    ])))),
-  ]);
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  final _authManager = FirebaseAuthManager();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _displayNameController = TextEditingController();
+
+  bool _isSignInMode = true;
+  bool _isLoading = false;
+  String _errorMessage = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _emailController.addListener(() => setState(() => _errorMessage = ''));
+    _passwordController.addListener(() => setState(() => _errorMessage = ''));
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _displayNameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleEmailAuth() async {
+    if (!widget.firebaseReady) return;
+    setState(() {
+      _isLoading = true;
+      _errorMessage = '';
+    });
+
+    try {
+      if (_isSignInMode) {
+        await _authManager.signInWithEmail(
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+        );
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Signed in successfully!')));
+      } else {
+        if (_displayNameController.text.isEmpty) throw FirebaseAuthException(code: 'invalid-argument', message: 'Display name is required.');
+        await _authManager.signUpWithEmail(
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+          displayName: _displayNameController.text.trim(),
+        );
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Account created! Welcome!')));
+      }
+      if (mounted) {
+        _emailController.clear();
+        _passwordController.clear();
+        _displayNameController.clear();
+      }
+    } on FirebaseAuthException catch (e) {
+      setState(() => _errorMessage = _authManager.getErrorMessage(e.code, e.message ?? 'Failed'));
+    } catch (e) {
+      setState(() => _errorMessage = 'An error occurred. Please try again.');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _handleGoogleSignIn() async {
+    if (!widget.firebaseReady) return;
+    setState(() {
+      _isLoading = true;
+      _errorMessage = '';
+    });
+
+    try {
+      await _authManager.signInWithGoogle();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Google Sign-In successful!')));
+    } on FirebaseAuthException catch (e) {
+      setState(() => _errorMessage = _authManager.getErrorMessage(e.code, e.message ?? 'Failed'));
+    } catch (e) {
+      setState(() => _errorMessage = 'An error occurred. Please try again.');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _handleSignOut() async {
+    try {
+      await _authManager.signOut();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Signed out')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final currentUser = _authManager.currentUser;
+
+    if (currentUser != null) {
+      return ListView(children: [
+        const Header('Profile'),
+        Padding(
+          padding: const EdgeInsets.all(20),
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(children: [
+                CircleAvatar(
+                  radius: 48,
+                  backgroundColor: const Color(0xff0b2d4d),
+                  child: Text(
+                    (currentUser.displayName?.isNotEmpty ?? false) ? currentUser.displayName![0].toUpperCase() : (currentUser.email?[0].toUpperCase() ?? 'U'),
+                    style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(currentUser.displayName ?? currentUser.email ?? 'User', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 4),
+                Text(currentUser.email ?? 'No email', style: const TextStyle(fontSize: 14, color: Color(0xff64748b))),
+                const SizedBox(height: 20),
+                FilledButton.icon(onPressed: _handleSignOut, icon: const Icon(Icons.logout), label: const Text('Sign Out'), style: FilledButton.styleFrom(backgroundColor: Colors.red)),
+              ]),
+            ),
+          ),
+        ),
+      ]);
+    }
+
+    return ListView(children: [
+      const Header('Sign In or Create Account'),
+      Padding(
+        padding: const EdgeInsets.all(20),
+        child: Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(children: [
+              if (!widget.firebaseReady) Padding(padding: const EdgeInsets.only(bottom: 16), child: Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.red.shade50, border: Border.all(color: Colors.red.shade300), borderRadius: BorderRadius.circular(8)), child: Text('Firebase configuration required.', style: TextStyle(color: Colors.red.shade800, fontSize: 12)))),
+              if (_errorMessage.isNotEmpty) Padding(padding: const EdgeInsets.only(bottom: 16), child: Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.red.shade50, border: Border.all(color: Colors.red.shade300), borderRadius: BorderRadius.circular(8)), child: Text(_errorMessage, style: TextStyle(color: Colors.red.shade800, fontSize: 12)))),
+              Row(children: [Expanded(child: OutlinedButton(onPressed: !_isLoading ? () => setState(() { _isSignInMode = true; _errorMessage = ''; _displayNameController.clear(); }) : null, style: OutlinedButton.styleFrom(side: BorderSide(color: _isSignInMode ? const Color(0xff0b2d4d) : Colors.grey, width: _isSignInMode ? 2 : 1)), child: Text('Sign In', style: TextStyle(color: _isSignInMode ? const Color(0xff0b2d4d) : Colors.grey, fontWeight: FontWeight.bold)))), const SizedBox(width: 12), Expanded(child: OutlinedButton(onPressed: !_isLoading ? () => setState(() { _isSignInMode = false; _errorMessage = ''; }) : null, style: OutlinedButton.styleFrom(side: BorderSide(color: !_isSignInMode ? const Color(0xff0b2d4d) : Colors.grey, width: !_isSignInMode ? 2 : 1)), child: Text('Sign Up', style: TextStyle(color: !_isSignInMode ? const Color(0xff0b2d4d) : Colors.grey, fontWeight: FontWeight.bold))))]),
+              const SizedBox(height: 20),
+              if (!_isSignInMode) TextField(controller: _displayNameController, enabled: !_isLoading, decoration: InputDecoration(labelText: 'Display Name', hintText: 'Your name', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), prefixIcon: const Icon(Icons.person_outline))),
+              if (!_isSignInMode) const SizedBox(height: 12),
+              TextField(controller: _emailController, enabled: !_isLoading, keyboardType: TextInputType.emailAddress, decoration: InputDecoration(labelText: 'Email', hintText: 'user@example.com', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), prefixIcon: const Icon(Icons.email_outlined))),
+              const SizedBox(height: 12),
+              TextField(controller: _passwordController, enabled: !_isLoading, obscureText: true, decoration: InputDecoration(labelText: 'Password', hintText: 'At least 6 characters', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), prefixIcon: const Icon(Icons.lock_outline))),
+              const SizedBox(height: 20),
+              FilledButton.icon(onPressed: !_isLoading && widget.firebaseReady ? _handleEmailAuth : null, icon: _isLoading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.login), label: Text(_isSignInMode ? 'Sign In with Email' : 'Create Account'), style: FilledButton.styleFrom(minimumSize: const Size(double.infinity, 48))),
+              const SizedBox(height: 16),
+              FilledButton.icon(onPressed: !_isLoading && widget.firebaseReady ? _handleGoogleSignIn : null, icon: const Text('G'), label: const Text('Sign In with Google'), style: FilledButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.black, minimumSize: const Size(double.infinity, 48), side: const BorderSide(color: Colors.grey))),
+            ]),
+          ),
+        ),
+      ),
+    ]);
+  }
 }
 
 class SectionTitle extends StatelessWidget { const SectionTitle(this.text, {super.key}); final String text; @override Widget build(BuildContext context) => Padding(padding: const EdgeInsets.fromLTRB(20, 4, 20, 12), child: Text(text, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800))); }
