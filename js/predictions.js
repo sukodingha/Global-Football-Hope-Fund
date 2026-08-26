@@ -16,7 +16,7 @@ import { auth, db } from "./firebase.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   doc, getDoc, setDoc, getDocs, collection, query, where, limit,
-  updateDoc, increment, serverTimestamp
+  updateDoc, increment, serverTimestamp, deleteDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   getFixturesByDate, getFixturesByIds, getRandomTopMatches, subscribeToFixtureUpdates
@@ -33,6 +33,9 @@ const globalMsg = getEl("predictionGlobalMsg");
 const historyContainer = getEl("predictionHistory");
 const countryFilterEl = getEl("predictionCountryFilter");
 const predictionSearchInput = getEl("predictionSearchInput");
+const selectionCounter = getEl("predictionSelectionCounter");
+const ticketLimitLabel = getEl("predictionTicketLimit");
+const submitTicketBtn = getEl("submitPredictionTicket");
 
 // ===== STATE =====
 let currentUser = null;
@@ -47,6 +50,7 @@ let allAvailableFixtures = [];
 let hasLoadedFixturesOnce = false;
 /** @type {Map<string, object>} fixture_id -> the signed-in user's prediction doc */
 let userPredictions = new Map();
+const pendingTicketSelections = new Map();
 let fixtureFetchInProgress = false;
 
 let pollIntervalId = null;
@@ -56,10 +60,9 @@ let fixtureUnsubscribe = null;
 // ===== CONSTANTS =====
 const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const PICK_LABELS = { home: "Home Win", draw: "Draw", away: "Away Win" };
-const PREDICTION_CORRECT_HP = 0.2; // Hope Points awarded for each correct prediction
 const PREDICTION_BATCH_SIZE = 7;
 const MAX_PREDICTIONS_PER_BATCH = 7;
-const MAX_BATCHES_PER_DAY = 3;
+const MAX_BATCHES_PER_DAY = 2;
 const MAX_PREDICTIONS_PER_DAY = MAX_PREDICTIONS_PER_BATCH * MAX_BATCHES_PER_DAY;
 
 // ===== HELPER FUNCTIONS =====
@@ -107,6 +110,12 @@ function getDailyLimitDocId(uid, dateStr = getTodayStr()) {
 
 function getTicketBatchNumber(totalPredictions) {
   return Math.min(Math.max(1, Math.floor(totalPredictions / MAX_PREDICTIONS_PER_BATCH) + 1), MAX_BATCHES_PER_DAY);
+}
+
+function updateTicketBuilder() {
+  const count = pendingTicketSelections.size;
+  if (selectionCounter) selectionCounter.textContent = `Selected: ${count} / ${MAX_PREDICTIONS_PER_BATCH}`;
+  if (submitTicketBtn) submitTicketBtn.disabled = count !== MAX_PREDICTIONS_PER_BATCH || !currentUser;
 }
 
 function normalizePredictionStatus(value) {
@@ -353,7 +362,7 @@ function renderFixtureCard(match) {
   const awayLogo = match.away_team_logo || "";
 
   const buttons = ["home", "draw", "away"].map((pick) => {
-    const isSelected = prediction?.pick === pick;
+    const isSelected = prediction?.pick === pick || pendingTicketSelections.get(String(fixtureId)) === pick;
     const label = pick === "home" ? "1" : pick === "draw" ? "X" : "2";
     const team = pick === "home" ? match.home_team_name : pick === "away" ? match.away_team_name : "Draw";
     return `
@@ -417,7 +426,7 @@ function stopLiveTick() {
   }
 }
 
-// ===== 5. PICK HANDLER — SUBMIT INDIVIDUAL PREDICTION IMMEDIATELY =====
+// ===== 5. TICKET BUILDER =====
 function attachPickHandlers() {
   fixturesContainer.querySelectorAll(".pick-btn").forEach((btn) => {
     btn.addEventListener("click", (e) => {
@@ -427,100 +436,102 @@ function attachPickHandlers() {
         if (authModal) authModal.classList.add("auth-modal--open");
         return;
       }
-      submitPrediction(btn);
+      toggleTicketSelection(btn);
     });
   });
 }
 
-async function submitPrediction(btn) {
+function toggleTicketSelection(btn) {
   const fixtureId = String(btn.dataset.fixture);
-  const pick = btn.dataset.pick; // 'home' | 'draw' | 'away'
+  const pick = btn.dataset.pick;
   const match = latestFixtures.find((f) => String(f.fixture_id) === fixtureId);
   if (!match) return;
-
   if (isMatchLocked(match.status)) {
     showGlobalMsg("This match has already kicked off — predictions are locked.", "error");
     return;
   }
-
   if (userPredictions.has(fixtureId)) {
     showGlobalMsg("You've already submitted a prediction for this match.", "error");
     return;
   }
+  const existingPick = pendingTicketSelections.get(fixtureId);
+  if (existingPick === pick) pendingTicketSelections.delete(fixtureId);
+  else if (existingPick || pendingTicketSelections.size < MAX_PREDICTIONS_PER_BATCH) pendingTicketSelections.set(fixtureId, pick);
+  else {
+    showGlobalMsg(`A ticket can contain exactly ${MAX_PREDICTIONS_PER_BATCH} predictions. Remove a pick before adding another.`, "error");
+    return;
+  }
+  updateTicketBuilder();
+  renderFixtures(latestFixtures);
+}
 
-  const todaySubmittedCount = [...userPredictions.values()].filter((p) => p.dateSubmitted === getTodayStr()).length;
-  const projectedTotal = todaySubmittedCount + 1;
-  const dailySummary = await getDailyPredictionSummary(currentUser.uid, getTodayStr());
-  const currentTicketCount = Number(dailySummary.currentBatchCount || 0);
-  const currentBatchNumber = getTicketBatchNumber(Number(dailySummary.totalPredictions || 0));
-
-  if (projectedTotal > MAX_PREDICTIONS_PER_DAY) {
-    showGlobalMsg(`⚠️ Daily limit reached: you can submit up to ${MAX_BATCHES_PER_DAY} bet tickets per day, with up to ${MAX_PREDICTIONS_PER_BATCH} picks per ticket.`, "error");
+async function submitPredictionTicket() {
+  if (!currentUser || pendingTicketSelections.size !== MAX_PREDICTIONS_PER_BATCH) return;
+  const dateSubmitted = getTodayStr();
+  const dailySummary = await getDailyPredictionSummary(currentUser.uid, dateSubmitted);
+  const ticketNumber = Number(dailySummary.batchCount || 0) + 1;
+  if (ticketNumber > MAX_BATCHES_PER_DAY) {
+    showGlobalMsg("You have already submitted two tickets today.", "error");
     return;
   }
 
-  if (currentTicketCount >= MAX_PREDICTIONS_PER_BATCH && Number(dailySummary.totalPredictions || 0) >= MAX_PREDICTIONS_PER_BATCH) {
-    showGlobalMsg(`⚠️ This ticket is full. Each bet ticket can contain up to ${MAX_PREDICTIONS_PER_BATCH} picks and you can submit ${MAX_BATCHES_PER_DAY} tickets per day.`, "error");
+  const selectedMatches = [...pendingTicketSelections.entries()].map(([fixtureId, pick]) => ({
+    fixtureId,
+    pick,
+    match: latestFixtures.find((fixture) => String(fixture.fixture_id) === fixtureId)
+  }));
+  if (selectedMatches.some(({ match }) => !match || isMatchLocked(match.status) || userPredictions.has(String(match.fixture_id)))) {
+    showGlobalMsg("One or more selected matches are no longer available. Please review your ticket.", "error");
     return;
   }
 
-  if (currentBatchNumber > MAX_BATCHES_PER_DAY) {
-    showGlobalMsg(`⚠️ You have reached the daily cap of ${MAX_BATCHES_PER_DAY} bet tickets for today.`, "error");
-    return;
-  }
-
-  const card = btn.closest(".odds-card");
-  if (card) card.querySelectorAll(".pick-btn").forEach((b) => { b.disabled = true; });
-
-  const docId = `${fixtureId}_${currentUser.uid}`;
-  const docRef = doc(db, "predictions", docId);
-
+  submitTicketBtn.disabled = true;
+  const batchId = `${currentUser.uid}_${dateSubmitted}_ticket_${ticketNumber}`;
   try {
-    const existing = await getDoc(docRef);
-    if (existing.exists()) {
-      userPredictions.set(fixtureId, { id: docId, ...existing.data() });
-      showGlobalMsg("You've already submitted a prediction for this match.", "error");
-      renderFixtures(latestFixtures);
-      return;
+    for (const { fixtureId, pick, match } of selectedMatches) {
+      const docId = `${fixtureId}_${currentUser.uid}`;
+      const data = {
+        userId: currentUser.uid,
+        userName: currentUserName,
+        fixtureId,
+        pick,
+        league: match.league_name || "",
+        homeTeam: match.home_team_name || "",
+        awayTeam: match.away_team_name || "",
+        kickoff: match.kickoff_time || null,
+        status: "pending",
+        ticketStatus: "pending",
+        pointsAwarded: 0,
+        schemaVersion: 2,
+        dateSubmitted,
+        batchId,
+        batchNumber: ticketNumber,
+        createdAt: serverTimestamp()
+      };
+      await setDoc(doc(db, "predictions", docId), data);
+      userPredictions.set(fixtureId, { id: docId, ...data });
     }
-
-    const ticketNumber = Math.min(
-      MAX_BATCHES_PER_DAY,
-      Math.max(1, Math.floor((Number(dailySummary.totalPredictions || 0)) / MAX_PREDICTIONS_PER_BATCH) + 1)
-    );
-    const batchId = `${currentUser.uid}_${getTodayStr()}_ticket_${ticketNumber}`;
-
-    const data = {
-      userId: currentUser.uid,
-      userName: currentUserName,
-      fixtureId,
-      pick,
-      league: match.league_name || "",
-      homeTeam: match.home_team_name || "",
-      awayTeam: match.away_team_name || "",
-      kickoff: match.kickoff_time || null,
-      status: "pending",
-      ticketStatus: "pending",
-      pointsAwarded: 0,
-      dateSubmitted: getTodayStr(),
-      batchId,
-      batchNumber: ticketNumber,
-      createdAt: serverTimestamp()
-    };
-
-    await setDoc(docRef, data);
-    await updateDailyPredictionSummary(currentUser.uid, 1, data.dateSubmitted);
-    userPredictions.set(fixtureId, { id: docId, ...data });
-
-    showGlobalMsg(`✅ Prediction saved: ${PICK_LABELS[pick]}`, "success");
+    await setDoc(doc(db, "predictionDailyLimits", getDailyLimitDocId(currentUser.uid, dateSubmitted)), {
+      uid: currentUser.uid,
+      date: dateSubmitted,
+      totalPredictions: ticketNumber * MAX_PREDICTIONS_PER_BATCH,
+      batchCount: ticketNumber,
+      currentBatchCount: 0,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+    pendingTicketSelections.clear();
+    updateTicketBuilder();
+    showGlobalMsg(`Ticket ${ticketNumber} submitted with 7 predictions.`, "success");
     renderFixtures(latestFixtures);
     loadPredictionHistory();
   } catch (err) {
-    console.error("Prediction submit error:", err);
-    showGlobalMsg("❌ Failed to save your prediction. Please try again.", "error");
-    renderFixtures(latestFixtures);
+    console.error("Ticket submission error:", err);
+    showGlobalMsg("Could not submit the ticket. Please try again.", "error");
+    updateTicketBuilder();
   }
 }
+
+submitTicketBtn?.addEventListener("click", submitPredictionTicket);
 
 // ===== 6. SETTLEMENT — mark finished matches correct/incorrect & award HP =====
 async function settlePendingPredictions() {
@@ -529,82 +540,53 @@ async function settlePendingPredictions() {
   try {
     const q = query(collection(db, "predictions"), where("userId", "==", currentUser.uid));
     const snap = await getDocs(q);
-    const pending = snap.docs
-      .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }))
-      .filter((prediction) => {
-        const status = normalizePredictionStatus(prediction.status);
-        const ticketStatus = normalizeTicketStatus(prediction.ticketStatus || prediction.status);
-        return status === "pending" || ticketStatus === "pending";
-      });
+    const allPredictions = snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+    const pending = allPredictions.filter((prediction) => normalizePredictionStatus(prediction.status) === "pending");
 
     if (pending.length === 0) return;
 
     const fixtures = await getFixturesByIds(pending.map((p) => p.fixtureId));
-    const groupedByTicket = new Map();
-    const resolvedPredictions = [];
-
-    pending.forEach((prediction) => {
-      const ticketKey = prediction.batchId || `${prediction.dateSubmitted || getTodayStr()}_${prediction.fixtureId}`;
-      if (!groupedByTicket.has(ticketKey)) groupedByTicket.set(ticketKey, []);
-      groupedByTicket.get(ticketKey).push(prediction);
-    });
+    const changedTicketKeys = new Set();
 
     for (const prediction of pending) {
       const fixture = fixtures.find((f) => String(f.fixture_id) === String(prediction.fixtureId));
-      if (!fixture || !["finished", "live", "half_time"].includes(fixture.status)) {
-        const maybeFinished = fixture && fixture.status === "finished";
-        if (!maybeFinished) continue;
-      }
+      if (!fixture || fixture.status !== "finished") continue;
 
       const homeScore = Number(fixture.home_score) || 0;
       const awayScore = Number(fixture.away_score) || 0;
       const outcome = getMatchOutcome(homeScore, awayScore);
       const correct = outcome === prediction.pick;
 
-      resolvedPredictions.push({
-        prediction,
-        correct,
-        homeScore,
-        awayScore,
-        finalScore: `${homeScore}-${awayScore}`
-      });
-
       await updateDoc(doc(db, "predictions", prediction.id), {
         status: correct ? "correct" : "incorrect",
-        ticketStatus: correct ? "won" : "lost",
-        pointsAwarded: correct ? PREDICTION_CORRECT_HP : 0,
+        pointsAwarded: 0,
         finalScore: `${homeScore}-${awayScore}`
       });
-
-      if (correct) {
-        await updateDoc(doc(db, "users", currentUser.uid), {
-          rewardPoints: increment(PREDICTION_CORRECT_HP),
-          totalRewardsEarned: increment(PREDICTION_CORRECT_HP)
-        });
-      }
+      prediction.status = correct ? "correct" : "incorrect";
+      prediction.finalScore = `${homeScore}-${awayScore}`;
+      changedTicketKeys.add(prediction.batchId || `${prediction.dateSubmitted || getTodayStr()}_${prediction.fixtureId}`);
     }
 
-    const groupedByDate = new Map();
-    let settledCount = 0;
-
-    for (const [ticketKey, ticketPredictions] of groupedByTicket.entries()) {
-      const evaluatedTicket = resolvedPredictions.filter((entry) =>
-        (entry.prediction.batchId || `${entry.prediction.dateSubmitted || getTodayStr()}_${entry.prediction.fixtureId}`) === ticketKey
+    for (const ticketKey of changedTicketKeys) {
+      const ticketPredictions = allPredictions.filter((prediction) =>
+        (prediction.batchId || `${prediction.dateSubmitted || getTodayStr()}_${prediction.fixtureId}`) === ticketKey
       );
+      if (ticketPredictions.length !== MAX_PREDICTIONS_PER_BATCH || ticketPredictions.some((prediction) => prediction.status === "pending")) continue;
 
-      if (!evaluatedTicket.length) continue;
+      const correctCount = ticketPredictions.filter((prediction) => prediction.status === "correct").length;
+      const ticketStatus = correctCount === MAX_PREDICTIONS_PER_BATCH ? "won" : "lost";
+      const ticketReward = ticketStatus === "won" ? 10 : 0;
+      const lossExpiry = ticketStatus === "lost" ? new Date(Date.now() + 24 * 60 * 60 * 1000) : null;
 
-      const correctCount = evaluatedTicket.filter((entry) => entry.correct).length;
-      const ticketStatus = correctCount === evaluatedTicket.length ? "won" : "lost";
-      const ticketReward = correctCount === evaluatedTicket.length ? 10 + (correctCount * PREDICTION_CORRECT_HP) : correctCount * PREDICTION_CORRECT_HP;
-
-      for (const entry of evaluatedTicket) {
-        const docRef = doc(db, "predictions", entry.prediction.id);
+      for (const prediction of ticketPredictions) {
+        const docRef = doc(db, "predictions", prediction.id);
         await updateDoc(docRef, {
           ticketStatus,
           ticketReward,
           ticketCorrectCount: correctCount,
-          ticketMatchCount: evaluatedTicket.length
+          ticketMatchCount: MAX_PREDICTIONS_PER_BATCH,
+          pointsAwarded: ticketStatus === "won" ? ticketReward / MAX_PREDICTIONS_PER_BATCH : 0,
+          lostExpiresAt: lossExpiry
         });
       }
 
@@ -614,30 +596,10 @@ async function settlePendingPredictions() {
           totalRewardsEarned: increment(ticketReward)
         });
       }
-
-      const key = evaluatedTicket[0].prediction.dateSubmitted || getTodayStr();
-      if (!groupedByDate.has(key)) groupedByDate.set(key, { date: key, correct: 0, total: 0 });
-      groupedByDate.get(key).total += evaluatedTicket.length;
-      groupedByDate.get(key).correct += correctCount;
-      settledCount += evaluatedTicket.length;
     }
 
-    for (const [dateStr, summary] of groupedByDate.entries()) {
-      if (summary.total === 0 || summary.correct < 7) continue;
-      await updateDoc(doc(db, "users", currentUser.uid), {
-        rewardPoints: increment(10),
-        totalRewardsEarned: increment(10)
-      });
-      await setDoc(doc(db, "predictionDailyLimits", getDailyLimitDocId(currentUser.uid, dateStr)), {
-        uid: currentUser.uid,
-        date: dateStr,
-        batchBonusAwarded: true,
-        bonusHP: increment(10)
-      }, { merge: true });
-    }
-
-    if (settledCount > 0) {
-      showGlobalMsg(`🏆 ${settledCount} prediction(s) settled!`, "success");
+    if (changedTicketKeys.size > 0) {
+      showGlobalMsg("Prediction results updated.", "success");
       await loadUserPredictions();
       await loadPredictionHistory();
       await loadLeaderboard();
@@ -652,6 +614,25 @@ function getTimestampMs(dateLike) {
   if (!dateLike) return 0;
   const ms = dateLike?.toMillis?.() ?? new Date(dateLike).getTime();
   return Number.isFinite(ms) ? Number(ms) : 0;
+}
+
+async function purgeExpiredLostPredictions(predictions) {
+  const now = Date.now();
+  const expired = predictions.filter((prediction) =>
+    prediction.ticketStatus === "lost" && getTimestampMs(prediction.lostExpiresAt) > 0 && getTimestampMs(prediction.lostExpiresAt) <= now
+  );
+  await Promise.all(expired.map((prediction) => deleteDoc(doc(db, "predictions", prediction.id)).catch((err) => {
+    console.warn("Could not delete expired lost ticket:", err);
+  })));
+  return new Set(expired.map((prediction) => prediction.id));
+}
+
+async function purgeLegacyPredictions(predictions) {
+  const legacy = predictions.filter((prediction) => Number(prediction.schemaVersion || 0) < 2);
+  await Promise.all(legacy.map((prediction) => deleteDoc(doc(db, "predictions", prediction.id)).catch((err) => {
+    console.warn("Could not remove legacy prediction:", err);
+  })));
+  return new Set(legacy.map((prediction) => prediction.id));
 }
 
 function formatTicketTimestamp(dateLike) {
@@ -702,11 +683,28 @@ async function loadPredictionHistory() {
     const snap = await getDocs(q);
 
     const cutoffMs = Date.now() - (7 * 24 * 60 * 60 * 1000);
-    const recentDocs = snap.docs
+    const allDocs = snap.docs
       .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }))
+    const legacyIds = await purgeLegacyPredictions(allDocs);
+    if (legacyIds.size > 0) {
+      const today = getTodayStr();
+      await setDoc(doc(db, "predictionDailyLimits", getDailyLimitDocId(currentUser.uid, today)), {
+        uid: currentUser.uid,
+        date: today,
+        totalPredictions: 0,
+        batchCount: 0,
+        currentBatchCount: 0,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+    }
+    const activeDocs = allDocs.filter((prediction) => !legacyIds.has(prediction.id));
+    const expiredIds = await purgeExpiredLostPredictions(activeDocs);
+    const recentDocs = activeDocs
+      .filter((prediction) => !expiredIds.has(prediction.id))
       .filter((prediction) => {
         const createdMs = getTimestampMs(prediction.createdAt);
-        return Number.isFinite(createdMs) && createdMs >= cutoffMs;
+        const expiryMs = getTimestampMs(prediction.lostExpiresAt);
+        return Number.isFinite(createdMs) && createdMs >= cutoffMs && (!expiryMs || expiryMs > Date.now());
       })
       .sort((a, b) => getTimestampMs(b.createdAt) - getTimestampMs(a.createdAt));
 
@@ -715,6 +713,7 @@ async function loadPredictionHistory() {
       return;
     }
 
+    const fixtures = await getFixturesByIds(recentDocs.map((prediction) => prediction.fixtureId));
     const groupedTickets = new Map();
     recentDocs.forEach((prediction, index) => {
       const ticketKey = getPredictionBatchKey(prediction, index);
@@ -753,9 +752,13 @@ async function loadPredictionHistory() {
       const matchRows = ticket.predictions.map((prediction) => {
         let resultLabel = "⏳ Pending";
         let resultClass = "pending";
+        const fixture = fixtures.find((item) => String(item.fixture_id) === String(prediction.fixtureId));
+        const liveStatus = fixture && ["live", "half_time"].includes(fixture.status)
+          ? `<span class="match-status-badge live">${fixture.status === "half_time" ? "HT" : `LIVE ${fixture.minute ? `${fixture.minute}'` : ""}`}</span>`
+          : "";
 
         if (prediction.status === "correct") {
-          resultLabel = `✅ Correct +${PREDICTION_CORRECT_HP} HP`;
+          resultLabel = "✅ Correct";
           resultClass = "won";
         } else if (prediction.status === "incorrect") {
           resultLabel = "❌ Incorrect";
@@ -766,7 +769,7 @@ async function loadPredictionHistory() {
           <div class="ticket-match-row">
             <div class="ticket-match-teams">
               <strong>${escapeHtml(prediction.homeTeam)} vs ${escapeHtml(prediction.awayTeam)}</strong>
-              <span>${PICK_LABELS[prediction.pick] || prediction.pick}</span>
+              <span>${PICK_LABELS[prediction.pick] || prediction.pick} ${liveStatus}</span>
             </div>
             <span class="slip-history-status ${resultClass}">${resultLabel}</span>
           </div>
@@ -774,16 +777,16 @@ async function loadPredictionHistory() {
       }).join("");
 
       return `
-        <div class="slip-history-item ${statusClass}">
-          <div class="slip-history-header" style="cursor:default;">
+        <details class="slip-history-item ${statusClass}">
+          <summary class="slip-history-header">
             <div class="slip-history-header-left ticket-header-left">
-              <span class="ticket-badge">🎫 Bet Ticket ${ticket.batchNumber}</span>
-              <span class="ticket-submeta">${ticket.predictions.length} picks · ${formatTicketTimestamp(ticket.createdAt)}</span>
+              <span class="ticket-badge">🎫 Ticket ${ticket.batchNumber} - ${formatDateShort(ticket.predictions[0].dateSubmitted)}</span>
+              <span class="ticket-submeta">${ticket.predictions.length}/7 picks · Click to view matches</span>
             </div>
             <span class="slip-history-status ${statusClass}">${statusText}</span>
-          </div>
+          </summary>
           <div class="ticket-match-list">${matchRows}</div>
-        </div>
+        </details>
       `;
     }).join("");
   } catch (err) {
@@ -808,7 +811,7 @@ async function loadLeaderboard() {
         userStats[p.userId] = { userId: p.userId, userName: p.userName || "Anonymous", correct: 0, hpEarned: 0 };
       }
       userStats[p.userId].correct++;
-      userStats[p.userId].hpEarned += Number(p.pointsAwarded) || PREDICTION_CORRECT_HP;
+      userStats[p.userId].hpEarned += Number(p.pointsAwarded) || 0;
     });
 
     const sorted = Object.values(userStats).sort((a, b) => b.hpEarned - a.hpEarned);
@@ -849,7 +852,7 @@ async function loadLeaderboard() {
         }).join("")}
       </div>
       <div class="leaderboard-legend">
-        <p>🏆 Earn <strong>${PREDICTION_CORRECT_HP} HP</strong> for every correct prediction!</p>
+        <p>🏆 Rewards are issued only for a complete 7/7 winning ticket.</p>
       </div>
     `;
   } catch (err) {
@@ -969,6 +972,7 @@ function wireFixtureSubscription() {
       allAvailableFixtures = fixtures || [];
       populateCountryFilterOptions(allAvailableFixtures);
       applyPredictionFilter();
+      loadPredictionHistory();
     }
   });
 }
@@ -1022,10 +1026,13 @@ onAuthStateChanged(auth, async (user) => {
     await settlePendingPredictions();
     await renderActivePredictedMatches();
     await loadPredictionHistory();
+    updateTicketBuilder();
   } else {
     currentUserUniqueId = "";
     currentUserName = "Guest";
     userPredictions = new Map();
+    pendingTicketSelections.clear();
+    updateTicketBuilder();
     if (userStatus) {
       userStatus.textContent = "Sign in to make predictions!";
       userStatus.classList.remove("active");

@@ -1,10 +1,10 @@
 /**
- * GFHF Service Worker — v8
+ * GFHF Service Worker — v10
  * Caches core app shell for offline functionality.
  * Implements cache-first then network-fallback strategy.
  */
 
-const CACHE_NAME = 'gfhf-cache-v8';
+const CACHE_NAME = 'gfhf-cache-v10';
 const APP_SHELL = [
   './',
   './index.html',

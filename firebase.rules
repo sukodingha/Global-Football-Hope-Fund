@@ -59,6 +59,13 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && isActiveUser() && request.resource.data.userId == request.auth.uid;
       allow update: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow delete: if isAdmin() || (isOwn(resource.data.userId) && (!('schemaVersion' in resource.data) || (resource.data.ticketStatus == 'lost' && resource.data.lostExpiresAt < request.time)));
+    }
+
+    match /predictionDailyLimits/{summaryId} {
+      allow read: if isSignedIn() && resource.data.uid == request.auth.uid;
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.uid == request.auth.uid && request.resource.data.uid == request.auth.uid;
       allow delete: if isAdmin();
     }
 

@@ -101,6 +101,14 @@
         <h3 style="color:#fff;margin:0;">📡 Your Active Predicted Matches</h3>
       </div>
 
+      <div id="predictionTicketBuilder" style="max-width:1200px;margin:0 auto 20px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:14px 16px;border:1px solid rgba(255,255,255,0.18);background:rgba(15,23,42,0.58);">
+        <div>
+          <strong id="predictionSelectionCounter" style="color:#fff;">Selected: 0 / 7</strong>
+          <span id="predictionTicketLimit" style="display:block;margin-top:4px;color:rgba(255,255,255,0.72);font-size:13px;">Two tickets are available each calendar day.</span>
+        </div>
+        <button id="submitPredictionTicket" class="btn" type="button" disabled>Submit Ticket</button>
+      </div>
+
       <!-- Fixtures -->
       <h3 style="color:#fff;margin-bottom:16px;">📅 Upcoming Fixtures</h3>
       <div class="odds-grid" id="predictionFixtures">
