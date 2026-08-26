@@ -2957,6 +2957,35 @@ footer {
     flex: 1;
 }
 
+.chat-camera-modal-card {
+    max-width: 480px;
+}
+
+.chat-camera-modal-body {
+    padding: 16px;
+}
+
+#chatCameraPreview {
+    display: block;
+    width: 100%;
+    max-height: 60vh;
+    background: #0f172a;
+    border-radius: 8px;
+    object-fit: cover;
+}
+
+.chat-camera-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 14px;
+}
+
+.chat-camera-actions .btn {
+    width: auto;
+    margin: 0;
+}
+
 /* ===== INSTALL APP NAV BUTTON (deprecated - kept for backward compat) ===== */
 .install-nav-btn {
     background: linear-gradient(90deg, #00c853, #00b34a);

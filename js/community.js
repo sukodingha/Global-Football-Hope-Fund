@@ -54,6 +54,8 @@ let liveCameraStream = null;
 let liveRecorder = null;
 let liveRecordedChunks = [];
 let capturedPhotoDataUrl = null;
+let chatCameraStream = null;
+let chatCameraSendHandler = null;
 let privacySettings = {
   accountType: "public",
   posts: "everyone",
@@ -182,6 +184,13 @@ const floatingChatMessages = document.getElementById("floatingChatMessages");
 const floatingChatForm = document.getElementById("floatingChatForm");
 const floatingChatInput = document.getElementById("floatingChatInput");
 const floatingChatClose = document.getElementById("floatingChatClose");
+const chatCameraModal = document.getElementById("chatCameraModal");
+const chatCameraOverlay = document.getElementById("chatCameraOverlay");
+const chatCameraClose = document.getElementById("chatCameraClose");
+const chatCameraPreview = document.getElementById("chatCameraPreview");
+const chatCameraStatus = document.getElementById("chatCameraStatus");
+const chatCameraCapture = document.getElementById("chatCameraCapture");
+const chatCameraCancel = document.getElementById("chatCameraCancel");
 
 // Filter buttons
 const filterBtns = document.querySelectorAll(".feed-filter-btn");
@@ -1773,13 +1782,59 @@ function renderDMMessages() {
     d.style.marginLeft = isMe ? "20px" : "0";
     d.style.marginRight = isMe ? "0" : "20px";
     d.style.background = isMe ? "rgba(0,200,83,0.1)" : "white";
-    d.innerHTML = `<div class="chat-author">${isMe ? "You" : msg.fromName}</div><div class="chat-text">${msg.text}</div><div class="chat-time">${new Date(msg.createdAt).toLocaleTimeString()}</div>`;
+    const imageHtml = msg.imageUrl
+      ? `<img src="${msg.imageUrl}" alt="Shared image" class="chat-shared-image" style="max-width:200px;max-height:200px;border-radius:8px;display:block;margin-top:5px;cursor:pointer;" onclick="window.open('${msg.imageUrl}', '_blank')">`
+      : "";
+    d.innerHTML = `<div class="chat-author">${isMe ? "You" : msg.fromName}</div>${imageHtml}<div class="chat-text">${msg.text || ""}</div><div class="chat-time">${new Date(msg.createdAt).toLocaleTimeString()}</div>`;
     dmChatMessages.appendChild(d);
   });
   dmChatMessages.scrollTop = dmChatMessages.scrollHeight;
 }
 
 if (dmChatForm) {
+  const dmFileInput = document.createElement('input');
+  dmFileInput.type = 'file';
+  dmFileInput.accept = 'image/*';
+  dmFileInput.style.display = 'none';
+  dmChatForm.appendChild(dmFileInput);
+
+  const dmCameraBtn = document.createElement('button');
+  dmCameraBtn.type = 'button';
+  dmCameraBtn.className = 'chat-camera-btn';
+  dmCameraBtn.textContent = '📷';
+  dmCameraBtn.title = 'Take a photo';
+  const dmAttachBtn = document.createElement('button');
+  dmAttachBtn.type = 'button';
+  dmAttachBtn.className = 'chat-camera-btn';
+  dmAttachBtn.textContent = '🖼️';
+  dmAttachBtn.title = 'Attach an image';
+  const dmSendBtn = dmChatForm.querySelector('.btn');
+  dmChatForm.insertBefore(dmCameraBtn, dmSendBtn);
+  dmChatForm.insertBefore(dmAttachBtn, dmSendBtn);
+
+  const sendDmImage = async (file) => {
+    if (!activeDMUserId || !currentUser) return false;
+    const chatKey = [currentUser.uid, activeDMUserId].sort().join('_');
+    const imageUrl = await uploadAndSendChatImage(file, `liveChats/${chatKey}/messages`);
+    if (!imageUrl) return false;
+    saveDMMessage(activeDMUserId, {
+      from: currentUser.uid,
+      fromName: currentUserName,
+      text: "",
+      imageUrl,
+      createdAt: new Date().toISOString()
+    });
+    renderDMMessages();
+    return true;
+  };
+  dmCameraBtn.addEventListener('click', () => openChatCamera(sendDmImage));
+  dmAttachBtn.addEventListener('click', () => dmFileInput.click());
+  dmFileInput.addEventListener('change', async () => {
+    const file = dmFileInput.files[0];
+    if (file) await sendDmImage(file);
+    dmFileInput.value = '';
+  });
+
   dmChatForm.addEventListener("submit", (e) => {
     e.preventDefault();
     if (!activeDMUserId || !dmMessageInput) return;
@@ -1837,6 +1892,97 @@ async function openChatFromDeepLink(partnerId) {
 }
 
 // ===== CLOUDINARY CHAT IMAGE UPLOAD =====
+const COMMUNITY_CHAT_PROFANITY_PATTERNS = [
+  /\bf+[\W_]*[uuv]+[\W_]*c+[\W_]*k+\b/i,
+  /\bsh+[\W_]*[i1!]+[\W_]*t+\b/i,
+  /\bb+[\W_]*[i1!]+[\W_]*t+[\W_]*c+[\W_]*h+\b/i,
+  /\ba+[\W_]*s+[\W_]*s+[\W_]*h+[\W_]*o+[\W_]*l+[\W_]*e+\b/i,
+  /\bc+[\W_]*[uuv]+[\W_]*n+[\W_]*t+\b/i
+];
+
+function containsProhibitedCommunityLanguage(text) {
+  return COMMUNITY_CHAT_PROFANITY_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+function showCommunityChatMessage(text) {
+  if (!communityChatForm) return;
+  let message = document.getElementById("communityChatValidation");
+  if (!message) {
+    message = document.createElement("p");
+    message.id = "communityChatValidation";
+    message.setAttribute("aria-live", "polite");
+    communityChatForm.before(message);
+  }
+  message.textContent = text;
+  message.className = "message error";
+}
+
+function setChatCameraStatus(text = "", type = "") {
+  if (!chatCameraStatus) return;
+  chatCameraStatus.textContent = text;
+  chatCameraStatus.className = type ? `message ${type}` : "message";
+}
+
+function closeChatCamera() {
+  chatCameraStream?.getTracks().forEach((track) => track.stop());
+  chatCameraStream = null;
+  chatCameraSendHandler = null;
+  if (chatCameraPreview) chatCameraPreview.srcObject = null;
+  if (chatCameraModal) chatCameraModal.hidden = true;
+  setChatCameraStatus();
+}
+
+async function openChatCamera(sendHandler) {
+  if (!currentUser || !chatCameraModal || !chatCameraPreview) return;
+  chatCameraModal.hidden = false;
+  chatCameraSendHandler = sendHandler;
+  chatCameraCapture.disabled = true;
+  setChatCameraStatus("Requesting camera permission...");
+  if (!navigator.mediaDevices?.getUserMedia) {
+    setChatCameraStatus("Camera capture is not supported by this browser.", "error");
+    return;
+  }
+  try {
+    chatCameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
+    chatCameraPreview.srcObject = chatCameraStream;
+    await chatCameraPreview.play();
+    chatCameraCapture.disabled = false;
+    setChatCameraStatus();
+  } catch (err) {
+    const message = err?.name === "NotAllowedError"
+      ? "Camera permission was denied. Enable it in your browser settings and try again."
+      : "The camera is unavailable. Check that it is connected and not in use by another app.";
+    setChatCameraStatus(message, "error");
+    console.warn("Chat camera unavailable:", err);
+  }
+}
+
+async function captureAndSendChatPhoto() {
+  if (!chatCameraPreview?.videoWidth || !chatCameraSendHandler) return;
+  const canvas = document.createElement("canvas");
+  canvas.width = chatCameraPreview.videoWidth;
+  canvas.height = chatCameraPreview.videoHeight;
+  canvas.getContext("2d").drawImage(chatCameraPreview, 0, 0, canvas.width, canvas.height);
+  const photo = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.9));
+  if (!photo) {
+    setChatCameraStatus("Could not capture the photo. Please try again.", "error");
+    return;
+  }
+  chatCameraCapture.disabled = true;
+  setChatCameraStatus("Sending photo...");
+  const sent = await chatCameraSendHandler(new File([photo], "chat-photo.jpg", { type: "image/jpeg" }));
+  if (sent) closeChatCamera();
+  else {
+    chatCameraCapture.disabled = false;
+    setChatCameraStatus("Could not send the photo. Please try again.", "error");
+  }
+}
+
+chatCameraCapture?.addEventListener("click", captureAndSendChatPhoto);
+chatCameraClose?.addEventListener("click", closeChatCamera);
+chatCameraCancel?.addEventListener("click", closeChatCamera);
+chatCameraOverlay?.addEventListener("click", closeChatCamera);
+
 /**
  * Reusable function: upload an image to Cloudinary, then save a chat message
  * with the image URL to the specified Firestore collection.
@@ -1845,7 +1991,7 @@ async function openChatFromDeepLink(partnerId) {
  * @param {object} extraData - Additional data to include in the message doc
  */
 async function uploadAndSendChatImage(file, collectionPath, extraData = {}) {
-  if (!currentUser || !file) return;
+  if (!currentUser || !file) return false;
 
   // Upload to Cloudinary
   const formData = new FormData();
@@ -1854,6 +2000,7 @@ async function uploadAndSendChatImage(file, collectionPath, extraData = {}) {
 
   try {
     const res = await fetch(CLOUDINARY_UPLOAD_URL, { method: 'POST', body: formData });
+    if (!res.ok) throw new Error(`Image upload failed with status ${res.status}`);
     const data = await res.json();
 
     // DEBUG LOG: See every key returned
@@ -1864,8 +2011,7 @@ async function uploadAndSendChatImage(file, collectionPath, extraData = {}) {
 
     if (!imageUrl) {
       console.error("No valid URL returned from Cloudinary!", data);
-      alert("Upload failed: Could not retrieve image URL from Cloudinary.");
-      return;
+      return false;
     }
 
     console.log("Extracted Image URL successfully:", imageUrl);
@@ -1902,12 +2048,15 @@ async function uploadAndSendChatImage(file, collectionPath, extraData = {}) {
         await addDoc(collection(db, collectionPath), msgData);
       }
 
+      return imageUrl;
+
     } catch (err) {
       console.error('Chat image save failed:', err);
+      return false;
     }
   } catch (err) {
     console.error('Chat image upload failed:', err);
-    return;
+    return false;
   }
 }
 
@@ -1921,22 +2070,30 @@ if (communityChatForm) {
   communityFileInput.id = 'communityChatFileInput';
   communityChatForm.appendChild(communityFileInput);
 
-  // Add camera icon button next to the Send button
+  // Add camera and image attachment controls next to the Send button.
   const communityCameraBtn = document.createElement('button');
   communityCameraBtn.type = 'button';
   communityCameraBtn.className = 'chat-camera-btn';
   communityCameraBtn.textContent = '📷';
-  communityCameraBtn.title = 'Upload image';
+  communityCameraBtn.title = 'Take a photo';
   communityCameraBtn.style.cssText = 'padding:8px 10px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:50%;font-size:18px;cursor:pointer;transition:background 0.2s;line-height:1;';
-  // Insert before the send button
+  const communityAttachBtn = document.createElement('button');
+  communityAttachBtn.type = 'button';
+  communityAttachBtn.className = 'chat-camera-btn';
+  communityAttachBtn.textContent = '🖼️';
+  communityAttachBtn.title = 'Attach an image';
+  communityAttachBtn.style.cssText = communityCameraBtn.style.cssText;
   const communitySendBtn = communityChatForm.querySelector('.btn');
   if (communitySendBtn) {
     communityChatForm.insertBefore(communityCameraBtn, communitySendBtn);
+    communityChatForm.insertBefore(communityAttachBtn, communitySendBtn);
   } else {
     communityChatForm.appendChild(communityCameraBtn);
+    communityChatForm.appendChild(communityAttachBtn);
   }
 
-  communityCameraBtn.addEventListener('click', () => communityFileInput.click());
+  communityCameraBtn.addEventListener('click', () => openChatCamera((file) => uploadAndSendChatImage(file, 'community_chats')));
+  communityAttachBtn.addEventListener('click', () => communityFileInput.click());
 
   communityFileInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];
@@ -1955,11 +2112,16 @@ if (communityChatForm) {
     const input = communityChatForm.querySelector("input");
     const text = input.value.trim();
     if (!text) return;
+    if (containsProhibitedCommunityLanguage(text)) {
+      showCommunityChatMessage("Please keep community chat respectful. That message was not sent.");
+      return;
+    }
     try {
       await addDoc(collection(db, "community_chats"), {
         authorId: currentUser.uid, authorName: currentUserName, authorAvatar: currentUserAvatar, text, createdAt: serverTimestamp()
       });
       input.value = "";
+      document.getElementById("communityChatValidation")?.remove();
     } catch (err) { console.error(err); }
   });
 }
@@ -2151,7 +2313,7 @@ if (floatingChatClose) {
 
 // Floating chat form submit
 if (floatingChatForm) {
-  // Add camera button for image upload in floating chat
+  // Add camera and image attachment controls in floating chat.
   const floatingFileInput = document.createElement('input');
   floatingFileInput.type = 'file';
   floatingFileInput.accept = 'image/*';
@@ -2163,25 +2325,38 @@ if (floatingChatForm) {
   floatingCameraBtn.type = 'button';
   floatingCameraBtn.className = 'chat-camera-btn';
   floatingCameraBtn.textContent = '📷';
-  floatingCameraBtn.title = 'Upload image';
+  floatingCameraBtn.title = 'Take a photo';
   floatingCameraBtn.style.cssText = 'padding:6px 8px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:50%;font-size:16px;cursor:pointer;width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;line-height:1;';
+  const floatingAttachBtn = document.createElement('button');
+  floatingAttachBtn.type = 'button';
+  floatingAttachBtn.className = 'chat-camera-btn';
+  floatingAttachBtn.textContent = '🖼️';
+  floatingAttachBtn.title = 'Attach an image';
+  floatingAttachBtn.style.cssText = floatingCameraBtn.style.cssText;
   const floatingSendBtn = floatingChatForm.querySelector('.floating-chat-send-btn');
   if (floatingSendBtn) {
     floatingChatForm.insertBefore(floatingCameraBtn, floatingSendBtn);
+    floatingChatForm.insertBefore(floatingAttachBtn, floatingSendBtn);
   } else {
     floatingChatForm.appendChild(floatingCameraBtn);
+    floatingChatForm.appendChild(floatingAttachBtn);
   }
 
-  floatingCameraBtn.addEventListener('click', () => floatingFileInput.click());
+  const sendFloatingImage = async (file) => {
+    if (!activeFloatingChatPartnerId || !currentUser) return false;
+    const chatKey = [currentUser.uid, activeFloatingChatPartnerId].sort().join("_");
+    return uploadAndSendChatImage(file, `liveChats/${chatKey}/messages`);
+  };
+  floatingCameraBtn.addEventListener('click', () => openChatCamera(sendFloatingImage));
+  floatingAttachBtn.addEventListener('click', () => floatingFileInput.click());
 
   floatingFileInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     if (!activeFloatingChatPartnerId || !currentUser) return;
-    const chatKey = [currentUser.uid, activeFloatingChatPartnerId].sort().join("_");
     floatingCameraBtn.disabled = true;
     floatingCameraBtn.textContent = '⏳';
-    await uploadAndSendChatImage(file, `liveChats/${chatKey}/messages`);
+    await sendFloatingImage(file);
     floatingCameraBtn.disabled = false;
     floatingCameraBtn.textContent = '📷';
     floatingFileInput.value = '';
