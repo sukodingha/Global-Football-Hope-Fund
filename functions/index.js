@@ -1,4 +1,4 @@
-const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
@@ -74,8 +74,7 @@ async function fetchFixtures(ids) {
   return Array.isArray(payload.response) ? payload.response : [];
 }
 
-exports.getFixtures = onCall({ secrets: [API_FOOTBALL_KEY] }, async (request) => {
-  const payload = request.data || {};
+async function buildFixturesPayload(payload = {}) {
   const live = payload.live === true;
   const date = typeof payload.date === "string" ? payload.date.trim() : "";
   const rawIds = Array.isArray(payload.ids) ? payload.ids : typeof payload.ids === "string" ? [payload.ids] : [];
@@ -113,6 +112,23 @@ exports.getFixtures = onCall({ secrets: [API_FOOTBALL_KEY] }, async (request) =>
     date,
     ids,
   };
+}
+
+exports.getFixtures = onCall({ secrets: [API_FOOTBALL_KEY] }, async (request) => {
+  return buildFixturesPayload(request.data || {});
+});
+
+exports.getFixturesHttp = onRequest({ cors: true, secrets: [API_FOOTBALL_KEY] }, async (req, res) => {
+  try {
+    const payload = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+    const result = await buildFixturesPayload(payload);
+    res.status(200).json(result);
+  } catch (err) {
+    console.error("getFixturesHttp error:", err);
+    res.status(err.code === "invalid-argument" ? 400 : 500).json({
+      error: err.message || "Fixture lookup failed"
+    });
+  }
 });
 
 exports.submitPredictionTicket = onCall({ secrets: [API_FOOTBALL_KEY] }, async (request) => {

@@ -22,7 +22,14 @@ service cloud.firestore {
     }
 
     function canModifyUserProfile(userId) {
-      return isOwn(userId) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['rewardPoints', 'totalRewardsEarned', 'walletBalance', 'walletCurrency', 'lastRewardDate']);
+      return isOwn(userId) && (
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'rewardPoints', 'currentStreak', 'lastLoginDate', 'totalRewardsEarned', 'walletBalance', 'walletCurrency', 'lastRewardDate'
+        ]) ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'rewardPoints', 'currentStreak', 'lastLoginDate', 'totalRewardsEarned', 'walletBalance', 'walletCurrency', 'lastRewardDate'
+        ])
+      );
     }
 
     match /users/{userId} {
