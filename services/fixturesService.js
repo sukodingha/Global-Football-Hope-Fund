@@ -1,23 +1,19 @@
 /**
  * GFHF Fixtures Service (Single Source of Truth)
  * -----------------------------------------------
- * Fetches football fixtures from the API-Football (api-sports.io) REST API and
- * normalizes every match to a common shape keyed by `fixture_id`.
+ * Fetches football fixtures from a secure Firebase callable function that keeps
+ * the API-Football secret server-side in Firebase Functions.
  *
  * This is the ONLY module that is allowed to talk to the fixtures API. Every
  * page that needs match data (Competition, Predictions, etc.) must import
  * from this file so all pages stay perfectly in sync and never issue
  * duplicate/competing network requests for the same data.
- *
- * Backed by API-Football v3 (https://www.api-football.com/documentation-v3).
- * The key below is the same API-Sports key already used by the widget on the
- * Competition page (pages/competition.html) so both surfaces read from the
- * same account/quota. Replace it with your own key if needed.
  */
 
-const API_FOOTBALL_KEY = "6e2987eec8066be0a986f648fe4a9cf7";
-const API_FOOTBALL_HOST = "v3.football.api-sports.io";
-const API_FOOTBALL_BASE = `https://${API_FOOTBALL_HOST}`;
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
+
+const functions = getFunctions();
+const getFixturesCallable = httpsCallable(functions, "getFixtures");
 
 const LIVE_CACHE_TTL_MS = 30 * 1000;   // live fixtures change fast
 const DATE_CACHE_TTL_MS = 5 * 60 * 1000; // fixture lists for a given day change slowly
@@ -91,20 +87,25 @@ function getCacheEntry(cacheKey, ttlMs) {
 }
 
 async function callApiFootball(path) {
-  const response = await fetch(`${API_FOOTBALL_BASE}${path}`, {
-    method: "GET",
-    headers: {
-      "x-apisports-key": API_FOOTBALL_KEY
-    }
-  });
+  const live = path.includes("live=all");
+  const dateMatch = path.match(/date=([^&]+)/);
+  const idsMatch = path.match(/ids=([^&]+)/);
+  const ids = idsMatch ? idsMatch[1].split("-").filter(Boolean) : [];
+  const date = dateMatch ? decodeURIComponent(dateMatch[1]) : "";
 
-  if (!response.ok) {
-    throw new Error(`API-Football returned ${response.status}`);
+  try {
+    const result = await getFixturesCallable({
+      live,
+      date,
+      ids,
+      limit: 40
+    });
+
+    return Array.isArray(result?.data?.fixtures) ? result.data.fixtures : [];
+  } catch (err) {
+    console.warn("Unable to load fixtures from secure Firebase function:", err);
+    return [];
   }
-
-  const data = await response.json();
-  const items = Array.isArray(data?.response) ? data.response : [];
-  return items.map(normalizeFixture).filter((f) => f.fixture_id);
 }
 
 /**

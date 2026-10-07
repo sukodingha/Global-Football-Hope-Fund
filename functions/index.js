@@ -28,6 +28,43 @@ function normalizeStatus(shortStatus) {
   return "scheduled";
 }
 
+function normalizeFixtureItem(item) {
+  const fixture = item?.fixture || {};
+  const league = item?.league || {};
+  const teams = item?.teams || {};
+  const goals = item?.goals || {};
+  const status = fixture?.status || {};
+
+  const shortStatus = String(status?.short || "NS").toUpperCase();
+  let normalizedStatus = "scheduled";
+  if (["1H", "2H", "ET", "BT", "P", "LIVE"].includes(shortStatus)) normalizedStatus = "live";
+  else if (shortStatus === "HT") normalizedStatus = "half_time";
+  else if (["FT", "AET", "PEN"].includes(shortStatus)) normalizedStatus = "finished";
+  else if (["TBD", "NS"].includes(shortStatus)) normalizedStatus = "scheduled";
+  else if (["PST", "CANC", "ABD", "AWD", "WO", "SUSP", "INT"].includes(shortStatus)) normalizedStatus = "postponed";
+
+  return {
+    fixture_id: String(fixture?.id ?? item?.fixture_id ?? ""),
+    league_id: league?.id ?? null,
+    league_name: league?.name || "League",
+    country_name: league?.country || "Global",
+    league_logo: league?.logo || "",
+    home_team_id: teams?.home?.id ?? null,
+    home_team_name: teams?.home?.name || "Home",
+    home_team_logo: teams?.home?.logo || "",
+    away_team_id: teams?.away?.id ?? null,
+    away_team_name: teams?.away?.name || "Away",
+    away_team_logo: teams?.away?.logo || "",
+    kickoff_time: fixture?.date || null,
+    status: normalizedStatus,
+    status_text: status?.long || "Not Started",
+    minute: status?.elapsed ?? "",
+    home_score: Number(goals?.home ?? 0) || 0,
+    away_score: Number(goals?.away ?? 0) || 0,
+    raw: item
+  };
+}
+
 async function fetchFixtures(ids) {
   const response = await fetch(`https://v3.football.api-sports.io/fixtures?ids=${ids.join("-")}`, {
     headers: { "x-apisports-key": API_FOOTBALL_KEY.value() }
@@ -36,6 +73,47 @@ async function fetchFixtures(ids) {
   const payload = await response.json();
   return Array.isArray(payload.response) ? payload.response : [];
 }
+
+exports.getFixtures = onCall({ secrets: [API_FOOTBALL_KEY] }, async (request) => {
+  const payload = request.data || {};
+  const live = payload.live === true;
+  const date = typeof payload.date === "string" ? payload.date.trim() : "";
+  const rawIds = Array.isArray(payload.ids) ? payload.ids : typeof payload.ids === "string" ? [payload.ids] : [];
+  const ids = [...new Set(rawIds.map(String).filter(Boolean))].slice(0, 20);
+  const limit = Math.max(1, Math.min(Number(payload.limit) || 40, 120));
+
+  if (!live && !date && ids.length === 0) {
+    throw new HttpsError("invalid-argument", "Please provide a date, live=true, or a list of fixture IDs.");
+  }
+
+  const query = new URLSearchParams();
+  if (live) query.set("live", "all");
+  if (date) query.set("date", date);
+  if (ids.length) query.set("ids", ids.join("-"));
+
+  const response = await fetch(`https://v3.football.api-sports.io/fixtures?${query.toString()}`, {
+    headers: {
+      "x-apisports-key": API_FOOTBALL_KEY.value(),
+      "Accept": "application/json"
+    }
+  });
+
+  if (!response.ok) {
+    throw new HttpsError("unavailable", `Fixture service returned ${response.status}.`);
+  }
+
+  const json = await response.json();
+  const responseItems = Array.isArray(json?.response) ? json.response : [];
+  const fixtures = responseItems.slice(0, limit).map(normalizeFixtureItem).filter((fixture) => fixture.fixture_id);
+
+  return {
+    fixtures,
+    count: fixtures.length,
+    live,
+    date,
+    ids,
+  };
+});
 
 exports.submitPredictionTicket = onCall({ secrets: [API_FOOTBALL_KEY] }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Sign in to submit a ticket.");

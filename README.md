@@ -1,7 +1,6 @@
-<<<<<<< HEAD
 # ⚽ Global Football Hope Fund (GFHF)
 
-Global Football Hope Fund is a modern football community platform that brings fans together through prediction competitions while supporting charitable initiatives through optional donations.
+Global Football Hope Fund is a football-first community and charity platform that brings supporters together through match predictions, leaderboards, community engagement, and optional giving. The project is built with HTML, CSS, JavaScript, and Firebase services.
 
 ![Status](https://img.shields.io/badge/status-active%20development-yellow.svg)
 ![License](https://img.shields.io/badge/license-all%20rights%20reserved-red.svg)
@@ -16,10 +15,10 @@ GFHF allows users to:
 - manage their profile and dashboard
 - participate in football prediction competitions
 - view live leaderboards and rankings
-- make optional cryptocurrency donations through Bitcoin and USDT
-- support charitable causes in a safe and engaging environment
+- support charitable causes through optional donations
+- engage with a global football community
 
-The project is built with HTML, CSS, JavaScript, and Firebase services, with a focus on responsiveness, security, and user experience.
+The project uses a static front-end architecture with Firebase authentication and Firestore for user, leaderboard, and community data.
 
 ## Key Features
 
@@ -29,57 +28,53 @@ The project is built with HTML, CSS, JavaScript, and Firebase services, with a f
 - 👥 Personalized Dashboard
 - ⚽ Prediction System
 - 🏆 Live Leaderboard
-- 💰 Bitcoin and USDT Donations
-- 📱 QR Code Wallet Payments
-- 📋 Copy Wallet Address
+- 💰 Donation and Wallet Features
+- 📱 PWA-Style Mobile Friendly Layout
 - 📊 Admin Dashboard
-- 🔥 Firestore Database
-- 🌍 Global Support
-
-## Screenshots
-
-Screenshots and product visuals will be added soon as the project grows.
+- 🔥 Firestore Data Storage
+- 🌍 Global Community and Charity Focus
 
 ## Technology Stack
 
 - HTML5
 - CSS3
-- JavaScript (ES6 Modules)
+- JavaScript (ES Modules)
 - Firebase Authentication
 - Cloud Firestore
 - Firebase Hosting
 - Git and GitHub
 
-## Project Goals
-
-GFHF aims to create a worldwide football community where supporters can enjoy prediction competitions while encouraging voluntary charitable contributions to help children’s organizations across different regions.
-
-Participation is free, and donations are completely voluntary.
-
 ## Getting Started
 
-To run the project locally:
+Run the app locally from the project root with either of these options:
 
-1. Clone the repository
-2. Open the project folder in your preferred editor
-3. Launch the project using a local server such as Live Server
-4. Open the home page in your browser
+1. PowerShell:
+   `powershell -ExecutionPolicy Bypass -File .\serve.ps1`
+2. Node static server:
+   `npx --yes http-server -p 8000`
+
+Then open:
+
+- http://localhost:8000/
+- http://localhost:8000/pages/community.html
+- http://localhost:8000/pages/predictions.html
 
 ## Project Structure
 
-- index.html — landing page
-- pages/ — main application pages
-- css/ — stylesheets
-- js/ — front-end logic and Firebase integration
-- assets/ — images and other static resources
+- `index.html` — landing page
+- `pages/` — main application pages
+- `css/` — shared stylesheets
+- `js/` — front-end logic and Firebase integration
+- `services/` — shared fixture and data services
+- `images/` — UI and branding assets
 
 ## Contributing
 
-Contributions are welcome as the project grows. Please read [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines before submitting changes.
+Contributions are welcome as the project grows. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting changes.
 
 ## Roadmap
 
-A detailed development roadmap is available in [ROADMAP.md](ROADMAP.md).
+A development roadmap is available in [ROADMAP.md](ROADMAP.md).
 
 ## Security
 
@@ -90,7 +85,3 @@ If you discover a security issue, please review [SECURITY.md](SECURITY.md) for t
 This project is currently under development.
 
 All rights reserved © Global Football Hope Fund.
-=======
-# Global-Football-Hope-Fund
-Global Football Hope Fund (GFHF) is a web platform that brings football fans together through match predictions, community engagement, and voluntary charitable giving. Built with HTML, CSS, JavaScript, and Firebase, the platform features secure user authentication, prediction competitions, leaderboards, crypto donations, and an admin dashboard.
->>>>>>> b849c0dc225747151e55f80f8a479d4af263080d
