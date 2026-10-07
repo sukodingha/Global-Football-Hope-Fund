@@ -388,6 +388,18 @@ function getMatchFilterValue(match) {
   return `${country} ${league} ${home} ${away}`.toLowerCase();
 }
 
+function getRandomDateFixtures(fixtures = [], limit = 10) {
+  const pool = Array.isArray(fixtures) ? [...fixtures] : [];
+  if (!pool.length) return [];
+
+  for (let index = pool.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [pool[index], pool[swapIndex]] = [pool[swapIndex], pool[index]];
+  }
+
+  return pool.slice(0, Math.min(Number(limit) || 10, pool.length));
+}
+
 function getFilteredFixtures(fixtures) {
   const source = Array.isArray(fixtures) ? fixtures.filter(isUpcomingFixture) : [];
   const query = (searchTerm || "").trim().toLowerCase();
@@ -402,12 +414,15 @@ function getFilteredFixtures(fixtures) {
   }
 
   if (selectedCountry === "Top Leagues") {
-    matched = getRandomTopMatches(source, 20);
+    matched = getRandomDateFixtures(getRandomTopMatches(source, 20), 10);
+  } else if (matched.length > 10) {
+    matched = getRandomDateFixtures(matched, 10);
   }
 
   if (!query) return matched;
 
-  return matched.filter((match) => getMatchFilterValue(match).includes(query));
+  const filtered = matched.filter((match) => getMatchFilterValue(match).includes(query));
+  return filtered.length ? getRandomDateFixtures(filtered, 10) : [];
 }
 
 function populateCountryFilterOptions(fixtures) {
