@@ -20,7 +20,7 @@ import {
   updateDoc, increment, serverTimestamp, deleteDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
-  getFixturesByDate, getFixturesByIds, getLiveFixtures, getRandomTopMatches, subscribeToFixtureUpdates
+  getFixturesByDate, getFixturesByIds, getRandomTopMatches, subscribeToFixtureUpdates
 } from "../services/fixturesService.js";
 
 // ===== DOM REFS (with existence checks) =====
@@ -52,7 +52,7 @@ let hasLoadedFixturesOnce = false;
 /** @type {Map<string, object>} fixture_id -> the signed-in user's prediction doc */
 let userPredictions = new Map();
 const pendingTicketSelections = new Map();
-let fixtureFetchInProgress = false;
+let fixtureLoadRequestId = 0;
 
 let pollIntervalId = null;
 let liveTickIntervalId = null;
@@ -188,113 +188,6 @@ function getMatchOutcome(homeScore, awayScore) {
   return "draw";
 }
 
-function createFallbackFixtures(dateStr) {
-  const date = new Date(`${dateStr}T12:00:00Z`);
-  const isoDate = (hours, minutes) => {
-    const d = new Date(date);
-    d.setUTCHours(hours, minutes, 0, 0);
-    return d.toISOString();
-  };
-
-  return [
-    {
-      fixture_id: "fallback-1",
-      league_id: 39,
-      league_name: "Premier League",
-      country_name: "England",
-      league_logo: "",
-      home_team_id: 40,
-      home_team_name: "Manchester City",
-      home_team_logo: "",
-      away_team_id: 41,
-      away_team_name: "Arsenal",
-      away_team_logo: "",
-      kickoff_time: isoDate(18, 30),
-      status: "scheduled",
-      status_text: "Not Started",
-      minute: "",
-      home_score: 0,
-      away_score: 0
-    },
-    {
-      fixture_id: "fallback-2",
-      league_id: 140,
-      league_name: "La Liga",
-      country_name: "Spain",
-      league_logo: "",
-      home_team_id: 81,
-      home_team_name: "Real Madrid",
-      home_team_logo: "",
-      away_team_id: 82,
-      away_team_name: "Barcelona",
-      away_team_logo: "",
-      kickoff_time: isoDate(20, 0),
-      status: "scheduled",
-      status_text: "Not Started",
-      minute: "",
-      home_score: 0,
-      away_score: 0
-    },
-    {
-      fixture_id: "fallback-3",
-      league_id: 135,
-      league_name: "Serie A",
-      country_name: "Italy",
-      league_logo: "",
-      home_team_id: 109,
-      home_team_name: "Juventus",
-      home_team_logo: "",
-      away_team_id: 110,
-      away_team_name: "Inter Milan",
-      away_team_logo: "",
-      kickoff_time: isoDate(19, 45),
-      status: "scheduled",
-      status_text: "Not Started",
-      minute: "",
-      home_score: 0,
-      away_score: 0
-    },
-    {
-      fixture_id: "fallback-4",
-      league_id: 78,
-      league_name: "Bundesliga",
-      country_name: "Germany",
-      league_logo: "",
-      home_team_id: 50,
-      home_team_name: "Bayern Munich",
-      home_team_logo: "",
-      away_team_id: 51,
-      away_team_name: "Borussia Dortmund",
-      away_team_logo: "",
-      kickoff_time: isoDate(17, 30),
-      status: "scheduled",
-      status_text: "Not Started",
-      minute: "",
-      home_score: 0,
-      away_score: 0
-    },
-    {
-      fixture_id: "fallback-5",
-      league_id: 61,
-      league_name: "Ligue 1",
-      country_name: "France",
-      league_logo: "",
-      home_team_id: 60,
-      home_team_name: "Paris Saint-Germain",
-      home_team_logo: "",
-      away_team_id: 61,
-      away_team_name: "Marseille",
-      away_team_logo: "",
-      kickoff_time: isoDate(21, 0),
-      status: "scheduled",
-      status_text: "Not Started",
-      minute: "",
-      home_score: 0,
-      away_score: 0
-    }
-  ];
-}
-
 // ===== 1. 5-DAY ROLLING CALENDAR =====
 function buildCalendar() {
   if (!calendarEl) return;
@@ -406,23 +299,17 @@ function getFilteredFixtures(fixtures) {
   const selectedCountry = selectedCountryFilter || "Top Leagues";
 
   let matched = source;
-  if (selectedCountry !== "Top Leagues" && selectedCountry !== "All") {
+  if (selectedCountry === "Top Leagues") {
+    matched = getRandomTopMatches(source, source.length);
+  } else if (selectedCountry !== "All") {
     matched = source.filter((match) => {
       const candidate = `${match?.country_name || ""} ${match?.league_name || ""}`.toLowerCase();
       return candidate.includes(selectedCountry.toLowerCase());
     });
   }
 
-  if (selectedCountry === "Top Leagues") {
-    matched = getRandomDateFixtures(getRandomTopMatches(source, 20), 10);
-  } else if (matched.length > 10) {
-    matched = getRandomDateFixtures(matched, 10);
-  }
-
-  if (!query) return matched;
-
-  const filtered = matched.filter((match) => getMatchFilterValue(match).includes(query));
-  return filtered.length ? getRandomDateFixtures(filtered, 10) : [];
+  if (query) matched = matched.filter((match) => getMatchFilterValue(match).includes(query));
+  return getRandomDateFixtures(matched, 10);
 }
 
 function populateCountryFilterOptions(fixtures) {
@@ -939,38 +826,30 @@ async function loadUserProfile() {
 
 // ===== FIXTURE LOADING FOR THE SELECTED CALENDAR DAY =====
 async function loadFixturesForDate() {
-  if (fixtureFetchInProgress || !selectedDateStr) return;
-  fixtureFetchInProgress = true;
+  if (!selectedDateStr) return;
+  const requestId = ++fixtureLoadRequestId;
+  const requestedDate = selectedDateStr;
 
   try {
-    let fixtures = await getFixturesByDate(selectedDateStr);
-
-    if (!fixtures || fixtures.length === 0) {
-      fixtures = await getLiveFixtures();
-    }
-
-    if (!fixtures || fixtures.length === 0) {
-      fixtures = createFallbackFixtures(selectedDateStr);
-    }
+    const fixtures = await getFixturesByDate(requestedDate);
+    if (requestId !== fixtureLoadRequestId || requestedDate !== selectedDateStr) return;
 
     allAvailableFixtures = (fixtures || []).filter(isUpcomingFixture);
-    if (allAvailableFixtures.length === 0) {
-      allAvailableFixtures = createFallbackFixtures(selectedDateStr);
-    }
 
     populateCountryFilterOptions(allAvailableFixtures);
     await loadUserPredictions();
+    if (requestId !== fixtureLoadRequestId || requestedDate !== selectedDateStr) return;
     await renderActivePredictedMatches();
+    if (requestId !== fixtureLoadRequestId || requestedDate !== selectedDateStr) return;
     applyPredictionFilter();
     hasLoadedFixturesOnce = true;
     await settlePendingPredictions();
   } catch (err) {
     console.error("Error loading fixtures:", err);
-    allAvailableFixtures = createFallbackFixtures(selectedDateStr);
+    if (requestId !== fixtureLoadRequestId || requestedDate !== selectedDateStr) return;
+    allAvailableFixtures = [];
     applyPredictionFilter();
     hasLoadedFixturesOnce = true;
-  } finally {
-    fixtureFetchInProgress = false;
   }
 }
 
