@@ -104,21 +104,9 @@
             <video id="postPreviewVideo" controls playsinline hidden></video>
             <button class="remove-image-btn" id="removeImageBtn">&times;</button>
           </div>
-          <div id="cameraPreviewWrapper" class="camera-preview-wrapper" hidden>
-            <video id="cameraPreview" autoplay playsinline muted></video>
-            <canvas id="cameraCaptureCanvas" hidden></canvas>
-            <div class="camera-preview-actions">
-              <button type="button" class="mini-btn" id="capturePhotoBtn">📸 Capture</button>
-              <button type="button" class="mini-btn secondary" id="retakePhotoBtn">↺ Retake</button>
-              <button type="button" class="mini-btn" id="uploadPhotoBtn">⬆️ Upload</button>
-            </div>
-          </div>
           <div class="create-post-modal-actions">
-            <label class="create-post-modal-photo-btn">
-              📷 Add Photos / Video
-              <input type="file" id="postModalFile" accept="image/*,video/*" hidden>
-            </label>
-            <button type="button" class="create-post-modal-photo-btn" id="openCameraBtn">📹 Open Camera</button>
+            <button type="button" class="create-post-modal-photo-btn" id="openGalleryMediaBtn">📷 Choose Photo / Video</button>
+            <button type="button" class="create-post-modal-photo-btn" id="openCameraBtn">📹 Capture Media</button>
             <div class="create-post-modal-interest">
               <select id="postModalInterest">
                 <option value="Football">⚽ Football</option>
@@ -138,6 +126,10 @@
           </div>
           <p style="font-size:11px;color:#94a3b8;margin:4px 0 0;">🎬 Videos longer than 30 seconds are automatically trimmed to the first 30 seconds.</p>
           <div id="postModalStatus" class="message"></div>
+          <div class="media-upload-progress post-media-progress" id="postUploadProgress" hidden>
+            <progress id="postUploadProgressBar" max="100" value="0"></progress>
+            <span id="postUploadProgressLabel" aria-live="polite">Preparing upload...</span>
+          </div>
           <button class="create-post-submit" id="postModalSubmit">Post</button>
         </div>
       </div>
@@ -246,24 +238,6 @@
       <input type="text" id="floatingChatInput" placeholder="Type a message..." required>
       <button type="submit" class="floating-chat-send-btn">Send</button>
     </form>
-  </div>
-
-  <div id="chatCameraModal" class="fb-modal" hidden role="dialog" aria-modal="true" aria-labelledby="chatCameraTitle">
-    <div class="fb-modal-overlay" id="chatCameraOverlay"></div>
-    <div class="fb-modal-card chat-camera-modal-card">
-      <div class="fb-modal-header">
-        <h3 id="chatCameraTitle">Take a photo</h3>
-        <button id="chatCameraClose" class="fb-modal-close" type="button" aria-label="Close camera">&times;</button>
-      </div>
-      <div class="chat-camera-modal-body">
-        <video id="chatCameraPreview" autoplay playsinline muted></video>
-        <p id="chatCameraStatus" class="message" aria-live="polite"></p>
-        <div class="chat-camera-actions">
-          <button id="chatCameraCancel" class="btn btn-secondary" type="button">Cancel</button>
-          <button id="chatCameraCapture" class="btn" type="button">Take Photo</button>
-        </div>
-      </div>
-    </div>
   </div>
 
   <footer>

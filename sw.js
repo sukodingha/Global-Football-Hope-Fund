@@ -1,10 +1,10 @@
 /**
- * GFHF Service Worker — v11
+ * GFHF Progressive Web App Service Worker — v13
  * Caches core app shell for offline functionality.
  * Implements cache-first then network-fallback strategy.
  */
 
-const CACHE_NAME = 'gfhf-cache-v11';
+const CACHE_NAME = 'gfhf-cache-v13';
 const APP_SHELL = [
   './',
   './index.html',
@@ -24,6 +24,8 @@ const APP_SHELL = [
   './js/admin.js',
   './js/community.js',
   './js/dashboard.js',
+  './js/mediaShare.js',
+  './js/settings.js',
   './js/donate.js',
   './js/news.js',
   './pages/about.html',
@@ -36,6 +38,7 @@ const APP_SHELL = [
   './pages/news.html',
   './pages/community.html',
   './pages/dashboard.html',
+  './pages/settings.html',
   './pages/predictions.html',
   './pages/admin.html',
   './images/icon-192.svg',
@@ -44,9 +47,15 @@ const APP_SHELL = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(APP_SHELL))
-      .then(() => self.skipWaiting())
+    caches.open(CACHE_NAME).then(async (cache) => {
+      await Promise.all(APP_SHELL.map(async (assetPath) => {
+        const request = new Request(new URL(assetPath, self.location.href), { cache: 'reload' });
+        const response = await fetch(request);
+        if (!response.ok) throw new Error(`Could not cache app shell asset: ${assetPath}`);
+        await cache.put(request, response);
+      }));
+      await self.skipWaiting();
+    })
   );
 });
 

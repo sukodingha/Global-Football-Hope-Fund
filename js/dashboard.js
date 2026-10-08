@@ -7,6 +7,7 @@ import { auth, db } from "./firebase.js";
 import { onAuthStateChanged, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { doc, getDoc, setDoc, updateDoc, addDoc, collection, query, where, orderBy, onSnapshot, getDocs, increment, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { updateHeaderAvatar } from "./auth.js";
+import { openMediaShareModal, uploadMediaToCloudinary } from "./mediaShare.js";
 
 // Import rewards system
 import {
@@ -34,13 +35,11 @@ const messageBox = document.getElementById("messageBox");
 const profileSummary = document.getElementById("profileSummary");
 const predictionSummary = document.getElementById("predictionSummary");
 const uniqueIdSection = document.getElementById("uniqueIdSection");
-const avatarUploadInput = document.getElementById("avatarUploadInput");
 const uploadAvatarBtn = document.getElementById("uploadAvatarBtn");
 const uploadSpinner = document.getElementById("uploadSpinner");
 const currentProfilePic = document.getElementById("currentProfilePic");
 const profilePicPlaceholder = document.getElementById("profilePicPlaceholder");
 const photoGalleryContainer = document.getElementById("photoGalleryContainer");
-const photoUploadInput = document.getElementById("photoUploadInput");
 
 // Wall elements
 const wallPostForm = document.getElementById("wallPostForm");
@@ -221,72 +220,12 @@ function updateCurrentProfilePicUI(photoURL) {
 }
 
 /**
- * Upload an image file to Cloudinary using the unsigned upload preset.
- * Returns the secure URL from Cloudinary, or null on failure.
- */
-async function handleImageUpload(fileInput) {
-    const file = fileInput.files[0];
-    if (!file) {
-        alert('Please select an image first!');
-        return null;
-    }
-
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('upload_preset', 'football_preset');
-
-    try {
-        const response = await fetch('https://api.cloudinary.com/v1_1/d8obkydb/image/upload', {
-            method: 'POST',
-            body: formData
-        });
-
-        const data = await response.json();
-        
-        // Safe extraction: try secure_url first, then url, then nested data
-        const imageUrl = data.secure_url || data.url || (data.data && data.data.secure_url);
-        
-        if (imageUrl) {
-            console.log('Upload successful:', imageUrl);
-            return imageUrl; // This URL goes straight to Firestore!
-        } else {
-            console.error("No valid URL returned from Cloudinary!", data);
-            throw new Error(data.error?.message || 'Cloudinary upload failed.');
-        }
-    } catch (error) {
-        console.error('Error uploading image:', error);
-        alert('Image upload failed. Check your console for details.');
-        return null;
-    }
-}
-
-/**
  * Upload a file to Cloudinary and return the secure URL.
  * Accepts a File object directly (not a file input element).
  */
-async function uploadToCloudinary(file) {
-  const formData = new FormData();
-  formData.append('file', file);
-  formData.append('upload_preset', 'football_preset');
-
-  try {
-    const response = await fetch('https://api.cloudinary.com/v1_1/d8obkydb/image/upload', {
-      method: 'POST',
-      body: formData
-    });
-
-    const data = await response.json();
-
-    if (data.secure_url) {
-      console.log('Upload successful:', data.secure_url);
-      return data.secure_url;
-    } else {
-      throw new Error(data.error?.message || 'Cloudinary upload failed.');
-    }
-  } catch (error) {
-    console.error('Error uploading image:', error);
-    throw error;
-  }
+async function uploadToCloudinary(file, onProgress) {
+  const result = await uploadMediaToCloudinary(file, "football_preset", onProgress);
+  return result.url;
 }
 
 /**
@@ -294,22 +233,25 @@ async function uploadToCloudinary(file) {
  * update Firestore (photoURL + galleryPhotos) → refresh UI everywhere.
  * Facebook-style instant refresh.
  */
-async function handleProfilePhotoUpload(file, user) {
-  if (!file || !user) return;
+async function handleProfilePhotoUpload(file, user, mediaUi) {
+  if (!file || !user) return false;
   if (!guardDb()) {
     showMessage("Database unavailable. Please try again later.", "error");
-    return;
+    return false;
   }
 
   showSpinner();
+  let localPreviewUrl = "";
   try {
     // 1. Local preview (instant)
-    const localPreviewUrl = URL.createObjectURL(file);
+    localPreviewUrl = URL.createObjectURL(file);
     updateHeaderAvatar(localPreviewUrl, user.displayName || user.email?.split("@")[0]);
     updateCurrentProfilePicUI(localPreviewUrl);
 
     // 2. Upload to Cloudinary
-    const downloadURL = await uploadToCloudinary(file);
+    const downloadURL = await uploadToCloudinary(file, (percent) => {
+      mediaUi?.setUploadProgress(percent, `Uploading profile photo... ${percent}%`);
+    });
 
     // 3. Update Firebase Auth profile
     await updateProfile(user, { photoURL: downloadURL });
@@ -329,14 +271,13 @@ async function handleProfilePhotoUpload(file, user) {
     }, { merge: true });
 
     // 5. Clean up local object URL
-    URL.revokeObjectURL(localPreviewUrl);
-
     // 6. Refresh UI everywhere (Facebook-style)
     updateHeaderAvatar(downloadURL, user.displayName || user.email?.split("@")[0]);
     updateCurrentProfilePicUI(downloadURL);
     renderPhotoGallery(user.uid);
 
     showMessage("Profile picture updated successfully!", "success");
+    return true;
   } catch (err) {
     console.error("Profile photo upload error:", err);
     showMessage("Failed to upload profile picture. Please try again.", "error");
@@ -344,10 +285,10 @@ async function handleProfilePhotoUpload(file, user) {
     const currentPhotoURL = user.photoURL || "";
     updateHeaderAvatar(currentPhotoURL, user.displayName || user.email?.split("@")[0]);
     updateCurrentProfilePicUI(currentPhotoURL);
+    return false;
   } finally {
+    if (localPreviewUrl) URL.revokeObjectURL(localPreviewUrl);
     hideSpinner();
-    // Reset the file input so the same file can be re-selected
-    if (avatarUploadInput) avatarUploadInput.value = "";
   }
 }
 
@@ -655,56 +596,56 @@ onAuthStateChanged(auth, async (user) => {
   // Render photo gallery
   renderPhotoGallery(user.uid);
 
-  // ===== Avatar Upload: #uploadAvatarBtn triggers hidden file input =====
-  if (uploadAvatarBtn && avatarUploadInput) {
+  if (uploadAvatarBtn) {
     uploadAvatarBtn.addEventListener("click", () => {
-      avatarUploadInput.click();
-    });
-  }
-
-  // ===== Avatar file handler — uses handleProfilePhotoUpload for full pipeline =====
-  if (avatarUploadInput) {
-    avatarUploadInput.addEventListener("change", async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      await handleProfilePhotoUpload(file, user);
-    });
-  }
-
-  // ===== Gallery Upload: "Upload New Photo" button triggers hidden input =====
-  const uploadPhotoBtn = document.getElementById("uploadPhotoBtn");
-  if (uploadPhotoBtn && photoUploadInput) {
-    uploadPhotoBtn.addEventListener("click", () => {
-      photoUploadInput.click();
-    });
-  }
-
-  // ===== Photo gallery upload handler =====
-  if (photoUploadInput) {
-    photoUploadInput.addEventListener("change", async (e) => {
-      const files = Array.from(e.target.files);
-      if (files.length === 0) return;
-      if (!guardDb()) {
-        showMessage("Database unavailable. Please try again later.", "error");
-        return;
-      }
-      try {
-        for (const file of files) {
-          const imageUrl = await uploadToCloudinary(file);
-          const snap = await getDoc(doc(db, "users", user.uid));
-          const currentProfile = snap.exists() ? snap.data() : {};
-          const existing = currentProfile.galleryPhotos || currentProfile.photos || [];
-          existing.push(imageUrl);
-          await setDoc(doc(db, "users", user.uid), { galleryPhotos: existing }, { merge: true });
+      openMediaShareModal({
+        accept: "image/*",
+        onSelect: async (files, mediaUi) => {
+          const uploaded = await handleProfilePhotoUpload(files[0], user, mediaUi);
+          if (!uploaded) {
+            mediaUi.setStatus("Profile photo upload failed. Please try again.", "error");
+            return false;
+          }
+          mediaUi.setStatus("Profile photo updated.");
+          return true;
         }
-        showMessage(`${files.length} photo(s) uploaded to gallery!`, "success");
-        renderPhotoGallery(user.uid);
-      } catch (err) {
-        console.error("Gallery upload error:", err);
-        showMessage("Failed to upload photos.", "error");
-      } finally {
-        photoUploadInput.value = "";
-      }
+      });
+    });
+  }
+
+  const uploadPhotoBtn = document.getElementById("uploadPhotoBtn");
+  if (uploadPhotoBtn) {
+    uploadPhotoBtn.addEventListener("click", () => {
+      openMediaShareModal({
+        accept: "image/*",
+        multiple: true,
+        onSelect: async (files, mediaUi) => {
+          if (!guardDb()) return false;
+          try {
+            for (let index = 0; index < files.length; index += 1) {
+              const file = files[index];
+              const imageUrl = await uploadToCloudinary(file, (percent) => {
+                const overallProgress = ((index + percent / 100) / files.length) * 100;
+                mediaUi.setUploadProgress(overallProgress, `Uploading photo ${index + 1} of ${files.length}... ${percent}%`);
+              });
+              const snap = await getDoc(doc(db, "users", user.uid));
+              const currentProfile = snap.exists() ? snap.data() : {};
+              const existing = currentProfile.galleryPhotos || currentProfile.photos || [];
+              if (!existing.includes(imageUrl)) existing.push(imageUrl);
+              await setDoc(doc(db, "users", user.uid), { galleryPhotos: existing }, { merge: true });
+            }
+            showMessage(`${files.length} photo(s) uploaded to gallery!`, "success");
+            renderPhotoGallery(user.uid);
+            mediaUi.setStatus("Gallery upload complete.");
+            return true;
+          } catch (err) {
+            console.error("Gallery upload error:", err);
+            showMessage("Failed to upload photos.", "error");
+            mediaUi.setStatus("Failed to upload photos. Please try again.", "error");
+            return false;
+          }
+        }
+      });
     });
   }
 
