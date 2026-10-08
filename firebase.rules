@@ -22,19 +22,22 @@ service cloud.firestore {
     }
 
     function canModifyUserProfile(userId) {
-      return isOwn(userId) && (
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-          'rewardPoints', 'currentStreak', 'lastLoginDate', 'totalRewardsEarned', 'walletBalance', 'walletCurrency', 'lastRewardDate'
-        ]) ||
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'rewardPoints', 'currentStreak', 'lastLoginDate', 'totalRewardsEarned', 'walletBalance', 'walletCurrency', 'lastRewardDate'
-        ])
-      );
+      let changedKeys = request.resource.data.diff(resource.data).affectedKeys();
+      let protectedMetrics = ['predictionPoints', 'postCount'];
+      let rewardFields = [
+        'rewardPoints', 'currentStreak', 'lastLoginDate', 'totalRewardsEarned', 'walletBalance', 'walletCurrency', 'lastRewardDate'
+      ];
+      return isOwn(userId) && !changedKeys.hasAny(protectedMetrics) &&
+        (!changedKeys.hasAny(rewardFields) || changedKeys.hasOnly(rewardFields));
     }
 
     match /users/{userId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.auth.uid == userId && !('rewardPoints' in request.resource.data) && !('walletBalance' in request.resource.data);
+      allow create: if isSignedIn() && request.auth.uid == userId &&
+        !('rewardPoints' in request.resource.data) &&
+        !('walletBalance' in request.resource.data) &&
+        !('predictionPoints' in request.resource.data) &&
+        !('postCount' in request.resource.data);
       allow update: if isSignedIn() && (canModifyUserProfile(userId) || isAdmin());
       allow delete: if isAdmin();
 
@@ -50,6 +53,38 @@ service cloud.firestore {
         allow read: if isSignedIn();
         allow write: if isOwn(userId);
       }
+    }
+
+    match /polls/{pollId} {
+      function isOpenPoll() {
+        return resource.data.get('active', false) == true ||
+          resource.data.get('isActive', false) == true ||
+          resource.data.get('status', '') == 'active';
+      }
+
+      function isSinglePollVote() {
+        let oldVotes = resource.data.get('votes', {});
+        let newVotes = request.resource.data.get('votes', {});
+        let oldCounts = resource.data.get('voteCounts', {});
+        let newCounts = request.resource.data.get('voteCounts', {});
+        let optionId = newVotes.get(request.auth.uid, '');
+        return isOpenPoll() &&
+          !oldVotes.keys().hasAny([request.auth.uid]) &&
+          !resource.data.get('voterIds', []).hasAny([request.auth.uid]) &&
+          optionId is string &&
+          newVotes.diff(oldVotes).affectedKeys().hasOnly([request.auth.uid]) &&
+          newCounts.diff(oldCounts).affectedKeys().hasOnly([optionId]) &&
+          newCounts.get(optionId, 0) == oldCounts.get(optionId, 0) + 1 &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes', 'voteCounts']);
+      }
+
+      allow read: if isSignedIn();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (isActiveUser() && isSinglePollVote());
+    }
+
+    match /postCountEvents/{eventId} {
+      allow read, write: if isAdmin();
     }
 
     match /posts/{postId} {

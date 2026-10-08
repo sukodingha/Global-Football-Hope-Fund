@@ -1,5 +1,6 @@
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
+const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const { initializeUserProfile, convertHopePointsToWallet, isAdminUser } = require("./auth.js");
@@ -10,6 +11,24 @@ const API_FOOTBALL_KEY = defineSecret("API_FOOTBALL_KEY");
 const MAX_TICKETS_PER_DAY = 2;
 const PICKS_PER_TICKET = 7;
 const TICKET_REWARD_HP = 50;
+
+exports.countUserPosts = onDocumentCreated("posts/{postId}", async (event) => {
+  const post = event.data?.data();
+  const authorId = String(post?.authorId || "");
+  if (!authorId) return;
+
+  const eventRef = db.collection("postCountEvents").doc(event.params.postId);
+  const userRef = db.collection("users").doc(authorId);
+  await db.runTransaction(async (transaction) => {
+    const processed = await transaction.get(eventRef);
+    if (processed.exists) return;
+    transaction.create(eventRef, { authorId, countedAt: admin.firestore.FieldValue.serverTimestamp() });
+    transaction.set(userRef, {
+      postCount: admin.firestore.FieldValue.increment(1),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+  });
+});
 
 function utcDateString(date = new Date()) {
   return date.toISOString().slice(0, 10);
@@ -249,13 +268,15 @@ exports.settlePredictionTickets = onSchedule({ schedule: "every 5 minutes", secr
           lostExpiresAt
         });
       });
+      const userUpdates = {
+        predictionPoints: admin.firestore.FieldValue.increment(correctCount),
+        updatedAt: now
+      };
       if (won) {
-        transaction.set(db.collection("users").doc(current[0].userId), {
-          rewardPoints: admin.firestore.FieldValue.increment(TICKET_REWARD_HP),
-          totalRewardsEarned: admin.firestore.FieldValue.increment(TICKET_REWARD_HP),
-          updatedAt: now
-        }, { merge: true });
+        userUpdates.rewardPoints = admin.firestore.FieldValue.increment(TICKET_REWARD_HP);
+        userUpdates.totalRewardsEarned = admin.firestore.FieldValue.increment(TICKET_REWARD_HP);
       }
+      transaction.set(db.collection("users").doc(current[0].userId), userUpdates, { merge: true });
     });
   }
 });

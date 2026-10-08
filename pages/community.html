@@ -66,6 +66,10 @@
       </div>
     </div>
 
+    <section id="matchDayPolls" class="match-day-polls" aria-label="Match day polls">
+      <div class="match-day-poll-empty">Loading active polls...</div>
+    </section>
+
     <!-- ===== CREATE POST CARD ===== -->
     <div class="create-post-card">
       <div class="create-post-row">
@@ -179,6 +183,19 @@
 
   <!-- ===== FLOATING CHAT SIDEBAR (fixed on right edge) ===== -->
   <div id="floating-chat-sidebar">
+    <section class="community-leaderboard-widget" aria-labelledby="communityLeaderboardTitle">
+      <div class="community-leaderboard-heading">
+        <div>
+          <span class="match-poll-kicker">PREDICTIONS</span>
+          <h3 id="communityLeaderboardTitle">Top Predictors</h3>
+        </div>
+        <span class="community-leaderboard-trophy" aria-hidden="true">🏆</span>
+      </div>
+      <ol id="communityLeaderboard" class="community-leaderboard-list">
+        <li class="community-leaderboard-loading">Loading leaderboard...</li>
+      </ol>
+    </section>
+
     <!-- TOP BOX: Community Chat -->
     <div id="community-chat-box" class="chat-panel" data-panel-key="community">
       <div class="chat-panel-header">

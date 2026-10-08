@@ -16,6 +16,8 @@ import { createReport, checkRateLimit } from "./moderation.js";
 import { normalizePrivacy } from "./privacy.js";
 import { startLiveStream, endLiveStream } from "./livestream.js";
 import { closeMediaShareModal, openMediaShareModal, uploadMediaToCloudinary } from "./mediaShare.js";
+import "./polls.js";
+import { invalidateUserBadgeCache, renderPredictionLeaderboard, renderUserBadgePills } from "./leaderboard.js";
 
 // Import rewards system for HP badges
 import { getHPBadgeHTML, getUserHP, invalidateHPCache, loadRewardData } from "./rewards.js";
@@ -638,6 +640,16 @@ if (postModalSubmit) {
         impressions: 0,
         createdAt: serverTimestamp()
       });
+      try {
+        invalidateUserBadgeCache(currentUser.uid);
+        document.querySelectorAll(".user-achievement-badge-list").forEach((element) => {
+          if (element.dataset.authorId === currentUser.uid) {
+            resolveAchievementBadges(currentUser.uid, element);
+          }
+        });
+      } catch (error) {
+        console.warn("Could not update post count:", error);
+      }
 
       closePostModal();
       resetMediaPreview();
@@ -962,9 +974,12 @@ function renderPostCard(post) {
         ${authorAvatarHtml}
       </a>
       <div class="fb-post-meta">
-        <a href="${profileLink}" style="text-decoration:none;color:inherit;">
-          <strong>${post.authorName || "Anonymous"}</strong>
-        </a>
+        <div class="fb-post-author-line">
+          <a href="${profileLink}" class="fb-post-author-link" style="text-decoration:none;color:inherit;">
+            <strong>${escapeHtml(post.authorName || "Anonymous")}</strong>
+          </a>
+          <span class="user-achievement-badge-list" data-author-id="${escapeHtml(post.authorId || "")}"></span>
+        </div>
         <div class="fb-post-time">${timeAgo(post.createdAt)} · ${post.interest || "General"}</div>
         <div class="post-hp-badge-placeholder" data-author-id="${post.authorId || ""}"></div>
       </div>
@@ -1488,6 +1503,12 @@ async function resolveHPBadge(uid, placeholderEl) {
   placeholderEl.innerHTML = getHPBadgeHTML(hp);
 }
 
+async function resolveAchievementBadges(uid, placeholderEl) {
+  if (!uid || !placeholderEl) return;
+  const badgeMarkup = await renderUserBadgePills(uid);
+  if (placeholderEl.isConnected) placeholderEl.innerHTML = badgeMarkup;
+}
+
 // ===== LOAD FEED =====
 async function loadFeed() {
   if (!feed) return;
@@ -1513,6 +1534,9 @@ async function loadFeed() {
     feed.querySelectorAll('.post-hp-badge-placeholder').forEach(el => {
       const authorId = el.dataset.authorId;
       resolveHPBadge(authorId, el);
+    });
+    feed.querySelectorAll('.user-achievement-badge-list').forEach((el) => {
+      resolveAchievementBadges(el.dataset.authorId, el);
     });
     // Set up IntersectionObserver to track post impressions + HP rewards
     const impressionObserver = new IntersectionObserver((entries) => {
@@ -1686,8 +1710,10 @@ function renderDMMessages() {
     const imageHtml = msg.imageUrl
       ? `<img src="${msg.imageUrl}" alt="Shared image" class="chat-shared-image" style="max-width:200px;max-height:200px;border-radius:8px;display:block;margin-top:5px;cursor:pointer;" onclick="window.open('${msg.imageUrl}', '_blank')">`
       : "";
-    d.innerHTML = `<div class="chat-author">${isMe ? "You" : msg.fromName}</div>${imageHtml}<div class="chat-text">${msg.text || ""}</div><div class="chat-time">${new Date(msg.createdAt).toLocaleTimeString()}</div>`;
+    const authorId = msg.from || "";
+    d.innerHTML = `<div class="chat-author"><div class="chat-author-name"><span>${isMe ? "You" : escapeHtml(msg.fromName || "Teammate")}</span><span class="user-achievement-badge-list" data-author-id="${escapeHtml(authorId)}"></span></div></div>${imageHtml}<div class="chat-text">${msg.text || ""}</div><div class="chat-time">${new Date(msg.createdAt).toLocaleTimeString()}</div>`;
     dmChatMessages.appendChild(d);
+    resolveAchievementBadges(authorId, d.querySelector(".user-achievement-badge-list"));
   });
   dmChatMessages.scrollTop = dmChatMessages.scrollHeight;
 }
@@ -1964,8 +1990,11 @@ function listenToChat() {
       const authorLinkHtml = authorId
         ? `<a href="${authorProfileLink}" style="text-decoration:none;color:inherit;">${escapeHtml(authorAvatar)} ${escapeHtml(authorName)}</a>`
         : `${escapeHtml(authorAvatar)} ${escapeHtml(authorName)}`;
-      item.innerHTML = `<div class="chat-author">${authorLinkHtml}<div class="chat-hp-placeholder" data-author-id="${authorId}"></div></div>${imageHtml}${textHtml}<div class="chat-time">${timeDisplay}</div>`;
+      item.innerHTML = `<div class="chat-author"><div class="chat-author-name">${authorLinkHtml}<span class="user-achievement-badge-list" data-author-id="${escapeHtml(authorId)}"></span></div><div class="chat-hp-placeholder" data-author-id="${escapeHtml(authorId)}"></div></div>${imageHtml}${textHtml}<div class="chat-time">${timeDisplay}</div>`;
       communityChatList.appendChild(item);
+    });
+    communityChatList.querySelectorAll('.user-achievement-badge-list').forEach((el) => {
+      resolveAchievementBadges(el.dataset.authorId, el);
     });
     // Resolve HP badges for chat messages
     communityChatList.querySelectorAll('.chat-hp-placeholder').forEach(async (el) => {
@@ -2075,13 +2104,26 @@ function openFloatingChat(partnerId, partnerName) {
       const bubble = document.createElement("div");
       bubble.style.cssText = `padding:8px 12px;margin:4px 8px;border-radius:${isOwn ? '16px 4px 16px 16px' : '4px 16px 16px 16px'};background:${isOwn ? '#0b2d4d' : '#eef4f8'};color:${isOwn ? 'white' : '#0b2d4d'};max-width:80%;align-self:${isOwn ? 'flex-end' : 'flex-start'};font-size:14px;display:flex;flex-direction:column;gap:4px;`;
       // Clickable sender name/avatar — mirrors the profile link on the main feed
+      const authorLine = document.createElement("div");
+      authorLine.className = "chat-author-name";
+      const authorName = isOwn ? "You" : (msg.authorName || activeFloatingChatPartnerName || "Teammate");
       if (!isOwn && authorId) {
         const nameLink = document.createElement("a");
         nameLink.href = `profile.html?uid=${encodeURIComponent(authorId)}`;
         nameLink.style.cssText = "font-weight:700;font-size:12px;text-decoration:none;color:inherit;opacity:0.85;";
-        nameLink.textContent = msg.authorName || activeFloatingChatPartnerName || "Teammate";
-        bubble.appendChild(nameLink);
+        nameLink.textContent = authorName;
+        authorLine.appendChild(nameLink);
+      } else {
+        const nameText = document.createElement("span");
+        nameText.textContent = authorName;
+        authorLine.appendChild(nameText);
       }
+      const badgeContainer = document.createElement("span");
+      badgeContainer.className = "user-achievement-badge-list";
+      badgeContainer.dataset.authorId = authorId;
+      authorLine.appendChild(badgeContainer);
+      bubble.appendChild(authorLine);
+      resolveAchievementBadges(authorId, badgeContainer);
       // Add text content if present
       if (msg.text) {
         const textEl = document.createElement('span');
@@ -2208,6 +2250,7 @@ onAuthStateChanged(auth, async (user) => {
   hideAppSplash();
   renderMembers();
   renderFriendRequests();
+  renderPredictionLeaderboard(document.getElementById("communityLeaderboard"), user);
   loadTeammates(); // Load teammates on auth change
   await loadPrivacySettings();
   handleNotificationDeepLink();
