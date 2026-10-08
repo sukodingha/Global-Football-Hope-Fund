@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0b2d4d">
+  <title>Settings | Global Football Hope Fund</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="manifest" href="../manifest.json">
+  <link rel="icon" href="../images/icon-192.svg" sizes="192x192">
+</head>
+<body>
+  <div id="appSplash" class="app-splash">
+    <div class="app-splash-card">
+      <div class="app-splash-icon">⚽</div>
+      <h2>GFHF</h2>
+      <p>Football news, live scores, and hope in one app.</p>
+    </div>
+  </div>
+
+  <header>
+    <div class="header-brand">
+      <div class="logo">⚽ GFHF</div>
+      <span id="userStatus" class="user-status">Login</span>
+      <button id="logoutBtn" class="logout-btn" type="button" hidden>Logout</button>
+    </div>
+    <nav>
+      <a href="../index.html">Home</a>
+      <a href="about.html">About</a>
+      <a href="competition.html">Competition</a>
+      <a href="predictions.html">Predictions</a>
+      <a href="donate.html">Donate</a>
+      <a href="news.html">News</a>
+      <a href="community.html">Community</a>
+      <a href="dashboard.html">Dashboard</a>
+      <a href="settings.html" class="active" aria-current="page">Settings</a>
+      <a href="faq.html">FAQ</a>
+      <a href="contact.html">Contact</a>
+    </nav>
+  </header>
+
+  <nav class="mobile-bottom-nav" aria-label="Mobile navigation">
+    <a href="../index.html">Home</a>
+    <a href="news.html">Sports</a>
+    <a href="community.html">Community</a>
+    <a href="dashboard.html">Dashboard</a>
+    <a href="settings.html" class="active" aria-current="page">Settings</a>
+  </nav>
+
+  <main class="settings-page">
+    <section class="section settings-intro">
+      <div class="section-heading">
+        <h1>Settings</h1>
+        <p>Manage your privacy, match alerts, and public profile preferences.</p>
+      </div>
+      <div id="settingsAuthMessage" class="settings-auth-message" hidden>
+        <p>Sign in to manage your account settings.</p>
+        <a class="btn" href="login.html">Sign in</a>
+      </div>
+    </section>
+
+    <form id="settingsForm" class="settings-form" hidden>
+      <section class="settings-panel" aria-labelledby="privacyHeading">
+        <div class="settings-panel-heading">
+          <div>
+            <p class="settings-eyebrow">Who sees your activity</p>
+            <h2 id="privacyHeading">Security &amp; Privacy Settings</h2>
+          </div>
+        </div>
+        <div class="settings-grid">
+          <label class="settings-field" for="accountTypeSelect">
+            <span>Account type</span>
+            <select id="accountTypeSelect">
+              <option value="public">Public account</option>
+              <option value="private">Private account</option>
+            </select>
+          </label>
+          <label class="settings-field" for="profilePrivacySelect">
+            <span>Profile visibility</span>
+            <select id="profilePrivacySelect"><option value="everyone">Everyone</option><option value="teammates">Teammates only</option><option value="me">Only me</option></select>
+          </label>
+          <label class="settings-field" for="postsPrivacySelect">
+            <span>Posts</span>
+            <select id="postsPrivacySelect"><option value="everyone">Everyone</option><option value="teammates">Teammates only</option><option value="me">Only me</option></select>
+          </label>
+          <label class="settings-field" for="photosPrivacySelect">
+            <span>Photos</span>
+            <select id="photosPrivacySelect"><option value="everyone">Everyone</option><option value="teammates">Teammates only</option><option value="me">Only me</option></select>
+          </label>
+          <label class="settings-field" for="videosPrivacySelect">
+            <span>Videos</span>
+            <select id="videosPrivacySelect"><option value="everyone">Everyone</option><option value="teammates">Teammates only</option><option value="me">Only me</option></select>
+          </label>
+          <label class="settings-field" for="predictionPrivacySelect">
+            <span>Prediction history</span>
+            <select id="predictionPrivacySelect"><option value="everyone">Everyone</option><option value="teammates">Teammates only</option><option value="me">Only me</option></select>
+          </label>
+          <label class="settings-field" for="onlinePrivacySelect">
+            <span>Online status</span>
+            <select id="onlinePrivacySelect"><option value="everyone">Everyone</option><option value="teammates">Teammates only</option><option value="me">Only me</option></select>
+          </label>
+          <label class="settings-field" for="lastActivePrivacySelect">
+            <span>Last active</span>
+            <select id="lastActivePrivacySelect"><option value="everyone">Everyone</option><option value="teammates">Teammates only</option><option value="me">Only me</option></select>
+          </label>
+        </div>
+        <div class="settings-security-action">
+          <span><strong>Password</strong><small>Send a password reset link to your account email.</small></span>
+          <button id="sendPasswordResetBtn" class="btn btn-secondary" type="button">Send reset link</button>
+        </div>
+        <button class="btn settings-save-button" type="button" data-save="privacy">Save privacy settings</button>
+      </section>
+
+      <section class="settings-panel" aria-labelledby="notificationsHeading">
+        <div class="settings-panel-heading">
+          <div>
+            <p class="settings-eyebrow">Choose what reaches you</p>
+            <h2 id="notificationsHeading">Notification Preferences</h2>
+          </div>
+        </div>
+        <label class="settings-toggle-row" for="kickoffAlerts">
+          <span><strong>Kick-off alerts</strong><small>Get notified when a match you follow is about to start.</small></span>
+          <input id="kickoffAlerts" type="checkbox">
+        </label>
+        <label class="settings-toggle-row" for="settlementNotifications">
+          <span><strong>Settlement notifications</strong><small>Get notified when your prediction ticket has been settled.</small></span>
+          <input id="settlementNotifications" type="checkbox">
+        </label>
+        <button class="btn settings-save-button" type="button" data-save="notifications">Save notification preferences</button>
+      </section>
+
+      <section class="settings-panel" aria-labelledby="profileHeading">
+        <div class="settings-panel-heading">
+          <div>
+            <p class="settings-eyebrow">Make your profile yours</p>
+            <h2 id="profileHeading">Profile Customization</h2>
+          </div>
+        </div>
+        <div class="settings-grid settings-profile-grid">
+          <label class="settings-field" for="settingsDisplayName">
+            <span>Display name</span>
+            <input id="settingsDisplayName" type="text" maxlength="60" autocomplete="nickname" placeholder="Your display name">
+          </label>
+          <div class="settings-field">
+            <label for="settingsAvatarUrl">Avatar image URL</label>
+            <input id="settingsAvatarUrl" type="url" inputmode="url" placeholder="https://example.com/avatar.jpg">
+            <div class="settings-avatar-preview-wrap">
+              <img id="settingsAvatarPreview" alt="Avatar preview" hidden>
+              <span id="settingsAvatarPlaceholder" aria-hidden="true">GF</span>
+            </div>
+          </div>
+        </div>
+        <fieldset class="settings-league-fieldset">
+          <legend>Favorite leagues</legend>
+          <div class="settings-league-options">
+            <label><input type="checkbox" name="favoriteLeague" value="Premier League"> Premier League</label>
+            <label><input type="checkbox" name="favoriteLeague" value="La Liga"> La Liga</label>
+            <label><input type="checkbox" name="favoriteLeague" value="Serie A"> Serie A</label>
+            <label><input type="checkbox" name="favoriteLeague" value="Bundesliga"> Bundesliga</label>
+            <label><input type="checkbox" name="favoriteLeague" value="Ligue 1"> Ligue 1</label>
+            <label><input type="checkbox" name="favoriteLeague" value="UEFA Champions League"> UEFA Champions League</label>
+            <label><input type="checkbox" name="favoriteLeague" value="Europa League"> Europa League</label>
+            <label><input type="checkbox" name="favoriteLeague" value="Africa Cup of Nations"> Africa Cup of Nations</label>
+          </div>
+        </fieldset>
+        <button class="btn settings-save-button" type="button" data-save="profile">Save profile customization</button>
+      </section>
+
+      <section class="settings-panel" aria-labelledby="dataHeading">
+        <div class="settings-panel-heading">
+          <div>
+            <p class="settings-eyebrow">Your account, your information</p>
+            <h2 id="dataHeading">Data &amp; Account Management</h2>
+          </div>
+        </div>
+        <p class="settings-data-copy">Download a copy of your profile information and preferences stored with your account.</p>
+        <div class="settings-actions">
+          <button id="exportAccountDataBtn" class="btn btn-secondary" type="button">Download my profile data</button>
+          <a class="settings-text-link" href="privacy.html">Read the privacy policy</a>
+        </div>
+      </section>
+    </form>
+  </main>
+
+  <div id="settingsToast" class="settings-toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+  <footer>
+    <p>© 2026 Global Football Hope Fund</p>
+  </footer>
+
+  <script src="../js/pwa.js"></script>
+  <script type="module" src="../js/auth.js"></script>
+  <script type="module" src="../js/notifications.js"></script>
+  <script type="module" src="../js/settings.js"></script>
+  <script type="module" src="../js/script.js"></script>
+  <script>
+    window.addEventListener("load", () => {
+      const splash = document.getElementById("appSplash");
+      if (splash) setTimeout(() => splash.classList.add("hidden"), 900);
+    });
+  </script>
+</body>
+</html>
