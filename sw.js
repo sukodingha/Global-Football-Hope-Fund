@@ -1,10 +1,10 @@
 /**
- * GFHF Progressive Web App Service Worker — v19
+ * GFHF Progressive Web App Service Worker — v21
  * Caches core app shell for offline functionality.
  * Implements cache-first then network-fallback strategy.
  */
 
-const CACHE_NAME = 'gfhf-cache-v19';
+const CACHE_NAME = 'gfhf-cache-v21';
 const APP_SHELL = [
   './',
   './index.html',
@@ -21,6 +21,7 @@ const APP_SHELL = [
   './js/firebase.js',
   './js/notifications.js',
   './js/predictions.js',
+  './services/fixturesService.js',
   './js/admin.js',
   './js/community.js',
   './js/polls.js',

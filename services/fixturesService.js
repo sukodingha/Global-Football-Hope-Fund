@@ -107,6 +107,20 @@ async function callApiFootball(path) {
     }
   }
 
+  if (ids.length) {
+    try {
+      const response = await fetch(`/api/prediction-fixtures?ids=${encodeURIComponent(ids.join("-"))}`, {
+        headers: { Accept: "application/json" }
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const result = await response.json();
+      return Array.isArray(result?.fixtures) ? result.fixtures : [];
+    } catch (err) {
+      console.warn("Unable to load fixture IDs from the Vercel API:", err);
+      return [];
+    }
+  }
+
   const payload = {
     live,
     date,

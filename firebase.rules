@@ -31,6 +31,24 @@ service cloud.firestore {
         (!changedKeys.hasAny(rewardFields) || changedKeys.hasOnly(rewardFields));
     }
 
+    function canUpdateOwnPredictionPoints(userId) {
+      let changedKeys = request.resource.data.diff(resource.data).affectedKeys();
+      let previousPoints = resource.data.get('predictionPoints', 0);
+      let nextPoints = request.resource.data.get('predictionPoints', 0);
+      let pointsDelta = nextPoints - previousPoints;
+      let rewardChanged = changedKeys.hasAny(['rewardPoints', 'totalRewardsEarned']);
+      return isOwn(userId) &&
+        changedKeys.hasAny(['predictionPoints']) &&
+        changedKeys.hasOnly(['predictionPoints', 'updatedAt', 'rewardPoints', 'totalRewardsEarned']) &&
+        nextPoints is int && pointsDelta > 0 && pointsDelta <= 7 &&
+        (!rewardChanged || (
+          pointsDelta == 7 &&
+          changedKeys.hasAll(['rewardPoints', 'totalRewardsEarned']) &&
+          request.resource.data.get('rewardPoints', 0) == resource.data.get('rewardPoints', 0) + 50 &&
+          request.resource.data.get('totalRewardsEarned', 0) == resource.data.get('totalRewardsEarned', 0) + 50
+        ));
+    }
+
     match /users/{userId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.auth.uid == userId &&
@@ -38,7 +56,7 @@ service cloud.firestore {
         !('walletBalance' in request.resource.data) &&
         !('predictionPoints' in request.resource.data) &&
         !('postCount' in request.resource.data);
-      allow update: if isSignedIn() && (canModifyUserProfile(userId) || isAdmin());
+      allow update: if isSignedIn() && (canModifyUserProfile(userId) || canUpdateOwnPredictionPoints(userId) || isAdmin());
       allow delete: if isAdmin();
 
       match /blockedUsers/{targetUid} {
@@ -83,10 +101,6 @@ service cloud.firestore {
       allow update: if isAdmin() || (isActiveUser() && isSinglePollVote());
     }
 
-    match /postCountEvents/{eventId} {
-      allow read, write: if isAdmin();
-    }
-
     match /posts/{postId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && isActiveUser() && request.resource.data.authorId == request.auth.uid && !request.resource.data.deleted;
@@ -103,7 +117,30 @@ service cloud.firestore {
 
     match /predictions/{predictionId} {
       allow read: if isSignedIn();
-      allow create, update, delete: if false;
+      allow create, delete: if false;
+      allow update: if isAdmin() || (
+        isActiveUser() &&
+        resource.data.userId == request.auth.uid &&
+        resource.data.status == 'pending' &&
+        resource.data.ticketStatus == 'pending' &&
+        resource.data.ticketId is string &&
+        request.resource.data.status in ['correct', 'incorrect'] &&
+        request.resource.data.ticketStatus in ['won', 'lost'] &&
+        request.resource.data.ticketMatchCount == 7 &&
+        request.resource.data.ticketCorrectCount is int &&
+        request.resource.data.ticketCorrectCount >= 0 &&
+        request.resource.data.ticketCorrectCount <= 7 &&
+        ((request.resource.data.ticketStatus == 'won' &&
+          request.resource.data.ticketCorrectCount == 7 &&
+          request.resource.data.ticketReward == 50) ||
+         (request.resource.data.ticketStatus == 'lost' &&
+          request.resource.data.ticketCorrectCount < 7 &&
+          request.resource.data.ticketReward == 0)) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'ticketStatus', 'ticketCorrectCount', 'ticketMatchCount', 'ticketReward',
+          'pointsAwarded', 'finalScore', 'settledAt', 'lostExpiresAt'
+        ])
+      );
     }
 
     match /predictionDailyLimits/{summaryId} {

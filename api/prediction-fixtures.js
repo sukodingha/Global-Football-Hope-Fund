@@ -12,6 +12,16 @@ function normalizeFixture(item) {
   const league = item.league || {};
   const teams = item.teams || {};
   const status = fixture.status || {};
+  const statusCode = String(status.short || "NS").toUpperCase();
+  const normalizedStatus = ["1H", "2H", "ET", "BT", "P", "LIVE"].includes(statusCode)
+    ? "live"
+    : statusCode === "HT"
+      ? "half_time"
+      : ["FT", "AET", "PEN"].includes(statusCode)
+        ? "finished"
+        : ["PST", "CANC", "ABD", "AWD", "WO", "SUSP", "INT"].includes(statusCode)
+          ? "postponed"
+          : "scheduled";
 
   return {
     fixture_id: String(fixture.id),
@@ -26,7 +36,7 @@ function normalizeFixture(item) {
     away_team_name: teams.away?.name || "Away",
     away_team_logo: teams.away?.logo || "",
     kickoff_time: fixture.date || null,
-    status: "scheduled",
+    status: normalizedStatus,
     status_text: status.long || "Not Started",
     minute: status.elapsed ?? "",
     home_score: Number(item.goals?.home ?? 0) || 0,
@@ -51,8 +61,11 @@ module.exports = async function predictionFixtures(req, res) {
   }
 
   const date = typeof req.query.date === "string" ? req.query.date : "";
-  if (!isValidDate(date)) {
-    return res.status(400).json({ error: "A valid date in YYYY-MM-DD format is required." });
+  const rawIds = typeof req.query.ids === "string" ? req.query.ids.split("-") : [];
+  const ids = [...new Set(rawIds.filter((id) => /^\d+$/.test(id)))].slice(0, 20);
+  const hasDate = isValidDate(date);
+  if (!hasDate && ids.length === 0) {
+    return res.status(400).json({ error: "Provide a valid date or fixture IDs." });
   }
 
   const apiKey = process.env.FOOTBALL_API_KEY;
@@ -62,7 +75,8 @@ module.exports = async function predictionFixtures(req, res) {
 
   try {
     const url = new URL(FIXTURES_URL);
-    url.searchParams.set("date", date);
+    if (ids.length) url.searchParams.set("ids", ids.join("-"));
+    else url.searchParams.set("date", date);
     const response = await fetch(url, {
       headers: {
         "x-apisports-key": apiKey,
@@ -82,14 +96,16 @@ module.exports = async function predictionFixtures(req, res) {
       return res.status(502).json({ error: "Unable to load fixtures right now." });
     }
 
-    const upcoming = (Array.isArray(payload.response) ? payload.response : [])
-      .filter((item) => UPCOMING_STATUSES.has(String(item.fixture?.status?.short || "").toUpperCase()))
-      .filter((item) => item.fixture?.id != null)
-      .map(normalizeFixture);
-    const fixtures = chooseRandomFixtures(upcoming);
+    const responseItems = (Array.isArray(payload.response) ? payload.response : [])
+      .filter((item) => item.fixture?.id != null);
+    const fixtures = ids.length
+      ? responseItems.map(normalizeFixture)
+      : chooseRandomFixtures(responseItems
+        .filter((item) => UPCOMING_STATUSES.has(String(item.fixture?.status?.short || "").toUpperCase()))
+        .map(normalizeFixture));
 
     res.setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=120");
-    return res.status(200).json({ date, count: fixtures.length, fixtures });
+    return res.status(200).json({ date: hasDate ? date : "", ids, count: fixtures.length, fixtures });
   } catch (error) {
     console.error("Fixture lookup failed:", error.name === "TimeoutError" ? "request timed out" : error.message);
     return res.status(502).json({ error: "Unable to load fixtures right now." });

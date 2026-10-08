@@ -17,7 +17,7 @@ import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/f
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
 import {
   doc, getDoc, setDoc, getDocs, collection, query, where, limit,
-  updateDoc, increment, serverTimestamp, deleteDoc
+  updateDoc, increment, serverTimestamp, deleteDoc, runTransaction, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   getFixturesByDate, getFixturesByIds, getRandomTopMatches, subscribeToFixtureUpdates
@@ -53,6 +53,7 @@ let hasLoadedFixturesOnce = false;
 let userPredictions = new Map();
 const pendingTicketSelections = new Map();
 let fixtureLoadRequestId = 0;
+let fixtureSettlementInProgress = false;
 
 let pollIntervalId = null;
 let liveTickIntervalId = null;
@@ -65,6 +66,7 @@ const PREDICTION_BATCH_SIZE = 7;
 const MAX_PREDICTIONS_PER_BATCH = 7;
 const MAX_BATCHES_PER_DAY = 2;
 const MAX_PREDICTIONS_PER_DAY = MAX_PREDICTIONS_PER_BATCH * MAX_BATCHES_PER_DAY;
+const TICKET_REWARD_HP = 50;
 const functions = getFunctions();
 const submitTicket = httpsCallable(functions, "submitPredictionTicket");
 
@@ -511,7 +513,107 @@ submitTicketBtn?.addEventListener("click", submitPredictionTicket);
 
 // ===== 6. SETTLEMENT — mark finished matches correct/incorrect & award HP =====
 async function settlePendingPredictions() {
-  // Settlement runs in the scheduled Firebase Function so the result and 50 HP reward are atomic.
+  if (!currentUser || fixtureSettlementInProgress) return;
+  const settlementUid = currentUser.uid;
+  fixtureSettlementInProgress = true;
+
+  try {
+    const userPredictionsQuery = query(
+      collection(db, "predictions"),
+      where("userId", "==", settlementUid)
+    );
+    const snapshot = await getDocs(userPredictionsQuery);
+    const tickets = new Map();
+
+    snapshot.docs.forEach((docSnap, index) => {
+      const prediction = { id: docSnap.id, ...docSnap.data() };
+      if ((prediction.ticketStatus || prediction.status) !== "pending") return;
+      const ticketId = String(prediction.ticketId || prediction.batchId || getPredictionBatchKey(prediction, index));
+      const ticket = tickets.get(ticketId) || [];
+      ticket.push(prediction);
+      tickets.set(ticketId, ticket);
+    });
+
+    let settledCount = 0;
+    for (const [ticketId, predictions] of tickets) {
+      if (predictions.length !== MAX_PREDICTIONS_PER_BATCH) continue;
+      if (new Set(predictions.map((prediction) => String(prediction.fixtureId || ""))).size !== MAX_PREDICTIONS_PER_BATCH) continue;
+
+      const fixtures = await getFixturesByIds(predictions.map((prediction) => prediction.fixtureId));
+      const fixtureById = new Map((fixtures || []).map((fixture) => [String(fixture.fixture_id), fixture]));
+      if (predictions.some((prediction) => {
+        const fixture = fixtureById.get(String(prediction.fixtureId));
+        return !fixture || String(fixture.status || "").toLowerCase() !== "finished";
+      })) continue;
+
+      const result = await runTransaction(db, async (transaction) => {
+        const predictionRefs = predictions.map((prediction) => doc(db, "predictions", prediction.id));
+        const [predictionSnapshots, userSnapshot] = await Promise.all([
+          Promise.all(predictionRefs.map((ref) => transaction.get(ref))),
+          transaction.get(doc(db, "users", settlementUid))
+        ]);
+        if (!userSnapshot.exists()) return null;
+
+        const current = predictionSnapshots.map((predictionSnapshot, index) => ({
+          ref: predictionRefs[index],
+          ...predictionSnapshot.data()
+        }));
+        if (current.some((prediction) => {
+          const explicitTicketId = prediction.ticketId || prediction.batchId;
+          return prediction.userId !== settlementUid ||
+            (prediction.ticketStatus || prediction.status) !== "pending" ||
+            (explicitTicketId && String(explicitTicketId) !== ticketId);
+        })) return null;
+
+        const correctCount = current.reduce((count, prediction) => {
+          const fixture = fixtureById.get(String(prediction.fixtureId));
+          return count + (getMatchOutcome(fixture.home_score, fixture.away_score) === prediction.pick ? 1 : 0);
+        }, 0);
+        const won = correctCount === MAX_PREDICTIONS_PER_BATCH;
+        const now = Timestamp.now();
+        const lostExpiresAt = won ? null : Timestamp.fromMillis(now.toMillis() + 24 * 60 * 60 * 1000);
+
+        current.forEach((prediction) => {
+          const fixture = fixtureById.get(String(prediction.fixtureId));
+          const correct = getMatchOutcome(fixture.home_score, fixture.away_score) === prediction.pick;
+          transaction.update(prediction.ref, {
+            status: correct ? "correct" : "incorrect",
+            ticketStatus: won ? "won" : "lost",
+            ticketCorrectCount: correctCount,
+            ticketMatchCount: MAX_PREDICTIONS_PER_BATCH,
+            ticketReward: won ? TICKET_REWARD_HP : 0,
+            pointsAwarded: won ? TICKET_REWARD_HP / MAX_PREDICTIONS_PER_BATCH : 0,
+            finalScore: `${Number(fixture.home_score || 0)}-${Number(fixture.away_score || 0)}`,
+            settledAt: now,
+            lostExpiresAt
+          });
+        });
+
+        transaction.update(doc(db, "users", settlementUid), {
+          predictionPoints: (Number(userSnapshot.data().predictionPoints) || 0) + correctCount,
+          ...(won ? {
+            rewardPoints: increment(TICKET_REWARD_HP),
+            totalRewardsEarned: increment(TICKET_REWARD_HP)
+          } : {}),
+          updatedAt: serverTimestamp()
+        });
+
+        return { correctCount, won };
+      });
+
+      if (result) settledCount += 1;
+    }
+
+    if (settledCount > 0) {
+      await loadUserPredictions();
+      await loadLeaderboard();
+      await loadPredictionHistory();
+    }
+  } catch (error) {
+    console.warn("Could not settle client-side prediction tickets:", error);
+  } finally {
+    fixtureSettlementInProgress = false;
+  }
 }
 
 // ===== 7. PREDICTION HISTORY =====

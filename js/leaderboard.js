@@ -1,10 +1,11 @@
 import { db } from "./firebase.js";
-import { collection, doc, getDoc, getDocs, limit, orderBy, query } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { collection, doc, getCountFromServer, getDoc, getDocs, limit, orderBy, query, where } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 export const TOP_PREDICTOR_POINTS = 100;
 export const MATCH_ANALYST_POSTS = 10;
 
 const profileCache = new Map();
+const postCountCache = new Map();
 
 export function calculateLeaderboard(entries = []) {
   return [...entries].sort((a, b) => (Number(b.points) || 0) - (Number(a.points) || 0));
@@ -42,7 +43,10 @@ export async function renderUserBadgePills(userId) {
   let profilePromise = profileCache.get(userId);
   if (!profilePromise) {
     profilePromise = getDoc(doc(db, "users", userId))
-      .then((snapshot) => snapshot.exists() ? snapshot.data() : {})
+      .then(async (snapshot) => {
+        const profile = snapshot.exists() ? snapshot.data() : {};
+        return { ...profile, postCount: await getUserPostCount(userId) };
+      })
       .catch((error) => {
         console.warn("Could not load user badge data:", error);
         return {};
@@ -53,7 +57,24 @@ export async function renderUserBadgePills(userId) {
 }
 
 export function invalidateUserBadgeCache(userId) {
-  if (userId) profileCache.delete(userId);
+  if (userId) {
+    profileCache.delete(userId);
+    postCountCache.delete(userId);
+  }
+}
+
+async function getUserPostCount(userId) {
+  let countPromise = postCountCache.get(userId);
+  if (!countPromise) {
+    countPromise = getCountFromServer(query(collection(db, "posts"), where("authorId", "==", userId)))
+      .then((snapshot) => snapshot.data().count)
+      .catch((error) => {
+        console.warn("Could not count user posts for badges:", error);
+        return 0;
+      });
+    postCountCache.set(userId, countPromise);
+  }
+  return countPromise;
 }
 
 export async function renderPredictionLeaderboard(container, user) {
@@ -78,7 +99,12 @@ export async function renderPredictionLeaderboard(container, user) {
       return;
     }
 
-    container.innerHTML = entries.map((user, index) => {
+    const entriesWithPostCounts = await Promise.all(entries.map(async (user) => ({
+      ...user,
+      postCount: await getUserPostCount(user.id)
+    })));
+
+    container.innerHTML = entriesWithPostCounts.map((user, index) => {
       const displayName = user.displayName || user.firstName || user.username || "Member";
       const badges = renderBadgePills(user);
       return `
