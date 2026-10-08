@@ -224,7 +224,7 @@ function updateCurrentProfilePicUI(photoURL) {
  * Accepts a File object directly (not a file input element).
  */
 async function uploadToCloudinary(file, onProgress) {
-  const result = await uploadMediaToCloudinary(file, "football_preset", onProgress);
+  const result = await uploadMediaToCloudinary(file, onProgress);
   return result.url;
 }
 

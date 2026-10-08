@@ -1,4 +1,5 @@
 const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/d8obkydb";
+const CLOUDINARY_UPLOAD_PRESET = "community_uploads";
 const MAX_IMAGE_SIZE = 15 * 1024 * 1024;
 const MAX_VIDEO_SIZE = 300 * 1024 * 1024;
 const MAX_VIDEO_SECONDS = 30;
@@ -433,8 +434,8 @@ export function openMediaShareModal(options = {}) {
   });
 }
 
-export async function uploadMediaToCloudinary(file, uploadPreset, onProgress = () => {}) {
-  if (!file || !uploadPreset) return Promise.reject(new Error("A file and upload preset are required."));
+export async function uploadMediaToCloudinary(file, onProgress = () => {}) {
+  if (!file) throw new Error("A file is required.");
   const mediaType = String(file.type || "").toLowerCase().split(";")[0];
   if (!ALLOWED_MEDIA_TYPES.has(mediaType)) throw new Error("Choose a supported photo or video file.");
   const isVideo = mediaType.startsWith("video/");
@@ -449,11 +450,10 @@ export async function uploadMediaToCloudinary(file, uploadPreset, onProgress = (
     }
   }
 
-  const resourceType = isVideo ? "video" : "image";
-  const uploadUrl = `${CLOUDINARY_URL}/${resourceType}/upload`;
+  const uploadUrl = `${CLOUDINARY_URL}/auto/upload`;
   const formData = new FormData();
   formData.append("file", file);
-  formData.append("upload_preset", uploadPreset);
+  formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
 
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
@@ -462,12 +462,11 @@ export async function uploadMediaToCloudinary(file, uploadPreset, onProgress = (
       if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
     };
     request.onload = () => {
-      if (request.status < 200 || request.status >= 300) {
-        reject(new Error("Media upload failed. Please try again."));
-        return;
-      }
       try {
         const result = JSON.parse(request.responseText);
+        if (request.status < 200 || request.status >= 300) {
+          throw new Error(result.error?.message || "Media upload failed. Please try again.");
+        }
         if (!result.secure_url) throw new Error("Upload returned no secure media URL.");
         resolve({ url: result.secure_url, thumbnailUrl: result.thumbnail_url || null, raw: result });
       } catch (error) {
@@ -476,6 +475,8 @@ export async function uploadMediaToCloudinary(file, uploadPreset, onProgress = (
     };
     request.onerror = () => reject(new Error("Media upload failed. Check your connection and try again."));
     request.onabort = () => reject(new Error("Media upload was cancelled."));
+    request.ontimeout = () => reject(new Error("Media upload timed out. Please try again."));
+    request.timeout = 120000;
     request.send(formData);
   });
 }

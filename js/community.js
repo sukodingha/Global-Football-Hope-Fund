@@ -26,7 +26,6 @@ import {
 } from "./wallet.js";
 
 // ===== CONFIG =====
-const CLOUDINARY_UPLOAD_PRESET = "chat_uploads";
 const MAX_CLIP_SECONDS = 30; // Hard cap for live recordings + device video uploads
 
 // ===== STATE =====
@@ -585,7 +584,7 @@ async function uploadMedia(file) {
 
   if (postUploadProgress) postUploadProgress.hidden = false;
   if (postUploadProgressBar) postUploadProgressBar.value = 0;
-  const result = await uploadMediaToCloudinary(compressedFile || file, CLOUDINARY_UPLOAD_PRESET, (percent) => {
+  const result = await uploadMediaToCloudinary(compressedFile || file, (percent) => {
     if (postUploadProgressBar) postUploadProgressBar.value = percent;
     if (postUploadProgressLabel) postUploadProgressLabel.textContent = `Uploading media... ${percent}%`;
   });
@@ -1845,7 +1844,7 @@ async function uploadAndSendChatImage(file, collectionPath, extraData = {}, medi
   if (!currentUser || !file) return false;
 
   try {
-    const upload = await uploadMediaToCloudinary(file, CLOUDINARY_UPLOAD_PRESET, (percent) => {
+    const upload = await uploadMediaToCloudinary(file, (percent) => {
       mediaUi?.setUploadProgress(percent, `Uploading photo... ${percent}%`);
     });
     const imageUrl = upload.url;
