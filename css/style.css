@@ -246,6 +246,98 @@ header nav a.active {
     box-shadow: 0 10px 20px rgba(11, 45, 77, 0.2);
 }
 
+.hero-actions {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 24px;
+}
+
+.hero-actions .btn,
+.hero-actions .btn-secondary {
+    margin: 0;
+}
+
+.pwa-download-btn {
+    display: none;
+}
+
+.pwa-download-btn.is-visible {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 10px 18px;
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 999px;
+    background: #fff;
+    color: #0b2d4d;
+    font: inherit;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.pwa-download-nav.is-visible {
+    min-height: 36px;
+    margin: 0 0 0 12px;
+    padding: 7px 12px;
+    color: #0b2d4d;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.pwa-install-banner {
+    position: fixed;
+    z-index: 3500;
+    right: 20px;
+    bottom: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    width: min(560px, calc(100vw - 40px));
+    padding: 15px 17px;
+    border: 1px solid #dbe5ec;
+    border-left: 4px solid #00a94f;
+    border-radius: 8px;
+    background: #fff;
+    color: #14213d;
+    box-shadow: 0 14px 38px rgba(11,45,77,0.2);
+}
+
+.pwa-install-banner-copy {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+}
+
+.pwa-install-banner-copy strong { color: #0b2d4d; font-size: 14px; }
+.pwa-install-banner-copy span { color: #64748b; font-size: 12px; line-height: 1.4; }
+
+.pwa-install-banner-actions {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 8px;
+}
+
+.pwa-install-banner-button,
+.pwa-install-banner-dismiss {
+    min-height: 40px;
+    padding: 8px 13px;
+    border: 1px solid #0b2d4d;
+    border-radius: 6px;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.pwa-install-banner-button { background: #0b2d4d; color: #fff; }
+.pwa-install-banner-dismiss { background: #fff; color: #0b2d4d; }
+
 /* SECTIONS */
 .section {
     padding: 70px 20px;
@@ -406,6 +498,20 @@ footer {
     .hero {
         padding: 90px 20px 110px;
     }
+
+    .hero-actions { gap: 10px; }
+
+    .pwa-install-banner {
+        right: 12px;
+        bottom: calc(82px + env(safe-area-inset-bottom));
+        left: 12px;
+        width: auto;
+        gap: 10px;
+        padding: 12px;
+    }
+
+    .pwa-install-banner-actions { gap: 6px; }
+    .pwa-install-banner-button, .pwa-install-banner-dismiss { padding: 8px 10px; }
 
     .btn-secondary {
         margin-left: 0;

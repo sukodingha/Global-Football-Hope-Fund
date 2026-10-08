@@ -44,6 +44,7 @@
         <a href="/pages/settings.html">Settings</a>
         <a href="/pages/admin.html">Admin</a>
         <a href="/pages/faq.html">FAQ</a>
+        <button class="pwa-download-btn pwa-download-nav" type="button">Download App</button>
         <!-- Language Selector -->
         <div class="lang-selector">
             <button class="lang-btn active" data-lang="en" title="English">EN</button>
@@ -53,19 +54,6 @@
         </div>
     </nav>
 </header>
-
-<!-- ===== PWA INSTALL MODAL ===== -->
-<div id="pwa-install-modal" class="fb-modal" hidden>
-  <div class="fb-modal-overlay"></div>
-  <div class="fb-modal-card">
-        <h3>Install GFHF?</h3>
-        <p>Install the app on this device for sports updates, community chat, predictions, and donations.</p>
-        <div class="pwa-install-actions">
-            <button id="pwa-install-btn" class="btn" type="button">Yes</button>
-            <button id="pwa-decline-btn" class="btn btn-secondary" type="button">No</button>
-        </div>
-  </div>
-</div>
 
 <nav class="mobile-bottom-nav" aria-label="Mobile navigation">
     <a href="/index.html">Home</a>
@@ -80,8 +68,11 @@
     <h1>One Game. One Community. Endless Hope.</h1>
     <p>Global football fans united to support children through free registration, skill-based predictions, and optional crypto donations.</p>
 
-    <a href="pages/register.html" class="btn">Join the Campaign</a>
-    <a href="pages/news.html" class="btn btn-secondary">Open Sports Hub</a>
+    <div class="hero-actions">
+        <a href="pages/register.html" class="btn">Join the Campaign</a>
+        <a href="pages/news.html" class="btn btn-secondary">Open Sports Hub</a>
+        <button class="pwa-download-btn" type="button">Download App</button>
+    </div>
 </section>
 
 <!-- LIVE SCORES TICKER + HP REWARDS TEASER (2-Column) -->

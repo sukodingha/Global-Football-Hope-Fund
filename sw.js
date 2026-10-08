@@ -1,10 +1,10 @@
 /**
- * GFHF Progressive Web App Service Worker — v13
+ * GFHF Progressive Web App Service Worker — v16
  * Caches core app shell for offline functionality.
  * Implements cache-first then network-fallback strategy.
  */
 
-const CACHE_NAME = 'gfhf-cache-v13';
+const CACHE_NAME = 'gfhf-cache-v16';
 const APP_SHELL = [
   './',
   './index.html',
