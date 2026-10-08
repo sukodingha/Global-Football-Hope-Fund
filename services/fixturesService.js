@@ -93,6 +93,20 @@ async function callApiFootball(path) {
   const ids = idsMatch ? idsMatch[1].split("-").filter(Boolean) : [];
   const date = dateMatch ? decodeURIComponent(dateMatch[1]) : "";
 
+  if (date) {
+    try {
+      const response = await fetch(`/api/prediction-fixtures?date=${encodeURIComponent(date)}`, {
+        headers: { Accept: "application/json" }
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const result = await response.json();
+      return Array.isArray(result?.fixtures) ? result.fixtures : [];
+    } catch (err) {
+      console.warn("Unable to load date fixtures from the Vercel API:", err);
+      return [];
+    }
+  }
+
   const payload = {
     live,
     date,
@@ -104,28 +118,8 @@ async function callApiFootball(path) {
     const result = await getFixturesCallable(payload);
     return Array.isArray(result?.data?.fixtures) ? result.data.fixtures : [];
   } catch (err) {
-    console.warn("Callable fixture request failed; falling back to HTTPS endpoint:", err);
-
-    try {
-      const httpResponse = await fetch("https://us-central1-global-football-hope-fund.cloudfunctions.net/getFixturesHttp", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
-        body: JSON.stringify(payload)
-      });
-
-      if (!httpResponse.ok) {
-        throw new Error(`HTTP ${httpResponse.status}`);
-      }
-
-      const json = await httpResponse.json();
-      return Array.isArray(json?.fixtures) ? json.fixtures : [];
-    } catch (fallbackErr) {
-      console.warn("Unable to load fixtures from secure Firebase function:", fallbackErr);
-      return [];
-    }
+    console.warn("Callable fixture request failed:", err);
+    return [];
   }
 }
 
