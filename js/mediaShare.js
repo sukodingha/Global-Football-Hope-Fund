@@ -1,5 +1,5 @@
 const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/d8obkydb";
-const CLOUDINARY_UPLOAD_PRESET = "community_uploads";
+const CLOUDINARY_UNSIGNED_UPLOAD_PRESET = "community_uploads";
 const MAX_IMAGE_SIZE = 15 * 1024 * 1024;
 const MAX_VIDEO_SIZE = 300 * 1024 * 1024;
 const MAX_VIDEO_SECONDS = 30;
@@ -453,7 +453,7 @@ export async function uploadMediaToCloudinary(file, onProgress = () => {}) {
   const uploadUrl = `${CLOUDINARY_URL}/auto/upload`;
   const formData = new FormData();
   formData.append("file", file);
-  formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+  formData.append("upload_preset", CLOUDINARY_UNSIGNED_UPLOAD_PRESET);
 
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();

@@ -1,13 +1,26 @@
-import { db } from "./firebase.js";
-import { collection, deleteDoc, doc, getDocs, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { auth, db } from "./firebase.js";
+import { collection, deleteDoc, doc, getDocs, setDoc, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 export async function sendTeammateRequest(currentUid, targetUid, senderName, senderAvatar, extra = {}) {
-  if (!currentUid || !targetUid || currentUid === targetUid) return false;
+  const senderId = auth.currentUser?.uid;
+  if (!senderId || senderId !== currentUid || !targetUid || senderId === targetUid) return false;
   try {
-    const notificationsRef = collection(db, "notifications", targetUid, "items");
-    await setDoc(doc(notificationsRef), {
+    const requestRef = doc(collection(db, "teammateRequests"));
+    const notificationRef = doc(collection(db, "notifications", targetUid, "items"));
+    const batch = writeBatch(db);
+    batch.set(requestRef, {
+      senderId,
+      receiverId: targetUid,
+      senderName,
+      senderAvatar,
+      status: "pending",
+      createdAt: serverTimestamp()
+    });
+    batch.set(notificationRef, {
+      ...extra,
       type: "teammate_request",
-      senderId: currentUid,
+      senderId,
+      receiverId: targetUid,
       recipientId: targetUid,
       senderName,
       senderAvatar,
@@ -15,8 +28,9 @@ export async function sendTeammateRequest(currentUid, targetUid, senderName, sen
       message: `${senderName} wants to connect as a teammate.`,
       read: false,
       createdAt: serverTimestamp(),
-      ...extra
+      requestId: requestRef.id
     });
+    await batch.commit();
     return true;
   } catch (err) {
     console.warn("Could not send teammate request", err);

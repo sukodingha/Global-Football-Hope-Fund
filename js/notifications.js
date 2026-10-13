@@ -198,7 +198,7 @@ function updateBadge(count) {
 /**
  * Handle accepting a teammate request
  */
-async function handleAcceptTeammate(notifId, senderId, senderName) {
+async function handleAcceptTeammate(notifId, senderId, senderName, requestId) {
   if (!currentUser || !senderId) return;
   try {
     // 1. Create mutual teammate links
@@ -228,12 +228,19 @@ async function handleAcceptTeammate(notifId, senderId, senderName) {
       status: "accepted",
       read: true
     });
+    if (requestId) {
+      await updateDoc(doc(db, "teammateRequests", requestId), {
+        status: "accepted",
+        updatedAt: serverTimestamp()
+      });
+    }
 
     // 4. Send acceptance notification to the requester
     const senderNotifRef = collection(db, "notifications", senderId, "items");
     await addDoc(senderNotifRef, {
       type: "teammate_accepted",
       senderId: currentUser.uid,
+      recipientId: senderId,
       senderName: currentUser.displayName || "Your teammate",
       senderAvatar: currentUser.photoURL || "✅",
       message: `${currentUser.displayName || "Your teammate"} accepted your teammate request!`,
@@ -252,7 +259,7 @@ async function handleAcceptTeammate(notifId, senderId, senderName) {
 /**
  * Handle rejecting a teammate request
  */
-async function handleRejectTeammate(notifId, senderId, senderName) {
+async function handleRejectTeammate(notifId, senderId, senderName, requestId) {
   if (!currentUser || !senderId) return;
   try {
     // 1. Update request notification status to 'rejected'
@@ -260,12 +267,19 @@ async function handleRejectTeammate(notifId, senderId, senderName) {
       status: "rejected",
       read: true
     });
+    if (requestId) {
+      await updateDoc(doc(db, "teammateRequests", requestId), {
+        status: "rejected",
+        updatedAt: serverTimestamp()
+      });
+    }
 
     // 2. Send rejection notification to the requester
     const senderNotifRef = collection(db, "notifications", senderId, "items");
     await addDoc(senderNotifRef, {
       type: "teammate_declined",
       senderId: currentUser.uid,
+      recipientId: senderId,
       senderName: currentUser.displayName || "A user",
       senderAvatar: currentUser.photoURL || "❌",
       message: `${currentUser.displayName || "A user"} declined your teammate request.`,
@@ -340,8 +354,8 @@ function renderNotifications(notifications) {
     if (notif.type === "teammate_request" && notif.status === "pending") {
       actionButtons = `
         <div style="display:flex;gap:6px;margin-top:8px;">
-          <button class="mini-btn teammate-accept-btn" data-notifid="${notif.id}" data-senderid="${notif.senderId}" data-sendername="${notif.senderName || ''}" style="flex:1;padding:6px 12px;background:#00c853;color:white;border:none;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer;">✅ Accept</button>
-          <button class="mini-btn teammate-reject-btn" data-notifid="${notif.id}" data-senderid="${notif.senderId}" data-sendername="${notif.senderName || ''}" style="flex:1;padding:6px 12px;background:#ef4444;color:white;border:none;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer;">❌ Reject</button>
+          <button class="mini-btn teammate-accept-btn" data-notifid="${notif.id}" data-requestid="${notif.requestId || ''}" data-senderid="${notif.senderId}" data-sendername="${notif.senderName || ''}" style="flex:1;padding:6px 12px;background:#00c853;color:white;border:none;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer;">✅ Accept</button>
+          <button class="mini-btn teammate-reject-btn" data-notifid="${notif.id}" data-requestid="${notif.requestId || ''}" data-senderid="${notif.senderId}" data-sendername="${notif.senderName || ''}" style="flex:1;padding:6px 12px;background:#ef4444;color:white;border:none;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer;">❌ Reject</button>
         </div>
       `;
     } else if (notif.type === "teammate_request" && notif.status === "accepted") {
@@ -377,7 +391,8 @@ function renderNotifications(notifications) {
       const notifId = btn.dataset.notifid;
       const senderId = btn.dataset.senderid;
       const senderName = btn.dataset.sendername;
-      await handleAcceptTeammate(notifId, senderId, senderName);
+      const requestId = btn.dataset.requestid;
+      await handleAcceptTeammate(notifId, senderId, senderName, requestId);
     });
   });
 
@@ -388,7 +403,8 @@ function renderNotifications(notifications) {
       const notifId = btn.dataset.notifid;
       const senderId = btn.dataset.senderid;
       const senderName = btn.dataset.sendername;
-      await handleRejectTeammate(notifId, senderId, senderName);
+      const requestId = btn.dataset.requestid;
+      await handleRejectTeammate(notifId, senderId, senderName, requestId);
     });
   });
 
@@ -460,7 +476,9 @@ export async function createNotification(targetUid, type, message, meta = {}) {
       message,
       read: false,
       createdAt: serverTimestamp(),
-      ...meta
+      ...meta,
+      senderId: auth.currentUser?.uid || null,
+      recipientId: targetUid
     });
     playNotificationSound(type);
   } catch (err) {
@@ -484,4 +502,3 @@ if (document.readyState === "loading") {
 } else {
   injectNotificationBell();
 }
-

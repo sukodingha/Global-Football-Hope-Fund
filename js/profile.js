@@ -11,6 +11,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { createNotification } from "./notifications.js";
 import { blockUser, createReport } from "./moderation.js";
+import { sendTeammateRequest } from "./teammates.js";
 
 // ===== DOM REFS =====
 const profileAvatar = document.getElementById("profileAvatar");
@@ -283,18 +284,8 @@ async function handleAddTeammate(targetUid) {
     const senderName = senderData.displayName || senderData.firstName || "A user";
     const senderAvatar = senderData.photoURL || "👤";
 
-    const notificationsRef = collection(db, "notifications", targetUid, "items");
-    await addDoc(notificationsRef, {
-      type: "teammate_request",
-      senderId: loggedInUserId,
-      recipientId: targetUid,
-      senderName,
-      senderAvatar,
-      status: "pending",
-      message: `${senderName} wants to connect as a teammate.`,
-      read: false,
-      createdAt: serverTimestamp()
-    });
+    const sent = await sendTeammateRequest(loggedInUserId, targetUid, senderName, senderAvatar);
+    if (!sent) throw new Error("Could not send teammate request.");
 
     updateAddTeammateBtnUI(false);
     alert("✅ Teammate request sent! Waiting for approval.");
@@ -389,4 +380,3 @@ onAuthStateChanged(auth, async (user) => {
     }
   }
 });
-

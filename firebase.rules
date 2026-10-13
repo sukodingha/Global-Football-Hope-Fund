@@ -69,7 +69,7 @@ service cloud.firestore {
       }
       match /teammates/{teammateId} {
         allow read: if isSignedIn();
-        allow write: if isOwn(userId);
+        allow write: if isSignedIn();
       }
     }
 
@@ -102,10 +102,37 @@ service cloud.firestore {
     }
 
     match /posts/{postId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && isActiveUser() && request.resource.data.authorId == request.auth.uid && !request.resource.data.deleted;
-      allow update: if isSignedIn() && (resource.data.authorId == request.auth.uid || isAdmin());
-      allow delete: if isAdmin();
+      allow read: if true;
+      allow create: if isSignedIn() && isActiveUser() &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.authorId == request.auth.uid &&
+        !request.resource.data.get('deleted', false);
+      allow update: if isSignedIn() &&
+        (resource.data.get('userId', resource.data.get('authorId', '')) == request.auth.uid ||
+         resource.data.authorId == request.auth.uid || isAdmin()) &&
+        request.resource.data.get('userId', resource.data.get('userId', '')) ==
+          resource.data.get('userId', resource.data.get('authorId', '')) &&
+        request.resource.data.get('authorId', resource.data.get('authorId', '')) ==
+          resource.data.get('authorId', '');
+      allow delete: if isSignedIn() &&
+        (resource.data.get('userId', resource.data.get('authorId', '')) == request.auth.uid || isAdmin());
+    }
+
+    match /teammateRequests/{requestId} {
+      allow read: if isSignedIn() &&
+        (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
+      allow create: if isSignedIn() &&
+        request.resource.data.senderId == request.auth.uid &&
+        request.resource.data.receiverId is string &&
+        request.resource.data.receiverId != request.auth.uid;
+      allow update: if isSignedIn() &&
+        (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid) &&
+        request.resource.data.senderId == resource.data.senderId &&
+        request.resource.data.receiverId == resource.data.receiverId &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']) &&
+        request.resource.data.status in ['accepted', 'rejected'];
+      allow delete: if isSignedIn() &&
+        (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
     }
 
     match /media/{mediaId} {
@@ -167,7 +194,10 @@ service cloud.firestore {
 
     match /notifications/{uid}/items/{notifId} {
       allow read: if isSignedIn() && request.auth.uid == uid;
-      allow create: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow create: if isSignedIn() && (
+        request.auth.uid == uid || isAdmin() ||
+        (request.resource.data.senderId == request.auth.uid && request.resource.data.recipientId == uid)
+      );
       allow update: if isSignedIn() && (request.auth.uid == uid || isAdmin());
       allow delete: if isAdmin();
     }

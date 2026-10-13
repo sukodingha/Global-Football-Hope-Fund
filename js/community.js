@@ -623,6 +623,7 @@ if (postModalSubmit) {
       const { cleanText: parsedText, taggedIds } = parseMentions(text);
 
       await addDoc(collection(db, "posts"), {
+        userId: currentUser.uid,
         authorId: currentUser.uid,
         authorName: currentUserName,
         authorAvatar: currentUserAvatar,
@@ -2357,4 +2358,3 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   initFundWalletModal();
 });
-
