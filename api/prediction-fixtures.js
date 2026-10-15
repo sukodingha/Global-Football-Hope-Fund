@@ -82,17 +82,35 @@ module.exports = async function predictionFixtures(req, res) {
         "x-apisports-key": apiKey,
         Accept: "application/json"
       },
-      signal: AbortSignal.timeout(10000)
+      signal: AbortSignal.timeout(8000)
     });
 
     if (!response.ok) {
-      console.error("Football API request failed with status", response.status);
+      const responseBody = await response.text().catch(() => "<unreadable response body>");
+      console.error("Football API request failed", JSON.stringify({
+        status: response.status,
+        statusText: response.statusText,
+        url: url.toString(),
+        body: responseBody
+      }));
       return res.status(502).json({ error: "Unable to load fixtures right now." });
     }
 
     const payload = await response.json();
-    if (payload.errors && Object.keys(payload.errors).length > 0) {
-      console.error("Football API returned fixture errors.");
+    if (payload?.errors && Object.keys(payload.errors).length > 0) {
+      console.error("Football API returned fixture errors", JSON.stringify({
+        url: url.toString(),
+        errors: payload.errors,
+        message: payload.message || ""
+      }));
+      return res.status(502).json({ error: "Unable to load fixtures right now." });
+    }
+    if (!payload || !Array.isArray(payload.response)) {
+      console.error("Football API returned an invalid fixture payload", JSON.stringify({
+        url: url.toString(),
+        message: payload?.message || "Missing response array",
+        errors: payload?.errors || null
+      }));
       return res.status(502).json({ error: "Unable to load fixtures right now." });
     }
 
