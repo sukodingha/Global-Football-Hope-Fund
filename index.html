@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#0b2d4d">
     <title>Global Football Hope Fund</title>
+    <script src="https://cdn.tailwindcss.com"></script>
 
     <!-- CSS LINK -->
 <link rel="stylesheet" href="css/style.css">
@@ -72,6 +73,22 @@
         <a href="pages/register.html" class="btn">Join the Campaign</a>
         <a href="pages/news.html" class="btn btn-secondary">Open Sports Hub</a>
         <button class="pwa-download-btn" type="button">Download App</button>
+    </div>
+</section>
+
+<section id="latest-football" class="bg-slate-950 text-white px-4 py-12 sm:px-6 lg:px-8" aria-labelledby="latest-football-heading">
+    <div class="mx-auto max-w-7xl">
+        <div class="mb-7 flex flex-wrap items-end justify-between gap-3">
+            <div>
+                <p class="mb-2 text-sm font-semibold uppercase tracking-[0.2em] text-emerald-400">The latest from the pitch</p>
+                <h2 id="latest-football-heading" class="text-2xl font-bold sm:text-3xl">Latest Football News &amp; Matches</h2>
+                <p class="mt-2 text-slate-400">Live scores and upcoming fixtures from across the game.</p>
+            </div>
+            <span id="latest-football-updated" class="text-sm text-slate-400" aria-live="polite"></span>
+        </div>
+        <div id="latest-football-cards" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-live="polite" aria-busy="true">
+            <p class="col-span-full rounded-xl border border-slate-800 bg-slate-900 p-6 text-slate-300">Loading the latest matches…</p>
+        </div>
     </div>
 </section>
 
@@ -394,6 +411,7 @@
 <script type="module" src="js/notifications.js"></script>
 <script type="module" src="js/script.js"></script>
 <script type="module" src="js/home.js"></script>
+<script type="module" src="js/home-matches.js"></script>
 <script type="module" src="js/livescores.js"></script>
 <script src="js/pwa.js"></script>
 <script>
