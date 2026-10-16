@@ -257,12 +257,35 @@ function getPostFavoriteTeam(post) {
   return getUserFavoriteTeam(post.authorId || post.userId, post.favoriteTeam || post.club || post.nationalTeam);
 }
 
+function isClubhouseOnlyPost(post) {
+  return post.visibility === "clubhouse" || post.privacy === "clubhouse";
+}
+
+function normalizeTeamName(team) {
+  return String(team || "").trim().toLocaleLowerCase();
+}
+
+function updatePostPrivacySummary() {
+  const summary = document.getElementById("postPrivacySummary");
+  if (!summary) return;
+  const selectedPrivacy = postPrivacySelect?.value || "everyone";
+  summary.textContent = selectedPrivacy === "clubhouse"
+    ? `🏠 ${currentFavoriteTeam || "Clubhouse"} Only`
+    : selectedPrivacy === "teammates" ? "👥 Teammates Only" : "🌍 Public";
+}
+
 function updateClubhouseControls() {
   const button = document.getElementById("clubhouseFilterBtn");
-  if (!button) return;
-  button.disabled = !currentFavoriteTeam;
-  button.textContent = currentFavoriteTeam ? `🏠 Clubhouse · ${currentFavoriteTeam}` : "🏠 Clubhouse (set a favorite team)";
-  button.title = currentFavoriteTeam ? `Show posts from ${currentFavoriteTeam} fans` : "Set a favorite team on your dashboard to use Clubhouse";
+  if (button) {
+    button.disabled = !currentFavoriteTeam;
+    button.textContent = currentFavoriteTeam ? `🏠 Clubhouse · ${currentFavoriteTeam}` : "🏠 Clubhouse (set a favorite team)";
+    button.title = currentFavoriteTeam ? `Show posts from ${currentFavoriteTeam} fans` : "Set a favorite team on your dashboard to use Clubhouse";
+  }
+  const privacyOption = document.getElementById("postPrivacyClubhouseOption");
+  if (privacyOption) {
+    privacyOption.disabled = !currentFavoriteTeam;
+    privacyOption.textContent = currentFavoriteTeam ? `🏠 ${currentFavoriteTeam} Clubhouse Only` : "🏠 Clubhouse Only (set a favorite team)";
+  }
 }
 
 function renderFanbaseScore() {
@@ -347,6 +370,7 @@ function openPostModal() {
   postModalText.value = "";
   postModalInterest.value = "Football";
   if (postPrivacySelect) postPrivacySelect.value = normalizePrivacy(privacySettings.posts || "everyone");
+  updatePostPrivacySummary();
   pendingFiles = [];
   pendingMediaType = "image";
   resetMediaPreview();
@@ -662,6 +686,12 @@ if (postModalSubmit) {
       postModalStatus.textContent = "Please write something.";
       return;
     }
+    const postPrivacy = normalizePrivacy(postPrivacySelect?.value || "everyone");
+    if (postPrivacy === "clubhouse" && !currentFavoriteTeam) {
+      postModalStatus.className = "message error";
+      postModalStatus.textContent = "Set a favorite team on your dashboard before posting to a Clubhouse.";
+      return;
+    }
 
     postModalSubmit.disabled = true;
     postModalSubmit.textContent = "Posting...";
@@ -691,7 +721,9 @@ if (postModalSubmit) {
         imageUrl: mediaUrl || null,
         thumbnailUrl,
         mediaType: pendingMediaType,
-        privacy: normalizePrivacy(postPrivacySelect?.value || "everyone"),
+        privacy: postPrivacy,
+        visibility: postPrivacy,
+        targetClub: postPrivacy === "clubhouse" ? currentFavoriteTeam : null,
         likes: [],
         comments: [],
         impressions: 0,
@@ -888,6 +920,7 @@ async function loadPrivacySettings() {
       privacySettings = { ...privacySettings, ...data };
       privacySettings.posts = normalizePrivacy(privacySettings.posts || 'everyone');
       if (postPrivacySelect) postPrivacySelect.value = privacySettings.posts || 'everyone';
+      updatePostPrivacySummary();
       currentFavoriteTeam = getFavoriteTeam(data);
       updateClubhouseControls();
       renderFanbaseScore();
@@ -899,6 +932,7 @@ async function loadPrivacySettings() {
 }
 
 // ===== FEED FILTER =====
+if (postPrivacySelect) postPrivacySelect.addEventListener("change", updatePostPrivacySummary);
 filterBtns.forEach((btn) => {
   btn.addEventListener("click", () => {
     filterBtns.forEach((b) => b.classList.remove("active"));
@@ -1637,8 +1671,11 @@ async function loadFeed() {
     feed.innerHTML = "";
     const posts = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
     const visiblePosts = activeInterest === "Clubhouse"
-      ? posts.filter((post) => currentFavoriteTeam && getPostFavoriteTeam(post).toLocaleLowerCase() === currentFavoriteTeam.toLocaleLowerCase())
-      : posts;
+      ? posts.filter((post) => {
+        const postTeam = post.targetClub || getPostFavoriteTeam(post);
+        return currentFavoriteTeam && normalizeTeamName(postTeam) === normalizeTeamName(currentFavoriteTeam);
+      })
+      : posts.filter((post) => !isClubhouseOnlyPost(post));
     if (!visiblePosts.length) {
       feed.innerHTML = activeInterest === "Clubhouse"
         ? `<div class="fb-empty-feed">${currentFavoriteTeam ? `No ${escapeHtml(currentFavoriteTeam)} fan posts yet. Be the first to post! 🎉` : "Set a favorite team on your dashboard to open your Clubhouse."}</div>`

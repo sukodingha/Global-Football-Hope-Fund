@@ -99,7 +99,7 @@
             <span class="create-post-modal-avatar" id="postModalAvatar">👤</span>
             <div>
               <strong id="postModalName">Your Name</strong>
-              <div class="create-post-modal-privacy">🌍 Public</div>
+              <div id="postPrivacySummary" class="create-post-modal-privacy">🌍 Public</div>
             </div>
           </div>
           <textarea id="postModalText" class="create-post-modal-textarea" placeholder="What's on your mind?" rows="3"></textarea>
@@ -125,6 +125,7 @@
               <select id="postPrivacySelect">
                 <option value="everyone">🌍 Public</option>
                 <option value="teammates">👥 Teammates Only</option>
+                <option id="postPrivacyClubhouseOption" value="clubhouse" disabled>🏠 Clubhouse Only</option>
               </select>
             </div>
           </div>
