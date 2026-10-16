@@ -1,27 +1,32 @@
 const NEWS_URL = "https://newsapi.org/v2/top-headlines";
 const MOCK_ARTICLES = [
   {
-    title: "Matchday spotlight: Europe's biggest clubs prepare for a decisive weekend",
-    description: "A sample headline for the homepage news feed. Connect NEWS_API_KEY to display current articles.",
-    source: "GFHF Sample News",
-    publishedAt: "2026-10-16T08:00:00Z",
-    url: "https://www.global-football-hope-fund.org/pages/news.html"
+    title: "Premier League title race: the fixtures that could shape the run-in",
+    description: "A GFHF sample headline on the key matchups, form, and storylines keeping supporters watching this season.",
+    source: "GFHF Football Desk",
+    category: "Premier League",
+    url: "/pages/news.html"
   },
   {
-    title: "The beautiful game brings communities together around the world",
-    description: "A sample football story highlighting the passion shared by supporters everywhere.",
-    source: "GFHF Sample News",
-    publishedAt: "2026-10-15T12:00:00Z",
-    url: "https://www.global-football-hope-fund.org/pages/news.html"
+    title: "Champions League nights return with heavyweight European clashes",
+    description: "A sample continental roundup celebrating the drama, rivalries, and big moments of European football.",
+    source: "GFHF Football Desk",
+    category: "Champions League",
+    url: "/pages/news.html"
   },
   {
-    title: "Young talent takes centre stage as the new season gathers pace",
-    description: "A sample headline. Live football reporting will appear here when a news provider key is configured.",
-    source: "GFHF Sample News",
-    publishedAt: "2026-10-14T10:00:00Z",
-    url: "https://www.global-football-hope-fund.org/pages/news.html"
+    title: "Transfer watch: clubs weigh up their next moves",
+    description: "A sample transfer update exploring squad needs, emerging talent, and the rumours that fuel the window.",
+    source: "GFHF Football Desk",
+    category: "Transfer Updates",
+    url: "/pages/news.html"
   }
 ];
+
+function fallbackResponse(res) {
+  res.setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=120");
+  return res.status(200).json({ articles: MOCK_ARTICLES, source: "fallback", fallback: true });
+}
 
 function setCorsHeaders(req, res) {
   const origin = req.headers.origin;
@@ -42,10 +47,7 @@ module.exports = async function homeNews(req, res) {
   }
 
   const apiKey = process.env.NEWS_API_KEY;
-  if (!apiKey) {
-    res.setHeader("Cache-Control", "public, s-maxage=300, stale-while-revalidate=600");
-    return res.status(200).json({ articles: MOCK_ARTICLES, source: "sample" });
-  }
+  if (!apiKey) return fallbackResponse(res);
 
   try {
     const url = new URL(NEWS_URL);
@@ -61,11 +63,12 @@ module.exports = async function homeNews(req, res) {
     });
     if (!response.ok) {
       console.error("News provider request failed:", response.status);
-      return res.status(502).json({ error: "Unable to load football news right now." });
+      return fallbackResponse(res);
     }
     const payload = await response.json();
     if (payload?.status !== "ok" || !Array.isArray(payload.articles)) {
-      return res.status(502).json({ error: "The news provider returned an invalid response." });
+      console.error("News provider returned an invalid response.");
+      return fallbackResponse(res);
     }
     const articles = payload.articles
       .filter((article) => {
@@ -82,13 +85,15 @@ module.exports = async function homeNews(req, res) {
         title: article.title.trim(),
         description: typeof article.description === "string" && article.description !== "[Removed]" ? article.description.trim() : "",
         source: article.source?.name || "Football News",
+        category: "Sports",
         publishedAt: typeof article.publishedAt === "string" ? article.publishedAt : "",
         url: article.url
       }));
+    if (articles.length === 0) return fallbackResponse(res);
     res.setHeader("Cache-Control", "public, s-maxage=300, stale-while-revalidate=600");
     return res.status(200).json({ articles, source: "live" });
   } catch (error) {
     console.error("News feed request failed:", error.name === "TimeoutError" ? "request timed out" : error.message);
-    return res.status(502).json({ error: "Unable to load football news right now." });
+    return fallbackResponse(res);
   }
 };

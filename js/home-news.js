@@ -21,13 +21,13 @@ function renderArticles(articles, source) {
     return;
   }
 
-  if (source === "sample") {
-    addText(container, "p", "text-xs font-medium uppercase tracking-wide text-amber-300", "Sample headlines · Configure NEWS_API_KEY for live news");
+  if (source === "sample" || source === "fallback") {
+    addText(container, "p", "text-xs font-medium uppercase tracking-wide text-amber-300", "Sample headlines · Live news is temporarily unavailable");
   }
-  articles.forEach((article) => {
+  articles.filter((article) => article && typeof article === "object").forEach((article) => {
     const card = document.createElement("article");
     card.className = "rounded-xl border border-slate-800 bg-slate-900 p-4 transition hover:border-emerald-500/60";
-    addText(card, "p", "mb-2 text-xs font-semibold uppercase tracking-wide text-emerald-300", article.source || "Football News");
+    addText(card, "p", "mb-2 text-xs font-semibold uppercase tracking-wide text-emerald-300", article.category || article.source || "Football News");
     addText(card, "h4", "font-semibold leading-snug text-white", article.title || "Football update");
     if (article.description) addText(card, "p", "mt-2 line-clamp-3 text-sm leading-relaxed text-slate-400", article.description);
     addText(card, "p", "mt-3 text-xs text-slate-500", formatPublished(article.publishedAt));
