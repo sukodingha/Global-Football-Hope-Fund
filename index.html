@@ -82,12 +82,23 @@
             <div>
                 <p class="mb-2 text-sm font-semibold uppercase tracking-[0.2em] text-emerald-400">The latest from the pitch</p>
                 <h2 id="latest-football-heading" class="text-2xl font-bold sm:text-3xl">Latest Football News &amp; Matches</h2>
-                <p class="mt-2 text-slate-400">Live scores and upcoming fixtures from across the game.</p>
+                <p class="mt-2 text-slate-400">Breaking headlines and upcoming fixtures from across the game.</p>
             </div>
             <span id="latest-football-updated" class="text-sm text-slate-400" aria-live="polite"></span>
         </div>
-        <div id="latest-football-cards" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-live="polite" aria-busy="true">
-            <p class="col-span-full rounded-xl border border-slate-800 bg-slate-900 p-6 text-slate-300">Loading the latest matches…</p>
+        <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <section class="lg:col-span-1" aria-labelledby="breaking-news-heading">
+                <h3 id="breaking-news-heading" class="mb-4 text-xl font-bold">📰 Breaking Football News</h3>
+                <div id="home-news-headlines" class="grid grid-cols-1 gap-3" aria-live="polite" aria-busy="true">
+                    <p class="rounded-xl border border-slate-800 bg-slate-900 p-5 text-slate-300">Loading breaking news…</p>
+                </div>
+            </section>
+            <section class="lg:col-span-2" aria-labelledby="upcoming-matches-heading">
+                <h3 id="upcoming-matches-heading" class="mb-4 text-xl font-bold">⚽ Live &amp; Upcoming Matches</h3>
+                <div id="latest-football-cards" class="grid grid-cols-1 gap-4 sm:grid-cols-2" aria-live="polite" aria-busy="true">
+                    <p class="col-span-full rounded-xl border border-slate-800 bg-slate-900 p-6 text-slate-300">Loading the latest matches…</p>
+                </div>
+            </section>
         </div>
     </div>
 </section>
@@ -412,6 +423,7 @@
 <script type="module" src="js/script.js"></script>
 <script type="module" src="js/home.js"></script>
 <script type="module" src="js/home-matches.js"></script>
+<script type="module" src="js/home-news.js"></script>
 <script type="module" src="js/livescores.js"></script>
 <script src="js/pwa.js"></script>
 <script>
