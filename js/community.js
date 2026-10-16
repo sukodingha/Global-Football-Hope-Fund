@@ -913,6 +913,43 @@ function generateCommentId() {
 const COMMENT_EMOJIS = ['❤️', '👍', '😂', '😮', '🔥'];
 
 // ===== POST CARD RENDERER =====
+function getPostMedia(post) {
+  const attachments = Array.isArray(post.attachments) ? post.attachments : [];
+  const mediaItems = [
+    post.videoUrl,
+    post.mediaUrl,
+    post.imageUrl,
+    post.attachmentUrl,
+    post.media,
+    ...attachments
+  ];
+
+  for (const media of mediaItems) {
+    const url = typeof media === "string" ? media : media?.url || media?.secure_url || media?.src;
+    if (typeof url !== "string" || !url.trim()) continue;
+
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(url, window.location.href);
+    } catch {
+      continue;
+    }
+    if (!["http:", "https:"].includes(parsedUrl.protocol)) continue;
+
+    const mediaType = String(
+      media?.mediaType || media?.type || media?.mimeType || post.mediaType || post.attachmentType || post.type || ""
+    ).toLowerCase();
+    const path = parsedUrl.pathname.toLowerCase();
+    const isVideo = mediaItems.indexOf(media) === 0
+      || mediaType === "video"
+      || mediaType.startsWith("video/")
+      || /\.(mp4|m4v|mov|webm|ogv|3gp)$/i.test(path)
+      || /\/video\/upload\//i.test(path);
+    return { url: parsedUrl.href, type: isVideo ? "video" : "image" };
+  }
+  return null;
+}
+
 function timeAgo(timestamp) {
   const now = Date.now();
   const t = timestamp?.toMillis ? timestamp.toMillis() : (typeof timestamp === "string" ? new Date(timestamp).getTime() : timestamp || now);
@@ -993,17 +1030,31 @@ function renderPostCard(post) {
     ${taggedBadge}
   `;
 
-  // Image Grid
-  if (post.imageUrl) {
+  // Render uploaded video, image, or attachment media while preserving text-only posts.
+  const postMedia = getPostMedia(post);
+  if (postMedia?.type === "video") {
+    const videoWrap = document.createElement("div");
+    videoWrap.className = "fb-post-image-grid fb-post-image-single";
+    const video = document.createElement("video");
+    video.controls = true;
+    video.playsInline = true;
+    video.preload = "metadata";
+    video.className = "w-full max-h-96 rounded-lg object-contain bg-black";
+    video.style.cssText = "display:block;width:100%;max-height:24rem;object-fit:contain;background:#000;border-radius:0.5rem;";
+    video.src = postMedia.url;
+    video.setAttribute("aria-label", "Community post video");
+    videoWrap.appendChild(video);
+    card.appendChild(videoWrap);
+  } else if (postMedia?.type === "image") {
     const imgWrap = document.createElement("div");
     imgWrap.className = "fb-post-image-grid fb-post-image-single";
     const img = document.createElement("img");
-    img.src = post.imageUrl;
+    img.src = postMedia.url;
     img.crossOrigin = "anonymous";
     img.alt = "Post image";
     img.loading = "lazy";
     img.style.cssText = "cursor:pointer;";
-    img.onclick = () => window.open(post.imageUrl, '_blank');
+    img.onclick = () => window.open(postMedia.url, '_blank', 'noopener,noreferrer');
     imgWrap.appendChild(img);
     card.appendChild(imgWrap);
   }
