@@ -107,11 +107,16 @@ export async function renderPredictionLeaderboard(container, user) {
     container.innerHTML = entriesWithPostCounts.map((user, index) => {
       const displayName = user.displayName || user.firstName || user.username || "Member";
       const badges = renderBadgePills(user);
+      const favoriteTeam = user.club || user.nationalTeam || user.favoriteTeam || "";
+      const teamBadge = favoriteTeam
+        ? `<span class="team-fan-badge" style="display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:999px;background:rgba(22,107,55,0.18);color:#9ee6b7;font-size:10px;font-weight:700;">⚽ ${escapeHtml(favoriteTeam)}</span>`
+        : "";
       return `
         <li class="community-leaderboard-item">
           <span class="community-leaderboard-rank" aria-label="Rank ${index + 1}">${index + 1}</span>
           <div class="community-leaderboard-user">
             <strong>${escapeHtml(displayName)}</strong>
+            ${teamBadge}
             ${badges ? `<span class="user-achievement-badges">${badges}</span>` : ""}
           </div>
           <span class="community-leaderboard-points">${user.points.toLocaleString()} pts</span>

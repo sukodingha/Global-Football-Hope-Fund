@@ -17,6 +17,12 @@ function formatCurrency(value) {
   }).format(value || 0);
 }
 
+function escapeHTML(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"
+  })[character]);
+}
+
 function toNumber(value) {
   const numericValue = Number(value);
   return Number.isFinite(numericValue) ? numericValue : 0;
@@ -87,6 +93,7 @@ async function loadTopEarnersLeaderboard() {
     querySnapshot.forEach((docSnap) => {
       const data = docSnap.data();
       const username = data.displayName || data.username || data.email?.split('@')[0] || "User";
+      const favoriteTeam = data.club || data.nationalTeam || data.favoriteTeam || "";
       const hp = data.rewardPoints || 0;
 
       const rankIcon = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : `#${rank}`;
@@ -94,7 +101,7 @@ async function loadTopEarnersLeaderboard() {
       html += `
         <div class="leaderboard-item">
           <span class="leaderboard-rank">${rankIcon}</span>
-          <span class="leaderboard-name"><strong>${username}</strong></span>
+          <span class="leaderboard-name"><strong>${escapeHTML(username)}</strong>${favoriteTeam ? `<small class="team-fan-badge" style="display:block;margin-top:3px;color:#9ee6b7;">⚽ ${escapeHTML(favoriteTeam)}</small>` : ""}</span>
           <span class="leaderboard-hp">${formatHP(hp)} HP</span>
         </div>
       `;

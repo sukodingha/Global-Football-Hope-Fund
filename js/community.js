@@ -37,6 +37,8 @@ let currentUserAvatar = "👤";
 let unsubscribeFeed = null;
 let activeInterest = "All";
 let activeDMUserId = null;
+let currentFavoriteTeam = "";
+const userProfilesById = new Map();
 const chatPanelState = {
   community: false,
   teammates: false
@@ -236,11 +238,58 @@ function renderStories() {
 /**
  * Load all Firestore users that have a uniqueId into the userDirectory
  */
+function getFavoriteTeam(profile = {}) {
+  return String(profile.club || profile.nationalTeam || profile.favoriteTeam || "").trim();
+}
+
+function getTeamBadgeHTML(team) {
+  const cleanTeam = String(team || "").trim();
+  return cleanTeam
+    ? `<span class="team-fan-badge" title="Favorite team" style="display:inline-flex;align-items:center;gap:3px;margin-left:5px;padding:2px 7px;border-radius:999px;background:#e6f7ec;color:#176b37;font-size:10px;font-weight:700;line-height:1.4;">⚽ ${escapeHtml(cleanTeam)}</span>`
+    : "";
+}
+
+function getUserFavoriteTeam(uid, fallback = "") {
+  return getFavoriteTeam(userProfilesById.get(uid) || {}) || String(fallback || "").trim();
+}
+
+function getPostFavoriteTeam(post) {
+  return getUserFavoriteTeam(post.authorId || post.userId, post.favoriteTeam || post.club || post.nationalTeam);
+}
+
+function updateClubhouseControls() {
+  const button = document.getElementById("clubhouseFilterBtn");
+  if (!button) return;
+  button.disabled = !currentFavoriteTeam;
+  button.textContent = currentFavoriteTeam ? `🏠 Clubhouse · ${currentFavoriteTeam}` : "🏠 Clubhouse (set a favorite team)";
+  button.title = currentFavoriteTeam ? `Show posts from ${currentFavoriteTeam} fans` : "Set a favorite team on your dashboard to use Clubhouse";
+}
+
+function renderFanbaseScore() {
+  const score = document.getElementById("fanbaseScore");
+  if (!score) return;
+  if (!currentFavoriteTeam) {
+    score.textContent = "Set a favorite team in your dashboard to see your fanbase score.";
+    return;
+  }
+  let totalPoints = 0;
+  let supporters = 0;
+  userProfilesById.forEach((profile) => {
+    if (getFavoriteTeam(profile).toLocaleLowerCase() !== currentFavoriteTeam.toLocaleLowerCase()) return;
+    supporters += 1;
+    const points = Number(profile.rewardPoints);
+    if (Number.isFinite(points)) totalPoints += points;
+  });
+  score.textContent = `${currentFavoriteTeam} · ${totalPoints.toLocaleString()} HP from ${supporters.toLocaleString()} supporter${supporters === 1 ? "" : "s"}`;
+}
+
 async function loadUserDirectory() {
   try {
     const usersSnap = await getDocs(collection(db, "users"));
+    userProfilesById.clear();
     usersSnap.forEach(docSnap => {
       const data = docSnap.data();
+      userProfilesById.set(docSnap.id, data);
       if (data.uniqueId) {
         userDirectory[data.uniqueId] = {
           uid: docSnap.id,
@@ -248,8 +297,14 @@ async function loadUserDirectory() {
         };
       }
     });
+    if (currentUser?.uid) {
+      currentFavoriteTeam = getUserFavoriteTeam(currentUser.uid);
+      updateClubhouseControls();
+      renderFanbaseScore();
+    }
+    loadFeed();
   } catch (err) {
-    console.warn("Could not load user directory for @mentions:", err);
+    console.warn("Could not load user directory for @mentions and team badges:", err);
   }
 }
 
@@ -625,6 +680,7 @@ if (postModalSubmit) {
       await addDoc(collection(db, "posts"), {
         userId: currentUser.uid,
         authorId: currentUser.uid,
+        favoriteTeam: currentFavoriteTeam || null,
         authorName: currentUserName,
         authorAvatar: currentUserAvatar,
         text: parsedText,
@@ -832,6 +888,10 @@ async function loadPrivacySettings() {
       privacySettings = { ...privacySettings, ...data };
       privacySettings.posts = normalizePrivacy(privacySettings.posts || 'everyone');
       if (postPrivacySelect) postPrivacySelect.value = privacySettings.posts || 'everyone';
+      currentFavoriteTeam = getFavoriteTeam(data);
+      updateClubhouseControls();
+      renderFanbaseScore();
+      if (activeInterest === "Clubhouse") loadFeed();
     }
   } catch (err) {
     console.warn('Could not load privacy settings:', err);
@@ -1016,6 +1076,7 @@ function renderPostCard(post) {
           <a href="${profileLink}" class="fb-post-author-link" style="text-decoration:none;color:inherit;">
             <strong>${escapeHtml(post.authorName || "Anonymous")}</strong>
           </a>
+          ${getTeamBadgeHTML(getPostFavoriteTeam(post))}
           <span class="user-achievement-badge-list" data-author-id="${escapeHtml(post.authorId || "")}"></span>
         </div>
         <div class="fb-post-time">${timeAgo(post.createdAt)} · ${post.interest || "General"}</div>
@@ -1568,18 +1629,23 @@ async function loadFeed() {
 
   if (unsubscribeFeed) unsubscribeFeed();
 
-  const postsQuery = activeInterest === "All"
+  const postsQuery = activeInterest === "All" || activeInterest === "Clubhouse"
     ? query(collection(db, "posts"), orderBy("createdAt", "desc"))
     : query(collection(db, "posts"), where("interest", "==", activeInterest), orderBy("createdAt", "desc"));
 
   unsubscribeFeed = onSnapshot(postsQuery, (snapshot) => {
     feed.innerHTML = "";
-    if (snapshot.empty) {
-      feed.innerHTML = '<div class="fb-empty-feed">No posts yet. Be the first to share! 🎉</div>';
+    const posts = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+    const visiblePosts = activeInterest === "Clubhouse"
+      ? posts.filter((post) => currentFavoriteTeam && getPostFavoriteTeam(post).toLocaleLowerCase() === currentFavoriteTeam.toLocaleLowerCase())
+      : posts;
+    if (!visiblePosts.length) {
+      feed.innerHTML = activeInterest === "Clubhouse"
+        ? `<div class="fb-empty-feed">${currentFavoriteTeam ? `No ${escapeHtml(currentFavoriteTeam)} fan posts yet. Be the first to post! 🎉` : "Set a favorite team on your dashboard to open your Clubhouse."}</div>`
+        : '<div class="fb-empty-feed">No posts yet. Be the first to share! 🎉</div>';
       return;
     }
-    snapshot.docs.forEach((docSnap) => {
-      const post = { id: docSnap.id, ...docSnap.data() };
+    visiblePosts.forEach((post) => {
       feed.appendChild(renderPostCard(post));
     });
     // Resolve HP badges for all post cards
@@ -1763,7 +1829,7 @@ function renderDMMessages() {
       ? `<img src="${msg.imageUrl}" alt="Shared image" class="chat-shared-image" style="max-width:200px;max-height:200px;border-radius:8px;display:block;margin-top:5px;cursor:pointer;" onclick="window.open('${msg.imageUrl}', '_blank')">`
       : "";
     const authorId = msg.from || "";
-    d.innerHTML = `<div class="chat-author"><div class="chat-author-name"><span>${isMe ? "You" : escapeHtml(msg.fromName || "Teammate")}</span><span class="user-achievement-badge-list" data-author-id="${escapeHtml(authorId)}"></span></div></div>${imageHtml}<div class="chat-text">${msg.text || ""}</div><div class="chat-time">${new Date(msg.createdAt).toLocaleTimeString()}</div>`;
+    d.innerHTML = `<div class="chat-author"><div class="chat-author-name"><span>${isMe ? "You" : escapeHtml(msg.fromName || "Teammate")}</span>${getTeamBadgeHTML(getUserFavoriteTeam(authorId, msg.favoriteTeam))}<span class="user-achievement-badge-list" data-author-id="${escapeHtml(authorId)}"></span></div></div>${imageHtml}<div class="chat-text">${msg.text || ""}</div><div class="chat-time">${new Date(msg.createdAt).toLocaleTimeString()}</div>`;
     dmChatMessages.appendChild(d);
     resolveAchievementBadges(authorId, d.querySelector(".user-achievement-badge-list"));
   });
@@ -2009,7 +2075,8 @@ if (communityChatForm) {
     }
     try {
       await addDoc(collection(db, "community_chats"), {
-        authorId: currentUser.uid, authorName: currentUserName, authorAvatar: currentUserAvatar, text, createdAt: serverTimestamp()
+        authorId: currentUser.uid, authorName: currentUserName, authorAvatar: currentUserAvatar,
+        favoriteTeam: currentFavoriteTeam || null, text, createdAt: serverTimestamp()
       });
       input.value = "";
       document.getElementById("communityChatValidation")?.remove();
@@ -2042,7 +2109,8 @@ function listenToChat() {
       const authorLinkHtml = authorId
         ? `<a href="${authorProfileLink}" style="text-decoration:none;color:inherit;">${escapeHtml(authorAvatar)} ${escapeHtml(authorName)}</a>`
         : `${escapeHtml(authorAvatar)} ${escapeHtml(authorName)}`;
-      item.innerHTML = `<div class="chat-author"><div class="chat-author-name">${authorLinkHtml}<span class="user-achievement-badge-list" data-author-id="${escapeHtml(authorId)}"></span></div><div class="chat-hp-placeholder" data-author-id="${escapeHtml(authorId)}"></div></div>${imageHtml}${textHtml}<div class="chat-time">${timeDisplay}</div>`;
+      const teamBadge = getTeamBadgeHTML(getUserFavoriteTeam(authorId, m.favoriteTeam));
+      item.innerHTML = `<div class="chat-author"><div class="chat-author-name">${authorLinkHtml}${teamBadge}<span class="user-achievement-badge-list" data-author-id="${escapeHtml(authorId)}"></span></div><div class="chat-hp-placeholder" data-author-id="${escapeHtml(authorId)}"></div></div>${imageHtml}${textHtml}<div class="chat-time">${timeDisplay}</div>`;
       communityChatList.appendChild(item);
     });
     communityChatList.querySelectorAll('.user-achievement-badge-list').forEach((el) => {
@@ -2170,6 +2238,9 @@ function openFloatingChat(partnerId, partnerName) {
         nameText.textContent = authorName;
         authorLine.appendChild(nameText);
       }
+      const teamBadge = document.createElement("span");
+      teamBadge.innerHTML = getTeamBadgeHTML(getUserFavoriteTeam(authorId, msg.favoriteTeam));
+      authorLine.appendChild(teamBadge);
       const badgeContainer = document.createElement("span");
       badgeContainer.className = "user-achievement-badge-list";
       badgeContainer.dataset.authorId = authorId;
@@ -2261,6 +2332,7 @@ if (floatingChatForm) {
       await addDoc(collection(db, "liveChats", chatKey, "messages"), {
         authorId: currentUser.uid,
         authorName: currentUserName,
+        favoriteTeam: currentFavoriteTeam || null,
         text,
         createdAt: serverTimestamp()
       });
@@ -2292,6 +2364,9 @@ function hideAppSplash() {
 // ===== AUTH STATE =====
 onAuthStateChanged(auth, async (user) => {
   currentUser = user;
+  currentFavoriteTeam = "";
+  updateClubhouseControls();
+  renderFanbaseScore();
   currentUserName = user?.displayName || user?.email?.split("@")[0] || "Guest";
   currentUserAvatar = "👤";
   if (createPostAvatar) createPostAvatar.textContent = currentUserAvatar;

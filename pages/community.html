@@ -165,10 +165,16 @@
     <!-- ===== FEED FILTER TABS ===== -->
     <div class="feed-filter-bar">
       <button class="feed-filter-btn active" data-filter="All">All Posts</button>
+      <button id="clubhouseFilterBtn" class="feed-filter-btn" data-filter="Clubhouse" disabled title="Set a favorite team on your dashboard to use Clubhouse">🏠 Clubhouse</button>
       <button class="feed-filter-btn" data-filter="Football">⚽ Football</button>
       <button class="feed-filter-btn" data-filter="Events">📅 Events</button>
       <button class="feed-filter-btn" data-filter="Support">🤝 Support</button>
     </div>
+
+    <aside class="community-fanbase-score" aria-live="polite" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 14px;margin:4px 0 10px;border:1px solid rgba(34,197,94,0.25);border-radius:12px;background:rgba(11,45,77,0.06);color:#0b2d4d;">
+      <strong>🏟️ Fanbase Score</strong>
+      <span id="fanbaseScore">Loading supporter totals…</span>
+    </aside>
 
     <!-- ===== FEED CONTAINER ===== -->
     <div class="fb-feed" id="communityFeed">
