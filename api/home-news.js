@@ -1,4 +1,4 @@
-const NEWS_URL = "https://newsapi.org/v2/everything";
+const NEWS_URL = "https://newsapi.org/v2/top-headlines";
 const MOCK_ARTICLES = [
   {
     title: "Matchday spotlight: Europe's biggest clubs prepare for a decisive weekend",
@@ -49,12 +49,14 @@ module.exports = async function homeNews(req, res) {
 
   try {
     const url = new URL(NEWS_URL);
-    url.searchParams.set("q", "football OR soccer");
-    url.searchParams.set("language", "en");
-    url.searchParams.set("sortBy", "publishedAt");
+    url.searchParams.set("category", "sports");
+    // NewsAPI's top-headlines endpoint expects a country or source; country=gb
+    // provides English-language sports headlines (language isn't supported here).
+    url.searchParams.set("country", "gb");
     url.searchParams.set("pageSize", "6");
+    url.searchParams.set("apiKey", apiKey);
     const response = await fetch(url, {
-      headers: { "X-Api-Key": apiKey, Accept: "application/json" },
+      headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(8000)
     });
     if (!response.ok) {
@@ -65,13 +67,24 @@ module.exports = async function homeNews(req, res) {
     if (payload?.status !== "ok" || !Array.isArray(payload.articles)) {
       return res.status(502).json({ error: "The news provider returned an invalid response." });
     }
-    const articles = payload.articles.slice(0, 6).map((article) => ({
-      title: article.title || "Football update",
-      description: article.description || "Read the latest football story.",
-      source: article.source?.name || "Football News",
-      publishedAt: article.publishedAt || "",
-      url: article.url || ""
-    }));
+    const articles = payload.articles
+      .filter((article) => {
+        if (!article || typeof article.title !== "string" || !article.title.trim() || article.title === "[Removed]") return false;
+        try {
+          const articleUrl = new URL(article.url);
+          return articleUrl.protocol === "https:" || articleUrl.protocol === "http:";
+        } catch {
+          return false;
+        }
+      })
+      .slice(0, 6)
+      .map((article) => ({
+        title: article.title.trim(),
+        description: typeof article.description === "string" && article.description !== "[Removed]" ? article.description.trim() : "",
+        source: article.source?.name || "Football News",
+        publishedAt: typeof article.publishedAt === "string" ? article.publishedAt : "",
+        url: article.url
+      }));
     res.setHeader("Cache-Control", "public, s-maxage=300, stale-while-revalidate=600");
     return res.status(200).json({ articles, source: "live" });
   } catch (error) {
